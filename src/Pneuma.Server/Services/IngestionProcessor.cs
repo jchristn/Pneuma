@@ -228,14 +228,25 @@ namespace Pneuma.Server.Services
                 token).ConfigureAwait(false);
             job.GraphNodeIds = merge.NodeIds;
 
-            List<PartioChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
-                stageToken => _Stages.EmbedAsync(job, categorization.Cells, stageToken),
-                result => "Embedding generation complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
+            // Summarization, chunking, and embedding run as three discrete, independently-timed stages.
+            List<string> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
+                stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, stageToken),
+                result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
                 token).ConfigureAwait(false);
-            await _Stages.PersistChunkArtifactsAsync(job, chunks, token).ConfigureAwait(false);
+
+            List<PartioChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
+                stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, summaries, stageToken),
+                result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
+                token).ConfigureAwait(false);
+
+            List<PartioChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
+                stageToken => _Stages.EmbedChunksAsync(job, chunks, stageToken),
+                result => "Embedding complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
+                token).ConfigureAwait(false);
+            await _Stages.PersistChunkArtifactsAsync(job, embeddedChunks, token).ConfigureAwait(false);
 
             List<string> verbexIds = await RunStageAsync(job, IngestionStageEnum.Indexing,
-                stageToken => _Stages.IndexAsync(job, merge, chunks, stageToken),
+                stageToken => _Stages.IndexAsync(job, merge, embeddedChunks, stageToken),
                 result => "Search indexing complete — indexed " + result.Count + " document(s), each linked back to its knowledge-graph node.",
                 token).ConfigureAwait(false);
             job.VerbexDocumentIds = verbexIds;

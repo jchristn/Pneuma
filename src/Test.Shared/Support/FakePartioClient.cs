@@ -25,6 +25,31 @@ namespace Test.Shared.Support
         }
 
         /// <inheritdoc />
+        public Task<string> SummarizeAsync(string text, string? summarizationPrompt = null, string? completionEndpointId = null, CancellationToken token = default)
+        {
+            return Task.FromResult(string.IsNullOrWhiteSpace(text) ? string.Empty : "summary of: " + text);
+        }
+
+        /// <inheritdoc />
+        public Task<List<PartioChunk>> ChunkAsync(string text, CancellationToken token = default)
+        {
+            List<PartioChunk> chunks = new List<PartioChunk>();
+            if (!string.IsNullOrWhiteSpace(text)) chunks.Add(new PartioChunk { Text = text });
+            return Task.FromResult(chunks);
+        }
+
+        /// <inheritdoc />
+        public Task<List<List<float>>> EmbedAsync(List<string> texts, string? embeddingEndpointId = null, CancellationToken token = default)
+        {
+            List<List<float>> vectors = new List<List<float>>();
+            if (texts != null)
+            {
+                foreach (string text in texts) vectors.Add(new List<float> { 0.1f, 0.2f });
+            }
+            return Task.FromResult(vectors);
+        }
+
+        /// <inheritdoc />
         public Task<List<PartioEndpoint>> ListEmbeddingEndpointsAsync(CancellationToken token = default)
         {
             List<PartioEndpoint> endpoints = new List<PartioEndpoint>

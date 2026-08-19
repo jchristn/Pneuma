@@ -25,7 +25,11 @@ namespace Pneuma.Core.Enums
         Hydration,
         /// <summary>LiteGraph subgraph merge.</summary>
         GraphMerge,
-        /// <summary>Partio summarize, chunk, and embed.</summary>
+        /// <summary>Partio summarization of the extracted cells.</summary>
+        Summarization,
+        /// <summary>Partio chunking of the cell (and summary) text.</summary>
+        Chunking,
+        /// <summary>Partio embedding of the produced chunks.</summary>
         Embedding,
         /// <summary>Verbex indexing.</summary>
         Indexing,

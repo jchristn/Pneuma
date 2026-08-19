@@ -88,12 +88,17 @@ namespace Test.Shared.Suites
                             string[] expectedSteps =
                             {
                                 "Type detection", "Semantic cell extraction", "Ontology", "Knowledge-graph insertion",
-                                "Chunking", "Embedding generation", "Search indexing"
+                                "Summarization", "Chunking", "Embedding", "Search indexing"
                             };
                             foreach (string step in expectedSteps)
                             {
                                 if (!log.Contains(step)) throw new Exception("ingestion log missing step '" + step + "'. Log: " + log);
                             }
+
+                            // Summarization, chunking, and embedding must be recorded as three discrete stages.
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.Summarization)) throw new Exception("expected a Summarization stage event");
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.Chunking)) throw new Exception("expected a Chunking stage event");
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.Embedding)) throw new Exception("expected an Embedding stage event");
 
                             // The two-stage boundary (categorize then hydrate) must be visible in the Follow-Logs stream.
                             if (!events.Exists(e => e.Stage == IngestionStageEnum.Categorization)) throw new Exception("expected a Categorization phase event");

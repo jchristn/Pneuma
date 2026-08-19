@@ -152,6 +152,65 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<string> SummarizeAsync(string text, string? summarizationPrompt = null, string? completionEndpointId = null, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(text)) return String.Empty;
+
+            string completionId = String.IsNullOrWhiteSpace(completionEndpointId)
+                ? await ResolveEndpointAsync(true, token).ConfigureAwait(false)
+                : completionEndpointId!;
+
+            object summarizationConfig = String.IsNullOrWhiteSpace(summarizationPrompt)
+                ? new { CompletionEndpointId = completionId, Order = "TopDown", MaxSummaryTokens = 1024 }
+                : (object)new { CompletionEndpointId = completionId, Order = "TopDown", MaxSummaryTokens = 1024, SummarizationPrompt = summarizationPrompt };
+
+            object requestBody = new { Text = text, SummarizationConfiguration = summarizationConfig };
+            string responseBody = await PostJsonAsync(_BaseUrl + "/v1.0/summarize", JsonSerializer.Serialize(requestBody, _RequestJson), token).ConfigureAwait(false);
+
+            SummarizeResponseDto? response = Json.Deserialize<SummarizeResponseDto>(responseBody);
+            return response?.Summary ?? String.Empty;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<PartioChunk>> ChunkAsync(string text, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(text)) return new List<PartioChunk>();
+
+            object requestBody = new
+            {
+                Type = "Text",
+                Text = text,
+                ChunkingConfiguration = new { Strategy = "FixedTokenCount", FixedTokenCount = 256, OverlapCount = 32 }
+            };
+            string responseBody = await PostJsonAsync(_BaseUrl + "/v1.0/chunk", JsonSerializer.Serialize(requestBody, _RequestJson), token).ConfigureAwait(false);
+
+            SemanticCellResponseDto? response = Json.Deserialize<SemanticCellResponseDto>(responseBody);
+            return MapChunks(response?.Chunks);
+        }
+
+        /// <inheritdoc />
+        public async Task<List<List<float>>> EmbedAsync(List<string> texts, string? embeddingEndpointId = null, CancellationToken token = default)
+        {
+            List<List<float>> vectors = new List<List<float>>();
+            if (texts == null || texts.Count == 0) return vectors;
+
+            string embeddingId = String.IsNullOrWhiteSpace(embeddingEndpointId)
+                ? await ResolveEndpointAsync(false, token).ConfigureAwait(false)
+                : embeddingEndpointId!;
+
+            object requestBody = new { EndpointId = embeddingId, Input = texts, L2Normalization = true };
+            string responseBody = await PostJsonAsync(_BaseUrl + "/v1.0/embed", JsonSerializer.Serialize(requestBody, _RequestJson), token).ConfigureAwait(false);
+
+            EmbedResponseDto? response = Json.Deserialize<EmbedResponseDto>(responseBody);
+            if (response?.Embeddings == null) return vectors;
+            foreach (List<float>? vector in response.Embeddings)
+            {
+                vectors.Add(vector ?? new List<float>());
+            }
+            return vectors;
+        }
+
+        /// <inheritdoc />
         public async Task<List<PartioEndpoint>> ListEmbeddingEndpointsAsync(CancellationToken token = default)
         {
             string responseBody = await PostJsonAsync(_BaseUrl + "/v1.0/endpoints/embedding/enumerate", "{}", token).ConfigureAwait(false);
@@ -484,6 +543,16 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             public string? Text { get; set; }
             public List<float>? Embeddings { get; set; }
+        }
+
+        private class EmbedResponseDto
+        {
+            public List<List<float>?>? Embeddings { get; set; }
+        }
+
+        private class SummarizeResponseDto
+        {
+            public string? Summary { get; set; }
         }
 
         #endregion

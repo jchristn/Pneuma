@@ -14,7 +14,9 @@ const STAGE_LABELS = {
   cellextraction: 'Semantic cell extraction',
   classification: 'Ontology / knowledge-graph mapping',
   graphmerge: 'Knowledge-graph insertion',
-  embedding: 'Chunking & embedding',
+  summarization: 'Summarization',
+  chunking: 'Chunking',
+  embedding: 'Embedding',
   indexing: 'Search indexing',
   cancelled: 'Cancelled',
   done: 'Complete'

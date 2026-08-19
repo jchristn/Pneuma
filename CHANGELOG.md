@@ -7,6 +7,10 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [0.1.0] - 2026-08-18
 
 ### Added
+- **Discrete Summarization, Chunking, and Embedding ingestion steps.** These now call Partio's separate
+  `/v1.0/summarize`, `/v1.0/chunk`, and `/v1.0/embed` endpoints (Partio 0.4.0) and run as three distinct,
+  independently-timed pipeline stages, each with its own duration recorded in the job log (the Follow Logs
+  modal shows per-step and total runtime). Embedding is done in bounded batches.
 - **One Verbex document per source.** Ingestion indexes a source's full text as a single lexical document
   (tagged with `linkId`/`tenantId`/`subjectId`/`jobId`/`sourceUrl`/`documentType`) rather than one document
   per chunk, so a search returns one hit per ingested source. Chunk-level graph nodes and vectors are still

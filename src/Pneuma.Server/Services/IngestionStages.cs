@@ -142,42 +142,93 @@ namespace Pneuma.Server.Services
             return merge;
         }
 
-        /// <summary>Embed each cell via Partio into chunks, recording the chunking step as its own log event.</summary>
+        /// <summary>Summarize each cell via Partio (one discrete pipeline step). Returns the produced summaries.</summary>
         /// <param name="job">The job.</param>
         /// <param name="cells">Extracted semantic cells.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The produced chunks (with embeddings where available).</returns>
-        public async Task<List<PartioChunk>> EmbedAsync(IngestionJob job, List<ExtractedCell> cells, CancellationToken token)
+        /// <returns>The non-empty summaries produced, one entry per summarized cell.</returns>
+        public async Task<List<string>> SummarizeCellsAsync(IngestionJob job, List<ExtractedCell> cells, CancellationToken token)
         {
             Prompt? summarizePrompt = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "cell.summarize", token).ConfigureAwait(false);
             string? summarizationPrompt = summarizePrompt?.Content;
 
-            Stopwatch chunkTimer = Stopwatch.StartNew();
-            List<PartioChunk> all = new List<PartioChunk>();
+            List<string> summaries = new List<string>();
             foreach (ExtractedCell cell in cells)
             {
+                token.ThrowIfCancellationRequested();
                 if (String.IsNullOrWhiteSpace(cell.Text)) continue;
+                string summary = await _Partio.SummarizeAsync(cell.Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
+                if (!String.IsNullOrWhiteSpace(summary)) summaries.Add(summary);
+            }
+            return summaries;
+        }
 
-                PartioProcessResult processed = await _Partio.ProcessAsync(cell.Text, true, summarizationPrompt, job.EmbeddingEndpointId, job.CompletionEndpointId, token).ConfigureAwait(false);
+        /// <summary>Chunk each cell (and each summary) via Partio (one discrete pipeline step); no embeddings yet.</summary>
+        /// <param name="job">The job.</param>
+        /// <param name="cells">Extracted semantic cells.</param>
+        /// <param name="summaries">Summaries produced by the summarization step.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The produced chunks (text only).</returns>
+        public async Task<List<PartioChunk>> ChunkCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> summaries, CancellationToken token)
+        {
+            List<PartioChunk> all = new List<PartioChunk>();
 
-                List<PartioChunk> perCell = new List<PartioChunk>();
-                perCell.AddRange(processed.Chunks);
-                perCell.AddRange(processed.SummaryChunks);
-                if (perCell.Count == 0) perCell.Add(new PartioChunk { Text = cell.Text });
-
-                foreach (PartioChunk chunk in perCell)
+            foreach (ExtractedCell cell in cells)
+            {
+                token.ThrowIfCancellationRequested();
+                if (String.IsNullOrWhiteSpace(cell.Text)) continue;
+                List<PartioChunk> chunks = await _Partio.ChunkAsync(cell.Text, token).ConfigureAwait(false);
+                if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = cell.Text });
+                foreach (PartioChunk chunk in chunks)
                 {
                     if (!String.IsNullOrWhiteSpace(chunk.Text)) all.Add(chunk);
                 }
             }
-            chunkTimer.Stop();
 
-            // Chunking is a distinct step in the log, recorded before the embedding-generation completion.
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Embedding, IngestionStatusEnum.Completed,
-                "Chunking complete — produced " + all.Count + " chunk(s) from " + cells.Count + " cell(s).",
-                chunkTimer.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+            if (summaries != null)
+            {
+                foreach (string summary in summaries)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (String.IsNullOrWhiteSpace(summary)) continue;
+                    List<PartioChunk> chunks = await _Partio.ChunkAsync(summary, token).ConfigureAwait(false);
+                    if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = summary });
+                    foreach (PartioChunk chunk in chunks)
+                    {
+                        if (!String.IsNullOrWhiteSpace(chunk.Text)) all.Add(chunk);
+                    }
+                }
+            }
 
             return all;
+        }
+
+        /// <summary>Embed the produced chunks via Partio in bounded batches (one discrete pipeline step).</summary>
+        /// <param name="job">The job.</param>
+        /// <param name="chunks">The chunks to embed (mutated in place with their vectors).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The chunks, now carrying their embedding vectors.</returns>
+        public async Task<List<PartioChunk>> EmbedChunksAsync(IngestionJob job, List<PartioChunk> chunks, CancellationToken token)
+        {
+            if (chunks.Count == 0) return chunks;
+
+            // Embed in bounded batches so a large source does not produce one enormous provider request.
+            const int batchSize = 64;
+            for (int start = 0; start < chunks.Count; start += batchSize)
+            {
+                token.ThrowIfCancellationRequested();
+                int count = Math.Min(batchSize, chunks.Count - start);
+                List<string> texts = new List<string>(count);
+                for (int i = 0; i < count; i++) texts.Add(chunks[start + i].Text);
+
+                List<List<float>> vectors = await _Partio.EmbedAsync(texts, job.EmbeddingEndpointId, token).ConfigureAwait(false);
+                for (int i = 0; i < count && i < vectors.Count; i++)
+                {
+                    chunks[start + i].Embeddings = vectors[i];
+                }
+            }
+
+            return chunks;
         }
 
         /// <summary>
