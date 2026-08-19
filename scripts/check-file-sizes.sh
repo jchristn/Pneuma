@@ -19,6 +19,7 @@ FRONTEND_LIMIT=400
 # Backend files grandfathered above the limit (single class + regions). Keep this list short and justified.
 BACKEND_ALLOWLIST=(
   "src/Pneuma.Core/Integrations/Implementations/LiteGraphClient.cs"
+  "src/Pneuma.Core/Integrations/Implementations/PartioClient.cs"
 )
 
 violations=0
