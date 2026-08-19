@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
 import ErrorBanner from '../components/ErrorBanner';
+import CopyableId from '../components/CopyableId';
 
 const PAGE_SIZE = 20;
 
@@ -92,9 +93,12 @@ function SearchView() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '90px' }}>{t('search.score')}</th>
-                    <th>{t('search.document')}</th>
-                    <th>{t('search.source')}</th>
+                    <th style={{ width: '80px' }}>{t('search.score')}</th>
+                    <th style={{ width: '80px' }}>{t('search.matches')}</th>
+                    <th>{t('search.docTitle')}</th>
+                    <th>{t('search.url')}</th>
+                    <th>{t('search.linkId')}</th>
+                    <th>{t('search.passage')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -102,16 +106,21 @@ function SearchView() {
                     const url = r.linkUrl || r.LinkUrl;
                     const title = r.linkTitle || r.LinkTitle;
                     const score = r.score ?? r.Score ?? 0;
+                    const matches = r.matchCount ?? r.MatchCount ?? 0;
+                    const linkId = r.linkId || r.LinkId;
                     const snippet = r.snippet || r.Snippet;
                     return (
-                      <tr key={r.documentId || r.DocumentId || i}>
+                      <tr key={linkId || r.documentId || r.DocumentId || i}>
                         <td><strong>{Number(score).toFixed(3)}</strong></td>
-                        <td className="wrap">{snippet || '—'}</td>
+                        <td>{matches || '—'}</td>
+                        <td className="wrap">{title || '—'}</td>
                         <td className="wrap">
                           {url ? (
-                            <a href={url} target="_blank" rel="noopener noreferrer">{title || url}</a>
+                            <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
                           ) : '—'}
                         </td>
+                        <td>{linkId ? <CopyableId value={linkId} /> : '—'}</td>
+                        <td className="wrap">{snippet || '—'}</td>
                       </tr>
                     );
                   })}

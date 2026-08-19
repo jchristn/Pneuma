@@ -72,7 +72,7 @@ function ModelRunnersView() {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHealthDetail(row); } }}
       >
         <StatusPill label={healthy ? 'Healthy' : 'Unhealthy'} tone={healthy ? 'success' : 'danger'} />
-        <HealthHistogram history={h.history || h.History || []} />
+        <HealthHistogram history={h.history || h.History || []} maxBars={10} />
       </span>
     );
   };

@@ -34,8 +34,10 @@ function barTone(b) {
   return 'mixed';
 }
 
-export function HealthHistogram({ history, height = 18 }) {
-  const buckets = bucketHistory(history);
+export function HealthHistogram({ history, height = 18, maxBars = 0 }) {
+  let buckets = bucketHistory(history);
+  // Cap the number of bars, keeping the most recent: the table strip is compact, the modal shows more.
+  if (maxBars > 0 && buckets.length > maxBars) buckets = buckets.slice(buckets.length - maxBars);
   if (buckets.length === 0) {
     return <span className="health-histogram-empty">No data</span>;
   }
@@ -122,7 +124,7 @@ export function HealthDetailModal({ title, health, loading, onClose }) {
           {lastError && <div className="health-error-box">{lastError}</div>}
 
           <div className="health-section-label">Health History</div>
-          <HealthHistogram history={history} height={36} />
+          <HealthHistogram history={history} height={36} maxBars={50} />
 
           <div className="health-timestamps">
             <div><span>First check</span><strong>{formatDateTime(get(h, 'firstCheckUtc', 'FirstCheckUtc')) || '—'}</strong></div>

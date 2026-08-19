@@ -3,6 +3,7 @@ namespace Pneuma.Server.Services
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
@@ -179,12 +180,17 @@ namespace Pneuma.Server.Services
             return all;
         }
 
-        /// <summary>Index chunks: create a Chunk node per chunk, add it to the lexical index (when enabled), and upsert its vector.</summary>
+        /// <summary>
+        /// Index the source into the lexical index as a single Verbex document (all chunk text concatenated),
+        /// tagged back to Pneuma identifiers, while still creating a Chunk node per chunk and upserting its
+        /// vector so semantic retrieval resolves to chunk-level content. Indexing one document per source
+        /// means a lexical search returns one hit per ingested source (link), not one per chunk.
+        /// </summary>
         /// <param name="job">The job.</param>
         /// <param name="merge">The graph merge result (its first node id is the source).</param>
         /// <param name="chunks">The chunks to index.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The Verbex document ids created (empty when the lexical index is disabled).</returns>
+        /// <returns>The Verbex document ids created (empty when the lexical index is disabled or there is no text).</returns>
         public async Task<List<string>> IndexAsync(IngestionJob job, MergeResult merge, List<PartioChunk> chunks, CancellationToken token)
         {
             // The inverted index is optional: when disabled, retrieval is served from the graph vector
@@ -193,44 +199,62 @@ namespace Pneuma.Server.Services
             string sourceNodeId = merge.NodeIds.Count > 0 ? merge.NodeIds[0] : String.Empty;
             List<string> docIds = new List<string>();
 
+            // Accumulate the full source text while keeping chunk-level graph nodes and vectors so semantic
+            // (vector) retrieval still resolves to specific passages.
+            StringBuilder fullText = new StringBuilder();
             foreach (PartioChunk chunk in chunks)
             {
                 if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
 
+                if (fullText.Length > 0) fullText.Append("\n\n");
+                fullText.Append(chunk.Text);
+
                 // Each chunk becomes a first-class Chunk node linked to its source, so semantic retrieval
-                // resolves to chunk-level content rather than the whole source. Falls back to the source
-                // node if chunk-node creation fails.
+                // resolves to chunk-level content. Falls back to the source node if chunk-node creation fails.
                 string chunkNodeId = await CreateChunkNodeAsync(job, sourceNodeId, chunk.Text, token).ConfigureAwait(false);
                 string targetNodeId = String.IsNullOrEmpty(chunkNodeId) ? sourceNodeId : chunkNodeId;
 
-                Dictionary<string, string> tags = new Dictionary<string, string>
-                {
-                    { "litegraphNodeId", targetNodeId },
-                    { "tenantId", job.TenantId },
-                    { "subjectId", job.SubjectId },
-                    { "jobId", job.Id }
-                };
-
-                if (_UseInvertedIndex && indexId != null)
-                {
-                    string docId = await _Verbex.AddDocumentAsync(indexId, chunk.Text, tags, token).ConfigureAwait(false);
-                    if (!String.IsNullOrEmpty(docId)) docIds.Add(docId);
-                }
-
-                // Store the chunk embedding on its chunk node so semantic (vector) retrieval works
-                // alongside the lexical index. Best-effort: the vector store is complementary, so a failure
-                // here must not fail ingestion (the base already records the failure metric).
+                // Store the chunk embedding on its chunk node so semantic (vector) retrieval works alongside the
+                // lexical index. Best-effort: the vector store is complementary, so a failure here must not fail
+                // ingestion (the base already records the failure metric).
                 if (!String.IsNullOrEmpty(targetNodeId) && chunk.Embeddings != null && chunk.Embeddings.Count > 0)
                 {
+                    Dictionary<string, string> vectorTags = new Dictionary<string, string>
+                    {
+                        { "litegraphNodeId", targetNodeId },
+                        { "tenantId", job.TenantId },
+                        { "subjectId", job.SubjectId },
+                        { "jobId", job.Id },
+                        { "linkId", job.LinkId }
+                    };
                     try
                     {
-                        await _Vectors.UpsertVectorAsync(targetNodeId, chunk.Embeddings, tags, token).ConfigureAwait(false);
+                        await _Vectors.UpsertVectorAsync(targetNodeId, chunk.Embeddings, vectorTags, token).ConfigureAwait(false);
                     }
                     catch (Exception vectorException)
                     {
                         _Logging.Warn("[IngestionStages] vector upsert failed for node " + targetNodeId + ": " + vectorException.Message);
                     }
                 }
+            }
+
+            // Index the entire source as ONE lexical document, tagged back to the Pneuma identifiers the search
+            // surfaces resolve against (link, tenant, subject, job) plus useful metadata (source url, type).
+            if (_UseInvertedIndex && indexId != null && fullText.Length > 0)
+            {
+                Dictionary<string, string> documentTags = new Dictionary<string, string>
+                {
+                    { "litegraphNodeId", sourceNodeId },
+                    { "linkId", job.LinkId },
+                    { "tenantId", job.TenantId },
+                    { "subjectId", job.SubjectId },
+                    { "jobId", job.Id },
+                    { "sourceUrl", job.SourceUrl }
+                };
+                if (!String.IsNullOrEmpty(job.DocumentType)) documentTags["documentType"] = job.DocumentType!;
+
+                string docId = await _Verbex.AddDocumentAsync(indexId, fullText.ToString(), documentTags, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(docId)) docIds.Add(docId);
             }
 
             return docIds;
@@ -255,13 +279,15 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
-        /// Record prompt provenance so a run is reproducible: which prompt version and exact content (by
-        /// hash) shaped this candidate plan. If a prompt is later edited its hash changes, and a past job's
-        /// provenance still shows what it actually used.
+        /// Build the prompt-provenance summary so a run is reproducible: which prompt version and exact
+        /// content (by hash) shaped this candidate plan. If a prompt is later edited its hash changes, and a
+        /// past job's provenance still shows what it actually used. The caller folds this into the
+        /// Categorization completion event rather than emitting a separate row.
         /// </summary>
         /// <param name="job">The job.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task RecordPromptProvenanceAsync(IngestionJob job, CancellationToken token)
+        /// <returns>A comma-separated "key vVersion@hash" summary for each prompt that shaped the run.</returns>
+        public async Task<string> BuildPromptProvenanceAsync(IngestionJob job, CancellationToken token)
         {
             string[] keys = { "ontology.classify", "ontology.definition", "cell.summarize" };
             List<string> parts = new List<string>();
@@ -273,8 +299,7 @@ namespace Pneuma.Server.Services
                 parts.Add(key + " v" + version + "@" + hash);
             }
 
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Processing,
-                "Prompt provenance (for reproducibility): " + String.Join(", ", parts) + ".", 0, token).ConfigureAwait(false);
+            return String.Join(", ", parts);
         }
 
         /// <summary>Count how many of the given chunks carry a non-empty embedding vector.</summary>

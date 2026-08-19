@@ -32,6 +32,9 @@ namespace Pneuma.Core.Integrations.Implementations
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        // Bounded concurrency for bulk document deletion during cascade cleanup.
+        private const int _MaxDeleteConcurrency = 8;
+
         private readonly string _BaseUrl;
         private readonly string _BearerToken;
         private readonly string _TenantId;
@@ -211,20 +214,31 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             if (documentIds == null) return;
 
-            string indexId = await EnsureIndexAsync(token).ConfigureAwait(false);
+            List<string> ids = new List<string>();
             foreach (string documentId in documentIds)
             {
-                if (String.IsNullOrWhiteSpace(documentId)) continue;
+                if (!String.IsNullOrWhiteSpace(documentId)) ids.Add(documentId);
+            }
+            if (ids.Count == 0) return;
+
+            string indexId = await EnsureIndexAsync(token).ConfigureAwait(false);
+
+            // Delete documents concurrently rather than one-at-a-time: a source can have many indexed
+            // documents and sequential round-trips make cascade deletion very slow. The client's per-service
+            // concurrency bulkhead still caps the real parallelism against Verbex.
+            ParallelOptions options = new ParallelOptions { MaxDegreeOfParallelism = _MaxDeleteConcurrency, CancellationToken = token };
+            await Parallel.ForEachAsync(ids, options, async (documentId, ct) =>
+            {
                 // Best-effort per document: an already-absent document must not abort the wider cascade.
                 try
                 {
-                    await SendAsync(HttpMethod.Delete, _BaseUrl + "/v1.0/indices/" + indexId + "/documents/" + documentId, null, token, isWrite: true).ConfigureAwait(false);
+                    await SendAsync(HttpMethod.Delete, _BaseUrl + "/v1.0/indices/" + indexId + "/documents/" + documentId, null, ct, isWrite: true).ConfigureAwait(false);
                 }
                 catch
                 {
                     // Swallow — the document may already be gone; deletion is idempotent.
                 }
-            }
+            }).ConfigureAwait(false);
         }
 
         #endregion

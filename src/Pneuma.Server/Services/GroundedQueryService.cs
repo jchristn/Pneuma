@@ -202,10 +202,15 @@ namespace Pneuma.Server.Services
             return sources;
         }
 
-        /// <summary>Resolve the tenant's answering model runner, if any.</summary>
+        /// <summary>
+        /// Resolve the tenant's answering model runner. Prefers an explicitly-configured Pneuma model runner
+        /// marked for user prompts; when none exists, falls back to the tenant's configured Partio completion
+        /// endpoint (what the Model Runners dashboard manages) so answering works out of the box with the
+        /// completion model, without requiring a separately-created runner.
+        /// </summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>An active user-prompt runner, or null.</returns>
+        /// <returns>An answering runner, or null when no completion model is configured anywhere.</returns>
         public async Task<ModelRunner?> ResolveAnswerRunnerAsync(string tenantId, CancellationToken token = default)
         {
             List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(tenantId, token).ConfigureAwait(false);
@@ -214,7 +219,8 @@ namespace Pneuma.Server.Services
                 if (!runner.Active) continue;
                 if (runner.Usage == ModelRunnerUsageEnum.UserPrompt || runner.Usage == ModelRunnerUsageEnum.Both) return runner;
             }
-            return null;
+
+            return await ResolvePartioCompletionRunnerAsync(token).ConfigureAwait(false);
         }
 
         /// <summary>Generate a cited answer from the given sources.</summary>
@@ -289,6 +295,55 @@ namespace Pneuma.Server.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task<ModelRunner?> ResolvePartioCompletionRunnerAsync(CancellationToken token)
+        {
+            List<PartioEndpoint> completions;
+            try
+            {
+                completions = await _Partio.ListCompletionEndpointsAsync(token).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _Logging.Warn("[GroundedQueryService] could not list completion endpoints: " + exception.Message);
+                return null;
+            }
+
+            PartioEndpoint? endpoint = null;
+            foreach (PartioEndpoint candidate in completions)
+            {
+                if (candidate.Active) { endpoint = candidate; break; }
+            }
+            if (endpoint == null && completions.Count > 0) endpoint = completions[0];
+            if (endpoint == null) return null;
+
+            ModelRunner runner = new ModelRunner
+            {
+                Name = String.IsNullOrWhiteSpace(endpoint.Name) ? "partio-completion" : endpoint.Name!,
+                Provider = MapProvider(endpoint.ApiFormat),
+                BaseUrl = endpoint.Endpoint ?? String.Empty,
+                DefaultModel = endpoint.Model ?? String.Empty,
+                Usage = ModelRunnerUsageEnum.Both,
+                Active = true
+            };
+
+            // The Partio endpoint's key is plaintext; store it encrypted so the shared answer path (which
+            // decrypts AuthMaterialEncrypted) can consume this transient runner exactly like a stored one.
+            if (!String.IsNullOrEmpty(endpoint.ApiKey))
+            {
+                try { runner.AuthMaterialEncrypted = _Cipher.Encrypt(endpoint.ApiKey); }
+                catch (Exception) { runner.AuthMaterialEncrypted = null; }
+            }
+
+            return runner;
+        }
+
+        private static ModelRunnerProviderEnum MapProvider(string? apiFormat)
+        {
+            if (String.Equals(apiFormat, "OpenAI", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.OpenAI;
+            if (String.Equals(apiFormat, "Gemini", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.Gemini;
+            return ModelRunnerProviderEnum.Ollama;
+        }
 
         private async Task<List<float>?> EmbedQueryAsync(string question, CancellationToken token)
         {

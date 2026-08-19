@@ -4,6 +4,29 @@ All notable changes to Pneuma (Pneuma - information brought to life) are documen
 [Keep a Changelog](https://keepachangelog.com/). Pneuma is in its `0.x` alpha series: anything may change
 between releases, and the project will adopt semantic versioning at its stable 1.0 release.
 
+## [0.1.1] - 2026-08-19
+
+### Added
+- **One Verbex document per source.** Ingestion now indexes a source's full text as a single lexical
+  document (tagged with `linkId`/`tenantId`/`subjectId`/`jobId`/`sourceUrl`/`documentType`), instead of one
+  document per chunk, so a search returns one hit per ingested source. Chunk-level graph nodes and vectors
+  are still created for semantic retrieval.
+- **Subject search grouped per source.** `GET /v1.0/subjects/{id}/search` rolls hits up to one result per
+  source link (best score + `matchCount`), and the admin Search table now shows Score, Matches, Title, URL,
+  Link ID, and the top passage.
+- **Answering model falls back to the Partio completion endpoint** when no explicit Pneuma model runner is
+  configured, so grounded query / chat works out of the box with the configured completion model.
+
+### Changed
+- **Cascade deletion is parallelized.** Verbex document deletes and LiteGraph node/edge deletes now run with
+  bounded concurrency, so deleting a link/subject with many indexed documents is dramatically faster.
+- **Clearer ingestion event log.** The Categorization phase is recorded as a single `Completed` event (with
+  prompt provenance folded in), and Hydration now emits a matching `Completed` event, so no phase lingers as
+  `Processing`.
+- Admin dashboard: health histogram capped to 10 bars in the table / 50 in the modal; the Follow Logs modal
+  shows total runtime across all stages at the top.
+- Docker compose pins Partio to `v0.4.0` (adds `/v1.0/chunk` and `/v1.0/embed`).
+
 ## [0.1.0] - 2026-08-18
 
 ### Added

@@ -187,8 +187,8 @@ services:
   # ------------------------------------------------------------------
   partio-server:
     container_name: 'partio-server'
-    # Partio publishes only :latest; pinned by digest for reproducibility.
-    image: 'jchristn77/partio-server:latest@sha256:bbea59eb7405b0543d18a66916ff0d674a3033797f2ac74ebe7bd1b7617c1d53'
+    # Pinned to the Partio 0.4.0 release (adds /v1.0/chunk and /v1.0/embed).
+    image: 'jchristn77/partio-server:v0.4.0'
     ports:
       - '8400:8400'
     depends_on:
@@ -203,8 +203,8 @@ services:
 
   partio-dashboard:
     container_name: 'partio-dashboard'
-    # Partio publishes only :latest; pinned by digest for reproducibility.
-    image: 'jchristn77/partio-dashboard:latest@sha256:fdd19bb1101eb5618470bcd2cf78e2bb2579bc17ba9a3313a030158b7326c108'
+    # Pinned to the Partio 0.4.0 release.
+    image: 'jchristn77/partio-dashboard:v0.4.0'
     ports:
       - '8401:8401'
     environment:

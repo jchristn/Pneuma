@@ -1,7 +1,7 @@
 <!-- Logo -->
 <p align="center"><img src="assets/logo.png" alt="Pneuma" width="140" /></p>
 
-<h1 align="center">Pneuma — information brought to life</h1>
+<h1 align="center">Pneuma — breathing life into your information</h1>
 
 <p align="center"><strong>v0.1.0 · Alpha</strong></p>
 

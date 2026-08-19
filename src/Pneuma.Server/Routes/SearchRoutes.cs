@@ -147,49 +147,70 @@ namespace Pneuma.Server.Routes
             Dictionary<string, string> filter = new Dictionary<string, string> { { "subjectId", subjectId } };
             List<VerbexHit> hits = await _Verbex.SearchAsync(indexId, query, 1000, filter, ctx.Token).ConfigureAwait(false);
 
-            // Highest score first, then paginate in-process (Verbex returns the full ranked set).
-            hits.Sort((a, b) => b.Score.CompareTo(a.Score));
-            int total = hits.Count;
-
-            List<VerbexHit> pageHits = new List<VerbexHit>();
-            for (int i = skip; i < hits.Count && pageHits.Count < maxResults; i++) pageHits.Add(hits[i]);
-
-            // Resolve each hit back to its originating link (documentTag jobId -> job.LinkId -> link).
+            // A source link is indexed as many Verbex documents (one per chunk). Resolve every hit back to its
+            // originating link (documentTag jobId -> job.LinkId) so chunk hits can be rolled up per link.
             Dictionary<string, string> jobToLink = new Dictionary<string, string>(StringComparer.Ordinal);
-            Dictionary<string, SubjectLink> linkById = new Dictionary<string, SubjectLink>(StringComparer.Ordinal);
-            foreach (VerbexHit hit in pageHits)
+            foreach (VerbexHit hit in hits)
             {
                 if (!hit.Tags.TryGetValue("jobId", out string? jobId) || String.IsNullOrEmpty(jobId)) continue;
-                if (!jobToLink.ContainsKey(jobId))
+                if (jobToLink.ContainsKey(jobId)) continue;
+                IngestionJob? job = await _Db.IngestionJobs.ReadAsync(tenantId, jobId, ctx.Token).ConfigureAwait(false);
+                if (job != null && !String.IsNullOrEmpty(job.LinkId)) jobToLink[jobId] = job.LinkId;
+            }
+
+            // Group hits into one result per source link (fall back to the Verbex document id when a link is
+            // not resolvable). Each group keeps its best-scoring chunk and how many chunks matched.
+            List<string> order = new List<string>();
+            Dictionary<string, SearchGroup> groups = new Dictionary<string, SearchGroup>(StringComparer.Ordinal);
+            foreach (VerbexHit hit in hits)
+            {
+                string? linkId = null;
+                if (hit.Tags.TryGetValue("jobId", out string? jid) && !String.IsNullOrEmpty(jid)) jobToLink.TryGetValue(jid, out linkId);
+                string key = !String.IsNullOrEmpty(linkId) ? "link:" + linkId : "doc:" + hit.DocumentId;
+
+                if (!groups.TryGetValue(key, out SearchGroup? group))
                 {
-                    IngestionJob? job = await _Db.IngestionJobs.ReadAsync(tenantId, jobId, ctx.Token).ConfigureAwait(false);
-                    if (job != null) jobToLink[jobId] = job.LinkId;
+                    group = new SearchGroup { LinkId = linkId, Best = hit, MatchCount = 0 };
+                    groups[key] = group;
+                    order.Add(key);
                 }
-                if (jobToLink.TryGetValue(jobId, out string? linkId) && !String.IsNullOrEmpty(linkId) && !linkById.ContainsKey(linkId))
-                {
-                    SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, linkId, ctx.Token).ConfigureAwait(false);
-                    if (link != null) linkById[linkId] = link;
-                }
+                group.MatchCount++;
+                if (hit.Score > group.Best.Score) group.Best = hit;
+            }
+
+            List<SearchGroup> ranked = new List<SearchGroup>();
+            foreach (string key in order) ranked.Add(groups[key]);
+            ranked.Sort((a, b) => b.Best.Score.CompareTo(a.Best.Score));
+
+            int total = ranked.Count;
+            List<SearchGroup> pageGroups = new List<SearchGroup>();
+            for (int i = skip; i < ranked.Count && pageGroups.Count < maxResults; i++) pageGroups.Add(ranked[i]);
+
+            // Resolve link details (url/title) for the links shown on this page.
+            Dictionary<string, SubjectLink> linkById = new Dictionary<string, SubjectLink>(StringComparer.Ordinal);
+            foreach (SearchGroup group in pageGroups)
+            {
+                if (String.IsNullOrEmpty(group.LinkId) || linkById.ContainsKey(group.LinkId!)) continue;
+                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, group.LinkId!, ctx.Token).ConfigureAwait(false);
+                if (link != null) linkById[group.LinkId!] = link;
             }
 
             List<SubjectSearchResult> objects = new List<SubjectSearchResult>();
-            foreach (VerbexHit hit in pageHits)
+            foreach (SearchGroup group in pageGroups)
             {
                 SubjectSearchResult result = new SubjectSearchResult
                 {
-                    DocumentId = hit.DocumentId,
-                    Score = hit.Score,
-                    Snippet = hit.Snippet
+                    DocumentId = group.Best.DocumentId,
+                    Score = group.Best.Score,
+                    MatchCount = group.MatchCount,
+                    Snippet = group.Best.Snippet,
+                    LinkId = group.LinkId
                 };
-                if (hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId)) result.NodeId = nodeId;
-                if (hit.Tags.TryGetValue("jobId", out string? jid) && jobToLink.TryGetValue(jid, out string? lid))
+                if (group.Best.Tags.TryGetValue("litegraphNodeId", out string? nodeId)) result.NodeId = nodeId;
+                if (!String.IsNullOrEmpty(group.LinkId) && linkById.TryGetValue(group.LinkId!, out SubjectLink? link))
                 {
-                    result.LinkId = lid;
-                    if (linkById.TryGetValue(lid, out SubjectLink? link))
-                    {
-                        result.LinkUrl = link.Url;
-                        result.LinkTitle = link.Title;
-                    }
+                    result.LinkUrl = link.Url;
+                    result.LinkTitle = link.Title;
                 }
                 objects.Add(result);
             }
@@ -205,6 +226,23 @@ namespace Pneuma.Server.Routes
                 Objects = objects
             };
             await RouteHelper.SendJsonAsync(ctx, 200, envelope).ConfigureAwait(false);
+        }
+
+        #endregion
+
+        #region Nested-Types
+
+        /// <summary>Accumulates the chunk hits belonging to one source link while rolling up search results.</summary>
+        private sealed class SearchGroup
+        {
+            /// <summary>The source content-link id, or null when the hit could not be resolved to a link.</summary>
+            public string? LinkId { get; set; }
+
+            /// <summary>The best-scoring chunk hit seen for this source.</summary>
+            public VerbexHit Best { get; set; } = null!;
+
+            /// <summary>How many chunk hits belong to this source.</summary>
+            public int MatchCount { get; set; }
         }
 
         #endregion

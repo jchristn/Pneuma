@@ -34,6 +34,9 @@ namespace Pneuma.Core.Integrations.Implementations
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        // Bounded concurrency for bulk node/edge deletion during cascade cleanup.
+        private const int _MaxDeleteConcurrency = 8;
+
         private readonly string _BaseUrl;
         private readonly string? _BearerToken;
         private readonly string _TenantGuid;
@@ -356,20 +359,12 @@ namespace Pneuma.Core.Integrations.Implementations
             // Delete nodes this job asserted (source + newly-created entity nodes). Deleting a node
             // cascades its attached edges; nodes reused from earlier jobs are not tagged here and survive.
             List<GraphNode> nodes = await SearchNodesByTagsAsync(jobTag, 10000, token).ConfigureAwait(false);
-            foreach (GraphNode node in nodes)
-            {
-                if (String.IsNullOrEmpty(node.Id)) continue;
-                await DeleteResourceAsync("nodes", node.Id, token).ConfigureAwait(false);
-            }
+            await DeleteResourcesAsync("nodes", NodeIds(nodes), token).ConfigureAwait(false);
 
             // Delete any remaining edges asserted by this job (e.g. relationships between two reused
             // shared nodes, which the node deletions above would not have removed).
             List<GraphEdge> edges = await SearchEdgesByTagsAsync(jobTag, 10000, token).ConfigureAwait(false);
-            foreach (GraphEdge edge in edges)
-            {
-                if (String.IsNullOrEmpty(edge.Id)) continue;
-                await DeleteResourceAsync("edges", edge.Id, token).ConfigureAwait(false);
-            }
+            await DeleteResourcesAsync("edges", EdgeIds(edges), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -382,11 +377,7 @@ namespace Pneuma.Core.Integrations.Implementations
             // All of a subject's nodes (source nodes and per-subject entity nodes) carry the subjectId tag.
             // Deleting each node cascades its attached edges, removing the subject's entire subgraph.
             List<GraphNode> nodes = await SearchNodesByTagsAsync(subjectTag, 100000, token).ConfigureAwait(false);
-            foreach (GraphNode node in nodes)
-            {
-                if (String.IsNullOrEmpty(node.Id)) continue;
-                await DeleteResourceAsync("nodes", node.Id, token).ConfigureAwait(false);
-            }
+            await DeleteResourcesAsync("nodes", NodeIds(nodes), token).ConfigureAwait(false);
         }
 
         #endregion
@@ -443,6 +434,38 @@ namespace Pneuma.Core.Integrations.Implementations
                 // Best-effort: a resource already removed (e.g. an edge cascaded by a node delete)
                 // must not abort the wider cascade. The base already recorded the failure metric.
             }
+        }
+
+        private async Task DeleteResourcesAsync(string resource, List<string> ids, CancellationToken token)
+        {
+            if (ids.Count == 0) return;
+
+            // Delete concurrently rather than one-at-a-time: a subject/job can have many nodes and edges, and
+            // sequential round-trips make cascade deletion very slow. Each delete is already best-effort, and
+            // the client's per-service concurrency bulkhead caps the real parallelism against LiteGraph.
+            ParallelOptions options = new ParallelOptions { MaxDegreeOfParallelism = _MaxDeleteConcurrency, CancellationToken = token };
+            await Parallel.ForEachAsync(ids, options, async (id, ct) =>
+                await DeleteResourceAsync(resource, id, ct).ConfigureAwait(false)).ConfigureAwait(false);
+        }
+
+        private static List<string> NodeIds(List<GraphNode> nodes)
+        {
+            List<string> ids = new List<string>();
+            foreach (GraphNode node in nodes)
+            {
+                if (!String.IsNullOrEmpty(node.Id)) ids.Add(node.Id);
+            }
+            return ids;
+        }
+
+        private static List<string> EdgeIds(List<GraphEdge> edges)
+        {
+            List<string> ids = new List<string>();
+            foreach (GraphEdge edge in edges)
+            {
+                if (!String.IsNullOrEmpty(edge.Id)) ids.Add(edge.Id);
+            }
+            return ids;
         }
 
         private HttpRequestMessage BuildRequest(HttpMethod method, string url, string? json)

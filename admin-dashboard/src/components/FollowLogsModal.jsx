@@ -85,6 +85,11 @@ function FollowLogsModal({ job, onClose }) {
   const currentStart = lastEvent?.createdUtc || jobData.startedUtc || jobData.createdUtc || null;
   const currentRuntimeMs = currentStart ? Math.max(0, Date.now() - new Date(currentStart).getTime()) : null;
 
+  // Total overall runtime = the sum of every stage's measured duration (phase markers report 0), plus the
+  // live elapsed time of the step currently in progress, so the header total reflects work done so far.
+  const totalRuntimeMs = events.reduce((sum, ev) => sum + (Number(ev.durationMs) || 0), 0)
+    + (showCurrentStep && currentRuntimeMs ? currentRuntimeMs : 0);
+
   // Initial load (and reload when the target job changes).
   useEffect(() => {
     poll();
@@ -121,6 +126,9 @@ function FollowLogsModal({ job, onClose }) {
       <div className="ilog-run-header" style={{ marginBottom: '0.75rem' }}>
         <StatusPill label={jobData.status} tone={toneForStatus(jobData.status)} />
         {jobData.documentType && <span className="ilog-doctype">{jobData.documentType}</span>}
+        {(events.length > 0 || showCurrentStep) && (
+          <span className="ilog-total">{t('jobs.totalRuntime')}: <strong>{formatDuration(totalRuntimeMs)}</strong></span>
+        )}
         <span className="ilog-run-times">
           {running && refreshSeconds > 0 && (
             <span className="ilog-live" aria-live="polite">

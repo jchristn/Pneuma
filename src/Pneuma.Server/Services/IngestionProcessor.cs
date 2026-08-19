@@ -202,12 +202,14 @@ namespace Pneuma.Server.Services
                 token).ConfigureAwait(false);
             await _Journal.TryStoreAsync("subgraph", () => _Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
 
-            await _Stages.RecordPromptProvenanceAsync(job, token).ConfigureAwait(false);
+            string provenance = await _Stages.BuildPromptProvenanceAsync(job, token).ConfigureAwait(false);
 
-            // End of the categorization phase: the candidate plan (proposed subgraph) is persisted and,
-            // under auto-approval, flows straight into hydration.
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Processing,
-                "Categorization complete — candidate plan proposes " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count + " relationship(s); auto-approved, proceeding to hydration.",
+            // End of the categorization phase: the candidate plan (proposed subgraph) is persisted and, under
+            // auto-approval, flows straight into hydration. Emitted as Completed (not Processing) so the phase
+            // reads as finished; the prompt provenance is folded in rather than logged as a separate row.
+            await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
+                "Categorization complete — candidate plan proposes " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count +
+                " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + provenance + ".",
                 0, token).ConfigureAwait(false);
 
             return new CategorizationResult { Cells = cells, Subgraph = subgraph };
@@ -237,6 +239,12 @@ namespace Pneuma.Server.Services
                 result => "Search indexing complete — indexed " + result.Count + " document(s), each linked back to its knowledge-graph node.",
                 token).ConfigureAwait(false);
             job.VerbexDocumentIds = verbexIds;
+
+            // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish;
+            // its "Hydration started" marker now has a matching completion before the job itself completes.
+            await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Completed,
+                "Hydration complete — knowledge graph and search index updated.",
+                0, token).ConfigureAwait(false);
 
             await _Journal.CompleteAsync(job, token).ConfigureAwait(false);
         }
