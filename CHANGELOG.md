@@ -1,9 +1,10 @@
 # Changelog
 
 All notable changes to Pneuma (Pneuma - information brought to life) are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
+[Keep a Changelog](https://keepachangelog.com/). Pneuma is in its `0.x` alpha series: anything may change
+between releases, and the project will adopt semantic versioning at its stable 1.0 release.
 
-## [Unreleased]
+## [0.1.0] - 2026-08-18
 
 ### Added
 - **Integrated MCP server.** The Pneuma host now serves a Model Context Protocol endpoint at `POST /mcp`
