@@ -5,7 +5,11 @@ services:
   # ------------------------------------------------------------------
   pneuma-postgres:
     container_name: 'pneuma-postgres'
-    image: 'postgres:17'
+    # Standard postgres:17 with pgvector installed (see postgres/Dockerfile), so RecallDB's database can
+    # enable the vector extension. Shared by every service that needs Postgres.
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
     ports:
       - '15432:5432'
     environment:
@@ -14,78 +18,37 @@ services:
       POSTGRES_PASSWORD: 'pneuma'
     volumes:
       - pneuma-postgres-data:/var/lib/postgresql/data
-      # Creates the per-service databases (less3, litegraph, partio, verbex) on first init.
+      # Creates the per-service databases (less3, litegraph, partio, recalldb) on first init and enables
+      # the vector/pg_trgm extensions in the recalldb database.
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pneuma -d pneuma']
+      # Force a TCP check (-h 127.0.0.1) so the container is only reported healthy once the real server is
+      # listening on the network. Without -h, pg_isready checks the local socket, which is up during
+      # first-init (initdb + create-databases + CREATE EXTENSION) before postgres listens on TCP — dependent
+      # services would then start too early and crash with "connection refused".
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 5432 -U pneuma -d pneuma']
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 2s
+      retries: 2
+      start_period: 30s
 
   # ------------------------------------------------------------------
-  # Pneuma backend server
+  # Local model runner (offline default for classification + embeddings)
   # ------------------------------------------------------------------
-  pneuma-server:
-    container_name: 'pneuma-server'
-    build:
-      context: ..
-      dockerfile: docker/server/Dockerfile
+  ollama:
+    container_name: 'pneuma-ollama'
+    image: 'ollama/ollama:0.31.2'
     ports:
-      - '8080:8080'
-    depends_on:
-      pneuma-postgres:
-        condition: service_healthy
-      litegraph:
-        condition: service_started
-      documentatom:
-        condition: service_started
-      partio-server:
-        condition: service_started
-      verbex-server:
-        condition: service_started
-      less3:
-        condition: service_started
-    environment:
-      PNEUMA_OLLAMA_BASE_URL: 'http://ollama:11434'
+      - '11434:11434'
     volumes:
-      - ./pneuma.json:/app/config/pneuma.json
-      - ./logs/pneuma:/app/logs
-      - ./blobs:/app/blobs
+      - ollama-data:/root/.ollama
     healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://localhost:8080/v1.0/api/health || exit 1']
-      interval: 10s
-      timeout: 3s
-      retries: 20
-
-  # ------------------------------------------------------------------
-  # Pneuma dashboards
-  # ------------------------------------------------------------------
-  admin-dashboard:
-    container_name: 'pneuma-admin-dashboard'
-    build:
-      context: ../admin-dashboard
-    ports:
-      - '3010:80'
-    depends_on:
-      - pneuma-server
-
-  subject-dashboard:
-    container_name: 'pneuma-subject-dashboard'
-    build:
-      context: ../subject-dashboard
-    ports:
-      - '3011:80'
-    depends_on:
-      - pneuma-server
-
-  user-dashboard:
-    container_name: 'pneuma-user-dashboard'
-    build:
-      context: ../user-dashboard
-    ports:
-      - '3012:80'
-    depends_on:
-      - pneuma-server
+      # The ollama image is distroless (no shell); use the bundled CLI, which returns 0 once the server is up.
+      test: ['CMD', 'ollama', 'list']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   # ------------------------------------------------------------------
   # Knowledge graph: LiteGraph + UI
@@ -107,6 +70,12 @@ services:
     depends_on:
       pneuma-postgres:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8701/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
 
   litegraph-ui:
     container_name: 'litegraph-ui'
@@ -118,7 +87,14 @@ services:
       LITEGRAPH_SERVER: 'http://localhost:8701'
       NEXT_PUBLIC_LITEGRAPH_SERVER_URL: 'http://localhost:8701'
     depends_on:
-      - litegraph
+      litegraph:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:3000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   # ------------------------------------------------------------------
   # Object storage: Less3 (S3-compatible) + UI
@@ -134,6 +110,12 @@ services:
     depends_on:
       pneuma-postgres:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
 
   less3-ui:
     container_name: 'less3-ui'
@@ -144,7 +126,14 @@ services:
       # Browser-reachable Less3 server URL (host-published port 8100 -> container 8000).
       LESS3_SERVER_URL: 'http://localhost:8100'
     depends_on:
-      - less3
+      less3:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:3000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   # ------------------------------------------------------------------
   # Type detection + cell extraction: DocumentAtom + UI
@@ -158,6 +147,12 @@ services:
       - documentatom-data:/app
       # Override the baked-in settings so the server binds all interfaces (not container loopback).
       - ./documentatom/documentatom.json:/app/documentatom.json
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 30s
 
   documentatom-ui:
     container_name: 'documentatom-ui'
@@ -169,78 +164,194 @@ services:
       # (documentatom is mapped to localhost:8000), not the internal container hostname.
       DOCUMENTATOM_SERVER_URL: 'http://localhost:8000'
     depends_on:
-      - documentatom
-
-  # ------------------------------------------------------------------
-  # Local model runner (offline default for classification + embeddings)
-  # ------------------------------------------------------------------
-  ollama:
-    container_name: 'pneuma-ollama'
-    image: 'ollama/ollama:0.31.2'
-    ports:
-      - '11434:11434'
-    volumes:
-      - ollama-data:/root/.ollama
+      documentatom:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:3000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   # ------------------------------------------------------------------
   # Chunking + embedding + summarization: Partio + dashboard
   # ------------------------------------------------------------------
   partio-server:
     container_name: 'partio-server'
-    # Partio publishes only :latest; pinned by digest for reproducibility.
-    image: 'jchristn77/partio-server:latest@sha256:bbea59eb7405b0543d18a66916ff0d674a3033797f2ac74ebe7bd1b7617c1d53'
+    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed), by digest for reproducibility.
+    image: 'jchristn77/partio-server:v0.4.0@sha256:5ac2901e35bfe1d399d6b91fde1b53cd8d1466fe5af034220b9ae19af16f8a10'
     ports:
       - '8400:8400'
     depends_on:
       ollama:
-        condition: service_started
+        condition: service_healthy
       pneuma-postgres:
         condition: service_healthy
     volumes:
       - partio-data:/app
       # Override the baked-in settings so the server binds all interfaces (not container loopback).
       - ./partio/partio.json:/app/partio.json
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8400/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
 
   partio-dashboard:
     container_name: 'partio-dashboard'
-    # Partio publishes only :latest; pinned by digest for reproducibility.
-    image: 'jchristn77/partio-dashboard:latest@sha256:fdd19bb1101eb5618470bcd2cf78e2bb2579bc17ba9a3313a030158b7326c108'
+    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed), by digest for reproducibility.
+    image: 'jchristn77/partio-dashboard:v0.4.0@sha256:6a57070c5da8b54974f9ae2342e6f23245ec9e549277246ef1362b8800bfc7f9'
     ports:
       - '8401:8401'
     environment:
       # Browser-reachable Partio server URL (host-published port).
       PARTIO_SERVER_URL: 'http://localhost:8400'
     depends_on:
-      - partio-server
+      partio-server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8401/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   # ------------------------------------------------------------------
-  # Inverted index / search: Verbex + dashboard
+  # Retrieval store (vector + full-text search): RecallDB + dashboard
   # ------------------------------------------------------------------
-  verbex-server:
-    container_name: 'verbex-server'
-    image: 'jchristn77/verbex-server:v0.1.0'
+  recalldb-server:
+    container_name: 'recalldb-server'
+    image: 'jchristn77/recalldb-server:latest'
     ports:
-      - '8600:8080'
+      - '8600:8600'
+    environment:
+      # Uses the shared Pneuma postgres (pgvector installed); its `recalldb` database and the vector/pg_trgm
+      # extensions are created by the postgres init scripts on first boot.
+      RECALLDB_DB_HOST: 'pneuma-postgres'
+      RECALLDB_DB_PORT: '5432'
+      RECALLDB_DB_NAME: 'recalldb'
+      RECALLDB_DB_USER: 'pneuma'
+      RECALLDB_DB_PASS: 'pneuma'
     volumes:
-      - verbex-data:/app
-      # Override the baked-in settings so the server binds all interfaces (not container loopback).
-      - ./verbex/verbex.json:/app/verbex.json
+      - ./recalldb/recalldb.json:/app/recalldb.json:ro
     depends_on:
       pneuma-postgres:
         condition: service_healthy
+    healthcheck:
+      # The recalldb-server image ships wget (not curl); its root path returns 200 when ready.
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:8600/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
 
-  verbex-dashboard:
-    container_name: 'verbex-dashboard'
-    image: 'jchristn77/verbex-dashboard:v0.1.0'
+  recalldb-dashboard:
+    container_name: 'recalldb-dashboard'
+    image: 'jchristn77/recalldb-dashboard:latest'
     ports:
-      - '8601:8200'
+      - '8601:8601'
     environment:
       # Rendered into the browser as the API base URL, so it must be the host-published port
-      # (verbex-server is mapped to localhost:8600), not the internal container hostname.
-      VERBEX_SERVER_URL: 'http://localhost:8600'
-      VERBEX_API_KEY: 'verbexadmin'
+      # (recalldb-server is mapped to localhost:8600), not the internal container hostname.
+      RECALLDB_SERVER_URL: 'http://localhost:8600'
+      RECALLDB_API_KEY: 'recalldbadmin'
     depends_on:
-      - verbex-server
+      recalldb-server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8601/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
+
+  # ------------------------------------------------------------------
+  # Pneuma backend server
+  # ------------------------------------------------------------------
+  pneuma-server:
+    container_name: 'pneuma-server'
+    build:
+      context: ..
+      dockerfile: docker/server/Dockerfile
+    ports:
+      - '8080:8080'
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+      litegraph:
+        condition: service_healthy
+      documentatom:
+        condition: service_healthy
+      partio-server:
+        condition: service_healthy
+      recalldb-server:
+        condition: service_healthy
+      less3:
+        condition: service_healthy
+    environment:
+      PNEUMA_OLLAMA_BASE_URL: 'http://ollama:11434'
+    volumes:
+      - ./pneuma.json:/app/config/pneuma.json
+      - ./logs/pneuma:/app/logs
+      - ./blobs:/app/blobs
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8080/v1.0/api/health || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
+
+  # ------------------------------------------------------------------
+  # Pneuma dashboards
+  # ------------------------------------------------------------------
+  admin-dashboard:
+    container_name: 'pneuma-admin-dashboard'
+    build:
+      context: ../admin-dashboard
+    ports:
+      - '3010:80'
+    depends_on:
+      pneuma-server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:80/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 15s
+
+  subject-dashboard:
+    container_name: 'pneuma-subject-dashboard'
+    build:
+      context: ../subject-dashboard
+    ports:
+      - '3011:80'
+    depends_on:
+      pneuma-server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:80/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 15s
+
+  user-dashboard:
+    container_name: 'pneuma-user-dashboard'
+    build:
+      context: ../user-dashboard
+    ports:
+      - '3012:80'
+    depends_on:
+      pneuma-server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:80/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 15s
 
   # ------------------------------------------------------------------
   # Observability: Prometheus + Grafana + Tempo
@@ -257,7 +368,15 @@ services:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - pneuma-prometheus-data:/prometheus
     depends_on:
-      - pneuma-server
+      pneuma-server:
+        condition: service_healthy
+    healthcheck:
+      # The prometheus image ships wget (not curl); /-/healthy returns 200 when ready.
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:9090/-/healthy || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 20s
 
   tempo:
     container_name: 'pneuma-tempo'
@@ -272,6 +391,13 @@ services:
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - pneuma-tempo-data:/var/tempo
+    healthcheck:
+      # The tempo image ships wget (not curl); /ready returns 503 until fully ready, then 200.
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:3200/ready || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 40s
 
   grafana:
     container_name: 'pneuma-grafana'
@@ -288,8 +414,16 @@ services:
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ../assets/grafana:/var/lib/grafana/dashboards/pneuma:ro
     depends_on:
-      - prometheus
-      - tempo
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/health || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 30s
 
 volumes:
   pneuma-postgres-data:
@@ -297,7 +431,6 @@ volumes:
   less3-data:
   documentatom-data:
   partio-data:
-  verbex-data:
   ollama-data:
   pneuma-prometheus-data:
   pneuma-tempo-data:

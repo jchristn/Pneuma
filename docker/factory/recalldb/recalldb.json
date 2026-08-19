@@ -1,0 +1,36 @@
+{
+  "Webserver": {
+    "Hostname": "*",
+    "Port": 8600,
+    "Ssl": false
+  },
+  "Database": {
+    "Hostname": "pneuma-postgres",
+    "Port": 5432,
+    "DatabaseName": "recalldb",
+    "Username": "pneuma",
+    "Password": "pneuma",
+    "Schema": "public",
+    "RequireEncryption": false,
+    "LogQueries": false
+  },
+  "Logging": {
+    "ConsoleLogging": true,
+    "EnableColors": false,
+    "MinimumSeverity": 0,
+    "LogDirectory": "./logs/",
+    "LogFilename": "recalldb.log",
+    "FileLogging": true,
+    "IncludeDateInFilename": true,
+    "Servers": []
+  },
+  "Debug": {
+    "Authentication": false,
+    "Exceptions": true,
+    "Requests": false,
+    "DatabaseQueries": false
+  },
+  "AdminApiKeys": [
+    "recalldbadmin"
+  ]
+}

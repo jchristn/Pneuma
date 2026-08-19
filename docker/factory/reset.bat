@@ -5,7 +5,7 @@ REM ==========================================================================
 REM reset.bat - Reset the Pneuma docker environment to factory defaults.
 REM
 REM Destroys all runtime docker data (Pneuma Postgres, LiteGraph, Less3, DocumentAtom,
-REM Partio, Verbex, Ollama, Prometheus, Grafana, and Tempo volumes), clears
+REM Partio, RecallDB, Ollama, Prometheus, Grafana, and Tempo volumes), clears
 REM logs/blobs/backups, restores factory config files (including every subordinate
 REM service config), and leaves the stack ready for a fresh "docker compose up".
 REM ==========================================================================
@@ -22,13 +22,13 @@ echo ==========================================================
 echo.
 echo WARNING: This is DESTRUCTIVE. The following are deleted:
 echo   - Pneuma PostgreSQL data volume (tenants, users, jobs, and the
-echo     less3/litegraph/partio/verbex databases)
-echo   - LiteGraph, Less3, DocumentAtom, Partio, Verbex, Ollama data volumes
+echo     less3/litegraph/partio/recalldb databases)
+echo   - LiteGraph, Less3, DocumentAtom, Partio, RecallDB, Ollama data volumes
 echo   - Prometheus, Grafana, and Tempo data volumes
 echo   - Pneuma logs, blobs, and backups
 echo   - Config edits to pneuma.json, compose.yaml, prometheus.yaml, tempo.yaml,
 echo     Grafana, and every subordinate service config (less3, litegraph,
-echo     documentatom, partio, verbex, postgres init)
+echo     documentatom, partio, recalldb, postgres init)
 echo.
 echo A fresh "docker compose up -d" will re-seed the default administrator
 echo (admin@pneuma / password).
@@ -67,10 +67,12 @@ mkdir "%DOCKER_DIR%litegraph" 2>nul
 copy /y "%FACTORY_DIR%litegraph\litegraph.json" "%DOCKER_DIR%litegraph\litegraph.json" >nul
 mkdir "%DOCKER_DIR%partio" 2>nul
 copy /y "%FACTORY_DIR%partio\partio.json" "%DOCKER_DIR%partio\partio.json" >nul
-mkdir "%DOCKER_DIR%verbex" 2>nul
-copy /y "%FACTORY_DIR%verbex\verbex.json" "%DOCKER_DIR%verbex\verbex.json" >nul
+mkdir "%DOCKER_DIR%recalldb" 2>nul
+copy /y "%FACTORY_DIR%recalldb\recalldb.json" "%DOCKER_DIR%recalldb\recalldb.json" >nul
 mkdir "%DOCKER_DIR%postgres\init" 2>nul
+copy /y "%FACTORY_DIR%postgres\Dockerfile" "%DOCKER_DIR%postgres\Dockerfile" >nul
 copy /y "%FACTORY_DIR%postgres\init\01-create-databases.sql" "%DOCKER_DIR%postgres\init\01-create-databases.sql" >nul
+copy /y "%FACTORY_DIR%postgres\init\02-recalldb-extensions.sql" "%DOCKER_DIR%postgres\init\02-recalldb-extensions.sql" >nul
 mkdir "%DOCKER_DIR%grafana\provisioning\datasources" 2>nul
 mkdir "%DOCKER_DIR%grafana\provisioning\dashboards" 2>nul
 copy /y "%FACTORY_DIR%grafana\provisioning\datasources\pneuma-datasources.yml" "%DOCKER_DIR%grafana\provisioning\datasources\pneuma-datasources.yml" >nul
