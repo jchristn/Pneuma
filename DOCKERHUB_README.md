@@ -2,7 +2,7 @@
 
 Pneuma turns a subject's approved body of work into structured, connected, rights-aware cultural intelligence. Subjects submit their material; Pneuma ingests each artifact, classifies it into an ontology, merges it into a knowledge graph, and indexes it for grounded search — powering trustworthy fan-facing experiences that stay anchored to authoritative source material.
 
-This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that orchestrates ingestion, hosts the REST API, enforces multi-tenant RBAC, and emits Prometheus metrics and Radiant/OTLP traces. It is designed to run as part of the Pneuma Docker Compose stack alongside LiteGraph, DocumentAtom, Partio, Verbex, Postgres, Prometheus, Grafana, and Tempo.
+This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that orchestrates ingestion, hosts the REST API, enforces multi-tenant RBAC, and emits Prometheus metrics and Radiant/OTLP traces. It is designed to run as part of the Pneuma Docker Compose stack alongside LiteGraph, DocumentAtom, Partio, RecallDB, Postgres, Prometheus, Grafana, and Tempo.
 
 ![Pneuma](https://raw.githubusercontent.com/jchristn/pneuma/main/assets/logo.png)
 
@@ -17,13 +17,13 @@ This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that o
 ```
 Subject link → ingestion job → worker pool:
   DocumentAtom (type detect + cell extract) → PolyPrompt (classify to ontology)
-  → LiteGraph (merge subgraph) → Partio (chunk/embed/summarize) → Verbex (index)
-User search (Verbex) → representative graph nodes → node explorer with provenance
+  → LiteGraph (merge subgraph) → Partio (chunk/embed/summarize) → RecallDB (store chunks + vectors)
+User search (RecallDB) → representative graph nodes → node explorer with provenance
 ```
 
 ## Getting started
 
-Use the Compose stack from the repository rather than running this image alone — the server depends on Postgres, LiteGraph, DocumentAtom, Partio, and Verbex.
+Use the Compose stack from the repository rather than running this image alone — the server depends on Postgres, LiteGraph, DocumentAtom, Partio, and RecallDB.
 
 ```bash
 git clone https://github.com/jchristn/pneuma

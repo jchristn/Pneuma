@@ -4,7 +4,7 @@ Pneuma (Pneuma - information brought to life) is a subject knowledge-graph platf
 
 ## What Pneuma is
 
-A C# (Watson 7.1) backend + Postgres control plane + LiteGraph knowledge graph, with a document→graph→search ingestion pipeline built from DocumentAtom, Partio, Verbex, and PolyPrompt, plus three React/Vite dashboards (admin, subject, user). See `PNEUMA_PLAN.md` for the phased plan and progress checkboxes, and `REST_API.md` for the API.
+A C# (Watson 7.1) backend + Postgres control plane + LiteGraph knowledge graph, with a document→graph→search ingestion pipeline built from DocumentAtom, Partio, RecallDB, and PolyPrompt, plus three React/Vite dashboards (admin, subject, user). See `PNEUMA_PLAN.md` for the phased plan and progress checkboxes, and `REST_API.md` for the API.
 
 ## Backend C# code style (STRICT)
 
@@ -47,8 +47,8 @@ React 19 + Vite 6 + React Router 7, hand-rolled fetch `ApiClient` (no axios), i1
 
 - **DocumentAtom** `:8000`, no auth, no version prefix. `POST /typedetect` (raw bytes) → `TypeResult`; `Type:"Unknown"` returns 200 — fail ingestion on it. `POST /atom/{type}` with `{ "Settings": null, "Data": "<base64>" }` → `Atom[]`.
 - **Partio** `:8400`, Bearer (`partioadmin`). `POST /v1.0/process` with `SemanticCellRequest`; embedding/completion endpoints referenced by ID (`eep_`/`cep_`), configured server-side.
-- **Verbex** `:8600`→8080, Bearer (`verbexadmin`/`default`). `POST /v1.0/indices`, `.../documents`, `.../search`. Store LiteGraph node ID in `Tags.litegraphNodeId` + `CustomMetadata`; it round-trips on search hits.
-- **LiteGraph** `:8701`. Knowledge graph store; node/edge labels + tags carry metadata, provenance, rights, authority.
+- **RecallDB** `:8600`, Bearer (`recalldbadmin`/`default`), Postgres+pgvector. Retrieval store: bring-your-own-vectors (no embedding/completion API). RecallDB is the authority for tenants and collections; Pneuma relays (like Partio model runners) and stores no local collection state. Each Pneuma tenant maps to a RecallDB tenant of the same id — creating a Pneuma tenant (and first-boot) provisions the RecallDB tenant + a default collection via `TenantProvisioningService`/`ITenantProvisioner` (best-effort, idempotent). Collection admin + retrieval are tenant-scoped (`ICollectionStore`/`IVectorRepository`/`IInvertedIndex` take a `tenantId`); a collection's `dimensionality` is fixed at creation. Per-chunk documents carry content + embedding + tags; `PUT /v1.0/tenants/{tid}/collections`, `POST .../collections/{cid}/documents/batch`, `POST .../collections/{cid}/search` (Vector CosineSimilarity + FullText TsRank + TagFilter), `POST .../documents/delete/filter`. Store LiteGraph node ID in `Tags.litegraphNodeId`; it round-trips on search hits. Ingestion requires a collection; delete-by-`jobId`-tag on cascade.
+- **LiteGraph** `:8701`. Knowledge graph store; node/edge labels + tags carry metadata, provenance, rights, authority. **Per-tenant:** each Pneuma tenant gets its own isolated LiteGraph tenant + graph (created/hydrated at tenant provisioning; GUIDs recorded on the Pneuma `Tenant` as `LiteGraphTenantGuid`/`LiteGraphGraphGuid`). Graph operations resolve a per-tenant client via `IGraphRepositoryFactory.ForTenantAsync(tenantId)` (falls back to the configured default tenant/graph when unprovisioned) — never share one LiteGraph tenant across Pneuma tenants.
 
 ## Testing
 

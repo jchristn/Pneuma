@@ -17,14 +17,17 @@ namespace Pneuma.Server.Services
         /// <summary>Semantic processor with Partio's endpoint-administration surface.</summary>
         public IPartioClient Partio { get; set; } = null!;
 
-        /// <summary>Inverted (lexical) search index.</summary>
-        public IInvertedIndex Verbex { get; set; } = null!;
+        /// <summary>Full-text (lexical) search over the retrieval store (RecallDB).</summary>
+        public IInvertedIndex Search { get; set; } = null!;
 
         /// <summary>Knowledge-graph repository.</summary>
         public IGraphRepository Graph { get; set; } = null!;
 
-        /// <summary>Vector store (semantic retrieval), backed by the graph store.</summary>
+        /// <summary>Vector store (semantic retrieval + chunk storage), backed by RecallDB.</summary>
         public IVectorRepository Vectors { get; set; } = null!;
+
+        /// <summary>Vector collection administration (RecallDB).</summary>
+        public ICollectionStore Collections { get; set; } = null!;
 
         /// <summary>Blob store.</summary>
         public IBlobStore Blobs { get; set; } = null!;

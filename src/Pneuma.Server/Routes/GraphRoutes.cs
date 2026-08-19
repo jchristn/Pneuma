@@ -23,7 +23,7 @@ namespace Pneuma.Server.Routes
 
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
-        private readonly IGraphRepository _Graph;
+        private readonly IGraphRepositoryFactory _GraphFactory;
 
         #endregion
 
@@ -32,15 +32,15 @@ namespace Pneuma.Server.Routes
         /// <summary>Instantiate graph routes.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="graph">LiteGraph client.</param>
-        public GraphRoutes(DatabaseDriverBase db, AuthorizationService authz, IGraphRepository graph)
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        public GraphRoutes(DatabaseDriverBase db, AuthorizationService authz, IGraphRepositoryFactory graphFactory)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
-            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             _Db = db;
             _Authz = authz;
-            _Graph = graph;
+            _GraphFactory = graphFactory;
         }
 
         #endregion
@@ -76,7 +76,7 @@ namespace Pneuma.Server.Routes
         {
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc).ConfigureAwait(false)) return;
-            GraphNode? node = await _Graph.ReadNodeAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            GraphNode? node = await (await _GraphFactory.ForTenantAsync(rc.TenantId ?? String.Empty, ctx.Token).ConfigureAwait(false)).ReadNodeAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
             if (node == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Node not found.").ConfigureAwait(false);
@@ -89,7 +89,7 @@ namespace Pneuma.Server.Routes
         {
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc).ConfigureAwait(false)) return;
-            List<GraphNode> neighbors = await _Graph.GetNeighborsAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            List<GraphNode> neighbors = await (await _GraphFactory.ForTenantAsync(rc.TenantId ?? String.Empty, ctx.Token).ConfigureAwait(false)).GetNeighborsAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, neighbors).ConfigureAwait(false);
         }
 
@@ -97,7 +97,7 @@ namespace Pneuma.Server.Routes
         {
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc).ConfigureAwait(false)) return;
-            List<GraphEdge> edges = await _Graph.GetEdgesAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            List<GraphEdge> edges = await (await _GraphFactory.ForTenantAsync(rc.TenantId ?? String.Empty, ctx.Token).ConfigureAwait(false)).GetEdgesAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, edges).ConfigureAwait(false);
         }
 

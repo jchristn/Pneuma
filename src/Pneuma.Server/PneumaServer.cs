@@ -29,10 +29,12 @@ namespace Pneuma.Server
         private readonly AuthenticationService _Authentication;
         private readonly AuthorizationService _Authorization;
         private readonly RequestHistoryCaptureService _Capture;
-        private readonly IGraphRepository _Graph;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IVectorRepository _Vectors;
-        private readonly IInvertedIndex _Verbex;
+        private readonly IInvertedIndex _Search;
+        private readonly ICollectionStore _Collections;
         private readonly IPartioClient _Partio;
+        private readonly TenantProvisioningService _Provisioning;
         private readonly ModelHealthMonitor _ModelHealth;
         private readonly IArtifactStore _Artifacts;
         private readonly IBlobStore _Blobs;
@@ -51,9 +53,11 @@ namespace Pneuma.Server
         /// <param name="authentication">Authentication service.</param>
         /// <param name="authorization">Authorization service.</param>
         /// <param name="capture">Request capture service.</param>
-        /// <param name="graph">LiteGraph client.</param>
-        /// <param name="verbex">Verbex client.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store (RecallDB).</param>
         /// <param name="partio">Partio client.</param>
+        /// <param name="provisioning">Tenant provisioning service (subordinate-service resources on tenant creation).</param>
         /// <param name="artifacts">Per-stage S3 artifact store, used by the artifact-view endpoints.</param>
         /// <param name="blobs">Blob store, used for cascading deletion of a link's raw ingested blobs.</param>
         /// <param name="logging">Logging module.</param>
@@ -64,10 +68,12 @@ namespace Pneuma.Server
             AuthenticationService authentication,
             AuthorizationService authorization,
             RequestHistoryCaptureService capture,
-            IGraphRepository graph,
+            IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
-            IInvertedIndex verbex,
+            IInvertedIndex search,
+            ICollectionStore collections,
             IPartioClient partio,
+            TenantProvisioningService provisioning,
             ModelHealthMonitor modelHealth,
             IArtifactStore artifacts,
             IBlobStore blobs,
@@ -79,10 +85,12 @@ namespace Pneuma.Server
             if (authentication == null) throw new ArgumentNullException(nameof(authentication));
             if (authorization == null) throw new ArgumentNullException(nameof(authorization));
             if (capture == null) throw new ArgumentNullException(nameof(capture));
-            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (vectors == null) throw new ArgumentNullException(nameof(vectors));
-            if (verbex == null) throw new ArgumentNullException(nameof(verbex));
+            if (search == null) throw new ArgumentNullException(nameof(search));
+            if (collections == null) throw new ArgumentNullException(nameof(collections));
             if (partio == null) throw new ArgumentNullException(nameof(partio));
+            if (provisioning == null) throw new ArgumentNullException(nameof(provisioning));
             if (modelHealth == null) throw new ArgumentNullException(nameof(modelHealth));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
             if (blobs == null) throw new ArgumentNullException(nameof(blobs));
@@ -94,10 +102,12 @@ namespace Pneuma.Server
             _Authentication = authentication;
             _Authorization = authorization;
             _Capture = capture;
-            _Graph = graph;
+            _GraphFactory = graphFactory;
             _Vectors = vectors;
-            _Verbex = verbex;
+            _Search = search;
+            _Collections = collections;
             _Partio = partio;
+            _Provisioning = provisioning;
             _ModelHealth = modelHealth;
             _Artifacts = artifacts;
             _Blobs = blobs;
@@ -155,7 +165,7 @@ namespace Pneuma.Server
         {
             new HealthRoutes("0.1.0").Register(_Server);
             new AuthRoutes(_Database, _Authentication).Register(_Server);
-            new TenantRoutes(_Database, _Authorization, _Authentication.Cipher).Register(_Server);
+            new TenantRoutes(_Database, _Authorization, _Authentication.Cipher, _Provisioning).Register(_Server);
             new UserRoutes(_Database, _Authorization).Register(_Server);
             new CredentialRoutes(_Database, _Authorization, _Authentication).Register(_Server);
             new RequestHistoryRoutes(_Database).Register(_Server);
@@ -164,19 +174,20 @@ namespace Pneuma.Server
             new PermissionRoutes(_Database, _Authorization).Register(_Server);
             new AssignmentRoutes(_Database, _Authorization).Register(_Server);
             new AuditRoutes(_Database, _Authorization).Register(_Server);
-            CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Verbex, _Graph, _Blobs);
+            CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs);
             new SubjectRoutes(_Database, _Authorization, cascade).Register(_Server);
-            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, cascade).Register(_Server);
+            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, cascade, _Collections).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization, cascade).Register(_Server);
             new IngestionEndpointRoutes(_Partio, _Authorization).Register(_Server);
+            new CollectionRoutes(_Authorization, _Collections).Register(_Server);
             new ModelRunnerRoutes(_Partio, _Authorization, _ModelHealth).Register(_Server);
             new PromptRoutes(_Database, _Authorization).Register(_Server);
-            new GraphRoutes(_Database, _Authorization, _Graph).Register(_Server);
-            new SearchRoutes(_Database, _Authorization, _Verbex, _Graph).Register(_Server);
-            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Verbex, _Graph, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
+            new GraphRoutes(_Database, _Authorization, _GraphFactory).Register(_Server);
+            new SearchRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory).Register(_Server);
+            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
             new QueryRoutes(_Authorization, groundedQuery, _Logging).Register(_Server);
-            new McpRoutes(_Database, _Authorization, _Verbex, _Graph, groundedQuery).Register(_Server);
-            PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Verbex, _Graph, groundedQuery);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery).Register(_Server);
+            PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Logging);
             new ChatRoutes(_Authorization, agenticChat, _Logging).Register(_Server);
         }

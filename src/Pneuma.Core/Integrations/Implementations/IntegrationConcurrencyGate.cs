@@ -7,7 +7,7 @@ namespace Pneuma.Core.Integrations.Implementations
 
     /// <summary>
     /// Process-wide concurrency gates (bulkheads) keyed by logical service name. Caps the number of
-    /// concurrent outbound requests to any one downstream integration (DocumentAtom, Partio, Verbex,
+    /// concurrent outbound requests to any one downstream integration (DocumentAtom, Partio, RecallDB,
     /// LiteGraph) so a slow or flapping service cannot exhaust threads or overwhelm the dependency.
     /// The gate for a service adapts to the most recently supplied maximum concurrency.
     /// </summary>

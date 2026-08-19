@@ -51,9 +51,9 @@ Subject submits a link  →  queued ingestion job  →  worker pool
   3. PolyPrompt     classify cells → candidate subgraph (ontology)
   4. LiteGraph      merge subgraph → record node/edge IDs
   5. Partio         summarize + chunk + embed
-  6. Verbex         index chunks, each linked back to its graph node
+  6. RecallDB       store chunk text + vectors, each linked back to its graph node
 
-A user searches (Verbex)  →  representative graph nodes  →  node explorer
+A user searches (RecallDB)  →  representative graph nodes  →  node explorer
   (contents, links, adjacent nodes, relationships, provenance, rights)
 
 An app or agent asks a question  →  lexical + semantic retrieval over the graph
@@ -82,7 +82,7 @@ Then open the **Admin dashboard** and sign in:
 | Pneuma Subject | http://localhost:3011 | `admin@pneuma` / `password` |
 | Pneuma User | http://localhost:3012 | `admin@pneuma` / `password` |
 
-The Pneuma API is at **http://localhost:8080** (OpenAPI at `/openapi.json`; admin API key `pneumaadmin`). The full list of service ports and default credentials — including LiteGraph, DocumentAtom, Partio, Verbex, Grafana, Prometheus, Tempo, and Postgres — is in [`docker/PORTS.md`](docker/PORTS.md).
+The Pneuma API is at **http://localhost:8080** (OpenAPI at `/openapi.json`; admin API key `pneumaadmin`). The full list of service ports and default credentials — including LiteGraph, DocumentAtom, Partio, RecallDB, Grafana, Prometheus, Tempo, and Postgres — is in [`docker/PORTS.md`](docker/PORTS.md).
 
 > **Change every default credential before exposing any service beyond your machine.** Override the seeded admin with `PNEUMA_ADMIN_EMAIL` / `PNEUMA_ADMIN_PASSWORD` (see `docker/pneuma.json`).
 
@@ -97,7 +97,7 @@ To wipe the stack back to factory defaults, use `docker/reset.bat` (Windows).
 | Knowledge graph | **LiteGraph** |
 | Type detection / cell extraction | **DocumentAtom** |
 | Chunking / embedding / summarization | **Partio** |
-| Inverted index / search | **Verbex** |
+| Retrieval store (vector + full-text) | **RecallDB** |
 | LLM access | **PolyPrompt** (OpenAI, Gemini, Ollama / local) |
 | BLOB / object storage | **Blobject** / S3 (Less3) |
 | Logging | **SyslogLogging** |

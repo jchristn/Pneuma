@@ -133,7 +133,7 @@ namespace Pneuma.Server.Routes
             if (!String.IsNullOrEmpty(s.Auth.TokenSigningKey)) s.Auth.TokenSigningKey = SecretMask;
             if (s.Auth.AdminApiKeys != null && s.Auth.AdminApiKeys.Count > 0) s.Auth.AdminApiKeys = new List<string> { SecretMask };
             if (!String.IsNullOrEmpty(s.Database.Password)) s.Database.Password = SecretMask;
-            if (!String.IsNullOrEmpty(s.Integrations.Verbex.BearerToken)) s.Integrations.Verbex.BearerToken = SecretMask;
+            if (!String.IsNullOrEmpty(s.Integrations.RecallDb.BearerToken)) s.Integrations.RecallDb.BearerToken = SecretMask;
             if (!String.IsNullOrEmpty(s.Integrations.Partio.BearerToken)) s.Integrations.Partio.BearerToken = SecretMask;
             if (!String.IsNullOrEmpty(s.Integrations.LiteGraph.BearerToken)) s.Integrations.LiteGraph.BearerToken = SecretMask;
             if (!String.IsNullOrEmpty(s.S3.AccessKey)) s.S3.AccessKey = SecretMask;
@@ -147,7 +147,7 @@ namespace Pneuma.Server.Routes
             if (incoming.Auth.AdminApiKeys != null && incoming.Auth.AdminApiKeys.Count == 1 && incoming.Auth.AdminApiKeys[0] == SecretMask)
                 incoming.Auth.AdminApiKeys = _Settings.Auth.AdminApiKeys;
             if (incoming.Database.Password == SecretMask) incoming.Database.Password = _Settings.Database.Password;
-            if (incoming.Integrations.Verbex.BearerToken == SecretMask) incoming.Integrations.Verbex.BearerToken = _Settings.Integrations.Verbex.BearerToken;
+            if (incoming.Integrations.RecallDb.BearerToken == SecretMask) incoming.Integrations.RecallDb.BearerToken = _Settings.Integrations.RecallDb.BearerToken;
             if (incoming.Integrations.Partio.BearerToken == SecretMask) incoming.Integrations.Partio.BearerToken = _Settings.Integrations.Partio.BearerToken;
             if (incoming.Integrations.LiteGraph.BearerToken == SecretMask) incoming.Integrations.LiteGraph.BearerToken = _Settings.Integrations.LiteGraph.BearerToken;
             if (incoming.S3.AccessKey == SecretMask) incoming.S3.AccessKey = _Settings.S3.AccessKey;
@@ -163,7 +163,7 @@ namespace Pneuma.Server.Routes
                 "auth.tokenSigningKey",
                 "auth.adminApiKeys",
                 "database.password",
-                "integrations.verbex.bearerToken",
+                "integrations.recallDb.bearerToken",
                 "integrations.partio.bearerToken",
                 "integrations.liteGraph.bearerToken",
                 "s3.accessKey",

@@ -31,7 +31,7 @@ namespace Pneuma.Core.Enums
         Chunking,
         /// <summary>Partio embedding of the produced chunks.</summary>
         Embedding,
-        /// <summary>Verbex indexing.</summary>
+        /// <summary>RecallDB chunk-document storage.</summary>
         Indexing,
         /// <summary>Terminal stage after successful indexing.</summary>
         Done

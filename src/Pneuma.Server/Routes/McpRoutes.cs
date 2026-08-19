@@ -33,13 +33,15 @@ namespace Pneuma.Server.Routes
         /// <summary>Instantiate MCP routes.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="verbex">Inverted-index client for search.</param>
-        /// <param name="graph">Graph repository for resolving search hits.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store used to resolve the target collection.</param>
+        /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service for the grounded-answer tool.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex verbex, IGraphRepository graph, GroundedQueryService query)
+        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
         {
-            _Invoker = new McpToolInvoker(db, authz, verbex, graph, query);
+            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query);
         }
 
         #endregion

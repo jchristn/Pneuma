@@ -18,5 +18,8 @@ namespace Pneuma.Core.Requests
 
         /// <summary>Chosen Partio completion endpoint identifier (e.g. "default").</summary>
         public string? CompletionEndpointId { get; set; } = null;
+
+        /// <summary>Chosen RecallDB collection identifier the ingested chunks are stored in and searched from.</summary>
+        public string? CollectionId { get; set; } = null;
     }
 }

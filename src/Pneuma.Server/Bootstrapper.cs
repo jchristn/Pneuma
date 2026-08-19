@@ -64,14 +64,39 @@ namespace Pneuma.Server
                 List<IServiceProbe> probes = new List<IServiceProbe>();
                 if (clients.DocumentAtom is IServiceProbe documentAtomProbe) probes.Add(documentAtomProbe);
                 if (clients.Partio is IServiceProbe partioProbe) probes.Add(partioProbe);
-                if (clients.Verbex is IServiceProbe verbexProbe) probes.Add(verbexProbe);
+                if (clients.Search is IServiceProbe searchProbe) probes.Add(searchProbe);
                 if (clients.Graph is IServiceProbe graphProbe) probes.Add(graphProbe);
 
                 ExternalServiceDiagnosticsService diagnostics = new ExternalServiceDiagnosticsService(probes, logging);
                 await diagnostics.RunAsync(settings.Diagnostics.FailFastOnStartupProbe).ConfigureAwait(false);
             }
 
-            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, clients.Graph, clients.Vectors, clients.Verbex, clients.Partio, modelHealth, artifactStore, clients.Blobs, logging, telemetry);
+            // Per-tenant graph routing: each Pneuma tenant's graph lives in its own LiteGraph tenant, so graph
+            // operations are resolved through a factory keyed by tenant (falling back to the default graph for
+            // unprovisioned tenants).
+            IntegrationResilienceSettings graphResilience = settings.Integrations.Resilience;
+            LiteGraphRepositoryFactory graphFactory = new LiteGraphRepositoryFactory(
+                settings.Integrations.LiteGraph.Endpoint,
+                settings.Integrations.LiteGraph.BearerToken,
+                graphResilience.TimeoutMilliseconds,
+                graphResilience.MaxConcurrentRequests,
+                graphResilience.RetryCount,
+                graphResilience.RetryDelayMilliseconds,
+                database,
+                clients.Graph);
+
+            // Provisioners create per-tenant resources on subordinate services when a Pneuma tenant is created:
+            // a RecallDB tenant + default collection, and an isolated LiteGraph tenant + graph. The list is the
+            // extension point for other subordinate services.
+            LiteGraphTenantAdmin liteGraphAdmin = new LiteGraphTenantAdmin(settings.Integrations.LiteGraph.Endpoint, settings.Integrations.LiteGraph.BearerToken, logging);
+            List<ITenantProvisioner> provisioners = new List<ITenantProvisioner>
+            {
+                new RecallDbTenantProvisioner(clients.Collections, settings.Integrations.RecallDb.DefaultCollectionName, settings.Integrations.RecallDb.DefaultCollectionDimensionality),
+                new LiteGraphTenantProvisioner(database, liteGraphAdmin)
+            };
+            TenantProvisioningService provisioning = new TenantProvisioningService(provisioners, logging);
+
+            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, clients.Partio, provisioning, modelHealth, artifactStore, clients.Blobs, logging, telemetry);
             server.Start();
 
             if (settings.S3.Enabled)
@@ -101,11 +126,28 @@ namespace Pneuma.Server
                 logging.Warn("[Bootstrapper] LiteGraph initialization failed (continuing): " + e.Message);
             }
 
+            try
+            {
+                // Provision subordinate-service resources (RecallDB tenant + default collection) for the
+                // configured system tenant and every existing Pneuma tenant. Idempotent and best-effort, so a
+                // subordinate service that is still starting up does not block boot.
+                await provisioning.ProvisionAsync(settings.Integrations.RecallDb.TenantId, settings.Integrations.RecallDb.TenantName, CancellationToken.None).ConfigureAwait(false);
+                List<Pneuma.Core.Models.Tenant> existingTenants = await database.Tenants.EnumerateAsync(CancellationToken.None).ConfigureAwait(false);
+                foreach (Pneuma.Core.Models.Tenant existingTenant in existingTenants)
+                {
+                    await provisioning.ProvisionAsync(existingTenant.Id, existingTenant.Name, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e)
+            {
+                logging.Warn("[Bootstrapper] tenant provisioning failed (continuing): " + e.Message);
+            }
+
             IContentFetcher fetcher = settings.Ingestion.UseHeadlessBrowser
                 ? new PlaywrightContentFetcher(new HttpContentFetcher(), settings.Ingestion.BrowserNavigationTimeoutMs)
                 : new HttpContentFetcher();
             IngestionProcessor processor = new IngestionProcessor(
-                database, clients.DocumentAtom, clients.Partio, clients.Verbex, clients.Graph, clients.Vectors, clients.Blobs,
+                database, clients.DocumentAtom, clients.Partio, graphFactory, clients.Vectors, clients.Blobs,
                 artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, logging, telemetry);
             IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, logging);
 
@@ -178,6 +220,17 @@ namespace Pneuma.Server
                 resilience.RetryCount,
                 resilience.RetryDelayMilliseconds);
 
+            // One RecallDB client backs all three retrieval roles (full-text search, vector store, and
+            // collection administration) against a single tenant/collection model.
+            RecallDbClient recallDb = new RecallDbClient(
+                integrations.RecallDb.Endpoint,
+                integrations.RecallDb.BearerToken ?? String.Empty,
+                integrations.RecallDb.TenantId,
+                resilience.TimeoutMilliseconds,
+                resilience.MaxConcurrentRequests,
+                resilience.RetryCount,
+                resilience.RetryDelayMilliseconds);
+
             return new IntegrationClients
             {
                 DocumentAtom = new DocumentAtomClient(
@@ -196,25 +249,10 @@ namespace Pneuma.Server
                     resilience.MaxConcurrentRequests,
                     resilience.RetryCount,
                     resilience.RetryDelayMilliseconds),
-                Verbex = new VerbexClient(
-                    integrations.Verbex.Endpoint,
-                    integrations.Verbex.BearerToken ?? String.Empty,
-                    integrations.Verbex.TenantId,
-                    integrations.Verbex.IndexName,
-                    resilience.TimeoutMilliseconds,
-                    resilience.MaxConcurrentRequests,
-                    resilience.RetryCount,
-                    resilience.RetryDelayMilliseconds),
+                Search = recallDb,
                 Graph = graphClient,
-                Vectors = new LiteGraphVectorRepository(
-                    integrations.LiteGraph.Endpoint,
-                    integrations.LiteGraph.BearerToken,
-                    integrations.LiteGraph.TenantGuid ?? String.Empty,
-                    graphClient,
-                    resilience.TimeoutMilliseconds,
-                    resilience.MaxConcurrentRequests,
-                    resilience.RetryCount,
-                    resilience.RetryDelayMilliseconds),
+                Vectors = recallDb,
+                Collections = recallDb,
                 Blobs = new DiskBlobStore(integrations.Blob.Directory)
             };
         }

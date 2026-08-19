@@ -33,20 +33,23 @@ namespace Pneuma.Server.Mcp
         /// <summary>Instantiate the tool invoker.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="verbex">Inverted-index client for search.</param>
-        /// <param name="graph">Graph repository.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store used to resolve the target collection.</param>
+        /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex verbex, IGraphRepository graph, GroundedQueryService query)
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
-            if (verbex == null) throw new ArgumentNullException(nameof(verbex));
-            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (search == null) throw new ArgumentNullException(nameof(search));
+            if (collections == null) throw new ArgumentNullException(nameof(collections));
+            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (query == null) throw new ArgumentNullException(nameof(query));
             _Authz = authz;
             _Entities = new McpEntityTools(db);
-            _GraphTools = new McpGraphTools(verbex, graph, query);
+            _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
         }
 
         #endregion
@@ -111,14 +114,14 @@ namespace Pneuma.Server.Mcp
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_search":
-                    toolResult = await _GraphTools.SearchAsync(arguments, ctx.Token).ConfigureAwait(false);
+                    toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, ctx.Token).ConfigureAwait(false);
                     break;
                 case "pneuma_get_node":
-                    toolResult = await _GraphTools.GetNodeAsync(ctx, id, arguments, ctx.Token).ConfigureAwait(false);
+                    toolResult = await _GraphTools.GetNodeAsync(rc.TenantId ?? String.Empty, ctx, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_get_neighbors":
-                    toolResult = await _GraphTools.GetNeighborsAsync(ctx, id, arguments, ctx.Token).ConfigureAwait(false);
+                    toolResult = await _GraphTools.GetNeighborsAsync(rc.TenantId ?? String.Empty, ctx, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_query":

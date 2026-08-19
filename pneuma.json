@@ -61,11 +61,11 @@
       "EmbeddingEndpointId": null,
       "CompletionEndpointId": null
     },
-    "Verbex": {
+    "RecallDb": {
       "Endpoint": "http://127.0.0.1:8600/",
-      "BearerToken": "verbexadmin",
-      "TenantId": "default",
-      "IndexName": "pneuma"
+      "BearerToken": "recalldbadmin",
+      "TenantId": "pneuma",
+      "TenantName": "Pneuma"
     },
     "LiteGraph": {
       "Endpoint": "http://127.0.0.1:8701/",

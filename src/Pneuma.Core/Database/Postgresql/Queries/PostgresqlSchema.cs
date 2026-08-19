@@ -22,6 +22,15 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS embeddingendpointid TEXT;",
                     "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS completionendpointid TEXT;"
                 }));
+                list.Add(new SchemaMigration(3, "Add ingestion job RecallDB collection id", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS collectionid TEXT;"
+                }));
+                list.Add(new SchemaMigration(4, "Add tenant LiteGraph tenant/graph GUIDs", new List<string>
+                {
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS litegraphtenantguid TEXT;",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS litegraphgraphguid TEXT;"
+                }));
                 return list;
             }
         }

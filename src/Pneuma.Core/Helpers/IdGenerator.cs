@@ -88,6 +88,10 @@ namespace Pneuma.Core.Helpers
         /// <returns>Audit identifier.</returns>
         public static string GenerateAuditId() => Generate(Constants.AuditPrefix);
 
+        /// <summary>Generate a RecallDB collection identifier.</summary>
+        /// <returns>Collection identifier.</returns>
+        public static string GenerateCollectionId() => Generate(Constants.CollectionPrefix);
+
         #endregion
 
         #region Private-Methods

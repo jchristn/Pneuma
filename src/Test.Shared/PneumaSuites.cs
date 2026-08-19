@@ -23,7 +23,9 @@ namespace Test.Shared
                     GraphSuite.Build(),
                     IngestionSuite.Build(),
                     ExternalServicesSuite.Build(),
-                    ApiSuite.Build()
+                    ApiSuite.Build(),
+                    CollectionsSuite.Build(),
+                    GraphTenancySuite.Build()
                 };
             }
         }

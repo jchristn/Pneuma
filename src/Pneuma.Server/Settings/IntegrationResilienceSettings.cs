@@ -3,7 +3,7 @@ namespace Pneuma.Server.Settings
     using System;
 
     /// <summary>
-    /// Resilience settings applied to every outbound integration client (DocumentAtom, Partio, Verbex,
+    /// Resilience settings applied to every outbound integration client (DocumentAtom, Partio, RecallDB,
     /// LiteGraph): per-attempt timeout, per-service concurrency bulkhead, and transient-failure retry
     /// budget. Values are clamped to safe ranges. Writes never retry regardless of <see cref="RetryCount"/>.
     /// </summary>

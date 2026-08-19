@@ -30,8 +30,9 @@ namespace Pneuma.Server.Services
         #region Private-Members
 
         private readonly DatabaseDriverBase _Db;
-        private readonly IInvertedIndex _Verbex;
-        private readonly IGraphRepository _Graph;
+        private readonly IInvertedIndex _Search;
+        private readonly ICollectionStore _Collections;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IVectorRepository _Vectors;
         private readonly IPartioClient _Partio;
         private readonly RetrievalSettings _Retrieval;
@@ -44,9 +45,10 @@ namespace Pneuma.Server.Services
 
         /// <summary>Instantiate the grounded query service.</summary>
         /// <param name="db">Database driver.</param>
-        /// <param name="verbex">Inverted index.</param>
-        /// <param name="graph">Graph repository.</param>
-        /// <param name="vectors">Vector repository.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store used to resolve the target collection.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        /// <param name="vectors">Vector repository (RecallDB).</param>
         /// <param name="partio">Semantic processor (query embedding).</param>
         /// <param name="retrieval">Retrieval settings.</param>
         /// <param name="cipher">Cipher for decrypting model-runner keys.</param>
@@ -54,8 +56,9 @@ namespace Pneuma.Server.Services
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public GroundedQueryService(
             DatabaseDriverBase db,
-            IInvertedIndex verbex,
-            IGraphRepository graph,
+            IInvertedIndex search,
+            ICollectionStore collections,
+            IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
             IPartioClient partio,
             RetrievalSettings retrieval,
@@ -63,16 +66,18 @@ namespace Pneuma.Server.Services
             LoggingModule logging)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
-            if (verbex == null) throw new ArgumentNullException(nameof(verbex));
-            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (search == null) throw new ArgumentNullException(nameof(search));
+            if (collections == null) throw new ArgumentNullException(nameof(collections));
+            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (vectors == null) throw new ArgumentNullException(nameof(vectors));
             if (partio == null) throw new ArgumentNullException(nameof(partio));
             if (retrieval == null) throw new ArgumentNullException(nameof(retrieval));
             if (cipher == null) throw new ArgumentNullException(nameof(cipher));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _Db = db;
-            _Verbex = verbex;
-            _Graph = graph;
+            _Search = search;
+            _Collections = collections;
+            _GraphFactory = graphFactory;
             _Vectors = vectors;
             _Partio = partio;
             _Retrieval = retrieval;
@@ -92,7 +97,7 @@ namespace Pneuma.Server.Services
         /// <returns>The grounded answer.</returns>
         public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, CancellationToken token = default)
         {
-            List<GraphNode> sources = await RetrieveSourcesAsync(question, max, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -126,32 +131,40 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>Retrieve supporting nodes for a question (lexical + vector + optional neighbor expansion).</summary>
+        /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum primary sources.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The supporting nodes.</returns>
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string question, int max, CancellationToken token = default)
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, CancellationToken token = default)
         {
             List<GraphNode> sources = new List<GraphNode>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+
+            // Both retrieval paths (full-text and vector) operate over the same RecallDB collection; resolve it
+            // once within the tenant. With no collection provisioned there is nothing to retrieve.
+            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
+            if (String.IsNullOrEmpty(collectionId)) return sources;
+
+            // All graph reads for this request go to the tenant's own LiteGraph tenant/graph.
+            IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
 
             if (_Retrieval.UseInvertedIndex)
             {
                 try
                 {
-                    string indexId = await _Verbex.EnsureIndexAsync(token).ConfigureAwait(false);
-                    List<VerbexHit> hits = await _Verbex.SearchAsync(indexId, question, max, token).ConfigureAwait(false);
-                    foreach (VerbexHit hit in hits)
+                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, null, token).ConfigureAwait(false);
+                    foreach (SearchHit hit in hits)
                     {
                         if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                         if (!seen.Add(nodeId)) continue;
-                        GraphNode? node = await _Graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
+                        GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
                         if (node != null) sources.Add(node);
                     }
                 }
                 catch (Exception exception)
                 {
-                    _Logging.Warn("[GroundedQueryService] inverted-index retrieval failed: " + exception.Message);
+                    _Logging.Warn("[GroundedQueryService] full-text retrieval failed: " + exception.Message);
                 }
             }
 
@@ -160,11 +173,11 @@ namespace Pneuma.Server.Services
                 List<float>? queryEmbedding = await EmbedQueryAsync(question, token).ConfigureAwait(false);
                 if (queryEmbedding != null && queryEmbedding.Count > 0)
                 {
-                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(queryEmbedding, max, _Retrieval.VectorMinimumScore, null, token).ConfigureAwait(false);
+                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, null, token).ConfigureAwait(false);
                     foreach (VectorSearchHit hit in vectorHits)
                     {
                         if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;
-                        GraphNode? node = hit.Node ?? await _Graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
+                        GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
                         if (node != null) sources.Add(node);
                     }
                 }
@@ -184,7 +197,7 @@ namespace Pneuma.Server.Services
                     {
                         if (sources.Count >= ceiling) break;
                         if (String.IsNullOrEmpty(seed.Id)) continue;
-                        List<GraphNode> neighbors = await _Graph.GetNeighborsAsync(seed.Id, token).ConfigureAwait(false);
+                        List<GraphNode> neighbors = await graph.GetNeighborsAsync(seed.Id, token).ConfigureAwait(false);
                         foreach (GraphNode neighbor in neighbors)
                         {
                             if (String.IsNullOrEmpty(neighbor.Id) || !seen.Add(neighbor.Id)) continue;

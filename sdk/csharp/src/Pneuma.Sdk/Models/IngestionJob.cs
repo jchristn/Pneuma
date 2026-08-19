@@ -45,8 +45,8 @@ namespace Pneuma.Sdk.Models
         /// <summary>Graph node identifiers created or updated during merge.</summary>
         public List<string> GraphNodeIds { get; set; } = new List<string>();
 
-        /// <summary>Search document identifiers created during indexing.</summary>
-        public List<string> VerbexDocumentIds { get; set; } = new List<string>();
+        /// <summary>RecallDB collection identifier the ingested chunks are stored in and searched from.</summary>
+        public string? CollectionId { get; set; } = null;
 
         /// <summary>UTC time processing started, if started.</summary>
         public DateTime? StartedUtc { get; set; } = null;

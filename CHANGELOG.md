@@ -4,6 +4,40 @@ All notable changes to Pneuma (Pneuma - information brought to life) are documen
 [Keep a Changelog](https://keepachangelog.com/). Pneuma is in its `0.x` alpha series: anything may change
 between releases, and the project will adopt semantic versioning at its stable 1.0 release.
 
+## [Unreleased]
+
+### Changed
+- **Retrieval store migrated from Verbex to RecallDB.** Verbex is removed entirely. RecallDB (Postgres +
+  pgvector, `:8600`) is now the retrieval store for both vector and full-text search, hidden behind the
+  same `IVectorRepository` / `IInvertedIndex` interfaces plus a new `ICollectionStore`. Vectors are no
+  longer stored on LiteGraph nodes — each chunk is stored in RecallDB as one document carrying its content,
+  embedding, and provenance tags (`litegraphNodeId` round-trips on hits so retrieval still resolves to the
+  chunk's graph node). Cascade deletion removes a job's documents by its `jobId` tag. Pneuma operates under
+  a dedicated RecallDB tenant (`pneuma`), ensured at startup.
+
+### Added
+- **Per-tenant LiteGraph isolation.** Each Pneuma tenant now gets its own isolated LiteGraph tenant and
+  graph, created and hydrated when the tenant is provisioned; the LiteGraph tenant/graph GUIDs are recorded
+  on the Pneuma tenant record (`LiteGraphTenantGuid`/`LiteGraphGraphGuid`, schema v4). All graph operations
+  (ingestion writes, search/query reads, cascade deletes, MCP graph tools) route through a per-tenant
+  `IGraphRepositoryFactory`, so one tenant can never read or write another's graph — with a fallback to the
+  configured default graph for tenants not yet provisioned. Postgres now installs pgvector (via the postgres
+  image build) with the `recalldb` database + extensions created in init.
+- **Per-tenant collections + automatic provisioning.** Each Pneuma tenant maps to a RecallDB tenant of the
+  same id; collection administration and retrieval (ingestion store, vector/full-text search, cascade
+  delete) are all tenant-scoped. RecallDB is the authority for tenants and collections — Pneuma relays and
+  assigns no ids of its own. Creating a Pneuma tenant (and first-boot seeding) now provisions the tenant on
+  RecallDB and creates a **default collection** for it, via a best-effort, idempotent, extensible
+  `TenantProvisioningService` (`ITenantProvisioner`). Configurable default collection name/dimensionality.
+- **User-managed vector collections.** Operators define collections in the Pneuma dashboard
+  (`GET/PUT/DELETE /v1.0/collections`, proxied to RecallDB); a collection's `dimensionality` is fixed at
+  creation. Ingestion now **requires** a collection: link submission takes a `collectionId`, persisted on
+  the ingestion job and used as the store/search target. The admin dashboard gains a Collections page and
+  a collection selector on link submission (single + bulk); the subject dashboard gains the selector.
+- **Collection-scoped search.** `GET /v1.0/search` and `GET /v1.0/subjects/{id}/search` accept an optional
+  `collection` query parameter; grounded query/chat and MCP search resolve a default collection when none
+  is specified.
+
 ## [0.1.0] - 2026-08-18
 
 ### Added

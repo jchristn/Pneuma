@@ -51,12 +51,15 @@ namespace Test.Shared.Suites
                         {
                             SequencedHttpMessageHandler handler = new SequencedHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
 
-                            using (VerbexClient client = new VerbexClient("http://127.0.0.1:8600", "verbexadmin", "ten_x", "pneuma", handler: handler))
+                            using (RecallDbClient client = new RecallDbClient("http://127.0.0.1:8600", "recalldbadmin", "pneuma", handler: handler))
                             {
                                 bool threw = false;
                                 try
                                 {
-                                    await client.AddDocumentAsync("idx_x", "content", new Dictionary<string, string>(), ct);
+                                    await client.StoreChunksAsync("ten_x", "col_x", new List<ChunkDocument>
+                                    {
+                                        new ChunkDocument { DocumentKey = "k1", DocumentId = "d1", Position = 0, Content = "content", Embedding = new List<float> { 1f }, Tags = new Dictionary<string, string>() }
+                                    }, ct);
                                 }
                                 catch (IntegrationClientException)
                                 {
@@ -151,13 +154,17 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor("ExternalServices", "VectorRepository_RanksByCosineAndFiltersByTag", "The vector store ranks by cosine similarity and honors a tag filter",
                         executeAsync: async ct =>
                         {
-                            FakeVectorRepository vectors = new FakeVectorRepository();
-                            await vectors.UpsertVectorAsync("n_near", new float[] { 1f, 0f, 0f }, new Dictionary<string, string> { { "subjectId", "sub_1" } }, ct);
-                            await vectors.UpsertVectorAsync("n_far", new float[] { 0f, 1f, 0f }, new Dictionary<string, string> { { "subjectId", "sub_1" } }, ct);
-                            await vectors.UpsertVectorAsync("n_other", new float[] { 1f, 0f, 0f }, new Dictionary<string, string> { { "subjectId", "sub_2" } }, ct);
+                            FakeRecallDbClient vectors = new FakeRecallDbClient();
+                            RecallCollection collection = await vectors.CreateCollectionAsync("ten_x", new RecallCollection { Name = "t", Dimensionality = 3 }, ct);
+                            await vectors.StoreChunksAsync("ten_x", collection.Id, new List<ChunkDocument>
+                            {
+                                new ChunkDocument { DocumentKey = "near", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_near" }, { "subjectId", "sub_1" } } },
+                                new ChunkDocument { DocumentKey = "far", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 0f, 1f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_far" }, { "subjectId", "sub_1" } } },
+                                new ChunkDocument { DocumentKey = "other", DocumentId = "d", Position = 2, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_other" }, { "subjectId", "sub_2" } } }
+                            }, ct);
 
                             List<VectorSearchHit> hits = await vectors.SearchAsync(
-                                new float[] { 1f, 0f, 0f }, 10, 0.0,
+                                "ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0,
                                 new Dictionary<string, string> { { "subjectId", "sub_1" } }, ct);
 
                             if (hits.Count != 2) throw new Exception("Expected 2 tag-filtered hits, got " + hits.Count);
@@ -168,46 +175,33 @@ namespace Test.Shared.Suites
                             }
                         }),
 
-                    new TestCaseDescriptor("ExternalServices", "LiteGraphVectors_Live_UpsertAndSearch", "LiteGraph-backed vectors round-trip against a live LiteGraph (gated on PNEUMA_LIVE_STACK=1)",
+                    new TestCaseDescriptor("ExternalServices", "RecallDbVectors_Live_StoreAndSearch", "RecallDB-backed vectors round-trip against a live RecallDB (gated on PNEUMA_LIVE_STACK=1)",
                         executeAsync: async ct =>
                         {
-                            // Gated: only runs against a live LiteGraph v7 stack. No-op otherwise so CI stays green.
+                            // Gated: only runs against a live RecallDB stack. No-op otherwise so CI stays green.
                             if (Environment.GetEnvironmentVariable("PNEUMA_LIVE_STACK") != "1") return;
 
-                            string baseUrl = "http://127.0.0.1:8701";
-                            string tenant = "00000000-0000-0000-0000-000000000000";
-                            string testSubjectId = "vectest_" + Guid.NewGuid().ToString("N");
-
-                            using (LiteGraphClient graph = new LiteGraphClient(baseUrl, "litegraphadmin", tenant, null))
-                            using (LiteGraphVectorRepository vectors = new LiteGraphVectorRepository(baseUrl, "litegraphadmin", tenant, graph))
+                            using (RecallDbClient recall = new RecallDbClient("http://127.0.0.1:8600", "recalldbadmin", "pneuma"))
                             {
-                                GraphNode node = new GraphNode
-                                {
-                                    NodeType = "TestVectorNode",
-                                    Name = "vec-test-" + Guid.NewGuid().ToString("N"),
-                                    CanonicalName = "vec-test",
-                                    Labels = new List<string> { "TestVectorNode" }
-                                };
-                                node.Tags["subjectId"] = testSubjectId;
-
-                                GraphNode created = await graph.CreateNodeAsync(node, ct);
-                                if (String.IsNullOrEmpty(created.Id)) throw new Exception("LiteGraph did not return a node id");
-
+                                await recall.EnsureTenantAsync("pneuma", "Pneuma", ct);
+                                RecallCollection collection = await recall.CreateCollectionAsync("pneuma", new RecallCollection { Name = "livetest_" + Guid.NewGuid().ToString("N"), Dimensionality = 4 }, ct);
                                 try
                                 {
-                                    float[] embedding = new float[] { 1f, 0f, 0f, 0f };
-                                    await vectors.UpsertVectorAsync(created.Id, embedding, null, ct);
-
-                                    List<VectorSearchHit> hits = await vectors.SearchAsync(embedding, 5, 0.5, null, ct);
-                                    if (!hits.Exists(h => h.NodeId == created.Id && h.Score > 0.9))
+                                    string nodeId = "node_" + Guid.NewGuid().ToString("N");
+                                    await recall.StoreChunksAsync("pneuma", collection.Id, new List<ChunkDocument>
                                     {
-                                        throw new Exception("live cosine search did not return the upserted node with a high score; hits=" + hits.Count);
+                                        new ChunkDocument { DocumentKey = "k_" + Guid.NewGuid().ToString("N"), DocumentId = "lnk_live", Position = 0, Content = "hello world", Embedding = new List<float> { 1f, 0f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", nodeId } } }
+                                    }, ct);
+
+                                    List<VectorSearchHit> hits = await recall.SearchAsync("pneuma", collection.Id, new float[] { 1f, 0f, 0f, 0f }, 5, 0.5, null, ct);
+                                    if (!hits.Exists(h => h.NodeId == nodeId && h.Score > 0.9))
+                                    {
+                                        throw new Exception("live cosine search did not return the stored chunk with a high score; hits=" + hits.Count);
                                     }
                                 }
                                 finally
                                 {
-                                    // Cascade-delete the test node (and its vector) by its subject tag.
-                                    await graph.DeleteBySubjectAsync(testSubjectId, ct);
+                                    await recall.DeleteCollectionAsync("pneuma", collection.Id, ct);
                                 }
                             }
                         }),
@@ -223,7 +217,7 @@ namespace Test.Shared.Suites
                             logging.Settings.EnableConsole = false;
 
                             using (DocumentAtomClient healthy = new DocumentAtomClient("http://127.0.0.1:8000", retryCount: 0, handler: okHandler))
-                            using (VerbexClient erroring = new VerbexClient("http://127.0.0.1:8600", "verbexadmin", "ten_x", "pneuma", retryCount: 0, handler: unauthHandler))
+                            using (RecallDbClient erroring = new RecallDbClient("http://127.0.0.1:8600", "recalldbadmin", "pneuma", retryCount: 0, handler: unauthHandler))
                             using (LiteGraphClient down = new LiteGraphClient("http://127.0.0.1:8701", null, "ten_x", null, retryCount: 0, handler: downHandler))
                             {
                                 List<IServiceProbe> probes = new List<IServiceProbe> { healthy, erroring, down };
@@ -231,13 +225,50 @@ namespace Test.Shared.Suites
                                 List<IntegrationHealthResult> results = await diagnostics.RunAsync(false, ct);
 
                                 IntegrationHealthResult doc = results.Find(r => r.ServiceName == "documentatom") ?? throw new Exception("Missing documentatom result");
-                                IntegrationHealthResult vbx = results.Find(r => r.ServiceName == "verbex") ?? throw new Exception("Missing verbex result");
+                                IntegrationHealthResult rcl = results.Find(r => r.ServiceName == "recalldb") ?? throw new Exception("Missing recalldb result");
                                 IntegrationHealthResult lgr = results.Find(r => r.ServiceName == "litegraph") ?? throw new Exception("Missing litegraph result");
 
                                 if (!doc.Reachable || !doc.Success) throw new Exception("A 200 service should be reachable and healthy");
-                                if (!vbx.Reachable || vbx.Success || vbx.StatusCode != 401) throw new Exception("A 401 service should be reachable but not successful");
+                                if (!rcl.Reachable || rcl.Success || rcl.StatusCode != 401) throw new Exception("A 401 service should be reachable but not successful");
                                 if (lgr.Reachable) throw new Exception("A connection failure should be classified unreachable");
                             }
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "TenantProvisioning_EnsuresTenantAndDefaultCollection", "Provisioning a tenant ensures its RecallDB tenant and a single default collection (idempotent)",
+                        executeAsync: async ct =>
+                        {
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            TenantProvisioningService provisioning = new TenantProvisioningService(
+                                new List<ITenantProvisioner> { new RecallDbTenantProvisioner(recall, "default", 384) }, logging);
+
+                            await provisioning.ProvisionAsync("ten_a", "Tenant A", ct);
+                            if (!recall.TenantExists("ten_a")) throw new Exception("tenant was not ensured");
+                            List<RecallCollection> first = await recall.ListCollectionsAsync("ten_a", ct);
+                            if (first.Count != 1 || first[0].Name != "default") throw new Exception("expected exactly one default collection, got " + first.Count);
+                            if (first[0].Dimensionality != 384) throw new Exception("default collection dimensionality should be 384");
+
+                            // Idempotent: a second pass must not create a duplicate default collection.
+                            await provisioning.ProvisionAsync("ten_a", "Tenant A", ct);
+                            List<RecallCollection> second = await recall.ListCollectionsAsync("ten_a", ct);
+                            if (second.Count != 1) throw new Exception("provisioning must be idempotent; got " + second.Count + " collections");
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "Collections_AreTenantIsolated", "A collection created in one tenant is not visible from another tenant",
+                        executeAsync: async ct =>
+                        {
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            await recall.EnsureTenantAsync("ten_a", "A", ct);
+                            await recall.EnsureTenantAsync("ten_b", "B", ct);
+                            RecallCollection created = await recall.CreateCollectionAsync("ten_a", new RecallCollection { Name = "kb", Dimensionality = 8 }, ct);
+
+                            List<RecallCollection> tenantA = await recall.ListCollectionsAsync("ten_a", ct);
+                            if (!tenantA.Exists(c => c.Id == created.Id)) throw new Exception("tenant A should see its own collection");
+                            List<RecallCollection> tenantB = await recall.ListCollectionsAsync("ten_b", ct);
+                            if (tenantB.Count != 0) throw new Exception("tenant B must not see tenant A's collections");
+                            if (await recall.CollectionExistsAsync("ten_b", created.Id, ct)) throw new Exception("tenant B must not resolve tenant A's collection by id");
+                            if (!await recall.CollectionExistsAsync("ten_a", created.Id, ct)) throw new Exception("tenant A should resolve its own collection by id");
                         })
                 });
         }

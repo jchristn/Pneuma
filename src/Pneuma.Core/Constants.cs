@@ -61,6 +61,9 @@ namespace Pneuma.Core
         /// <summary>Audit record identifier prefix.</summary>
         public const string AuditPrefix = "aud_";
 
+        /// <summary>RecallDB collection identifier prefix.</summary>
+        public const string CollectionPrefix = "col_";
+
         #endregion
 
         #region General

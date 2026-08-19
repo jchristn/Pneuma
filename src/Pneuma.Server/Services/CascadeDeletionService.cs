@@ -13,7 +13,7 @@ namespace Pneuma.Server.Services
     /// <summary>
     /// Centralizes cascading deletion of subjects, links, and ingestion jobs and everything they produce,
     /// across the database and the external stores (S3 pipeline artifacts + raw blobs, the LiteGraph
-    /// knowledge graph, and the Verbex search index). External-store cleanup is best-effort so an
+    /// knowledge graph, and the RecallDB retrieval store). External-store cleanup is best-effort so an
     /// unavailable subordinate service never blocks removal of the authoritative database records; graph
     /// deletions preserve entity nodes that belong to other jobs/subjects.
     /// </summary>
@@ -23,8 +23,8 @@ namespace Pneuma.Server.Services
 
         private readonly DatabaseDriverBase _Db;
         private readonly IArtifactStore _Artifacts;
-        private readonly IInvertedIndex _Verbex;
-        private readonly IGraphRepository _Graph;
+        private readonly IVectorRepository _Vectors;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IBlobStore _Blobs;
 
         #endregion
@@ -34,16 +34,16 @@ namespace Pneuma.Server.Services
         /// <summary>Instantiate the cascade deletion service.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
-        /// <param name="verbex">Verbex client.</param>
-        /// <param name="graph">LiteGraph client.</param>
+        /// <param name="vectors">Vector repository (RecallDB) holding the job's chunk documents.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="blobs">Blob store.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public CascadeDeletionService(DatabaseDriverBase db, IArtifactStore artifacts, IInvertedIndex verbex, IGraphRepository graph, IBlobStore blobs)
+        public CascadeDeletionService(DatabaseDriverBase db, IArtifactStore artifacts, IVectorRepository vectors, IGraphRepositoryFactory graphFactory, IBlobStore blobs)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
-            _Verbex = verbex ?? throw new ArgumentNullException(nameof(verbex));
-            _Graph = graph ?? throw new ArgumentNullException(nameof(graph));
+            _Vectors = vectors ?? throw new ArgumentNullException(nameof(vectors));
+            _GraphFactory = graphFactory ?? throw new ArgumentNullException(nameof(graphFactory));
             _Blobs = blobs ?? throw new ArgumentNullException(nameof(blobs));
         }
 
@@ -53,7 +53,7 @@ namespace Pneuma.Server.Services
 
         /// <summary>
         /// Delete a single ingestion job and its per-job contributions: graph nodes/edges it asserted
-        /// (LiteGraph), its indexed documents (Verbex), its raw blob, its processing-log events, and the
+        /// (LiteGraph), its chunk documents (RecallDB), its raw blob, its processing-log events, and the
         /// job row. Per-link S3 artifacts are not touched here — they belong to the link.
         /// </summary>
         /// <param name="tenantId">Tenant identifier.</param>
@@ -121,7 +121,8 @@ namespace Pneuma.Server.Services
                 await TryExternalAsync(() => _Artifacts.DeleteAllForLinkAsync(link.Id, token)).ConfigureAwait(false);
             }
 
-            await TryExternalAsync(() => _Graph.DeleteBySubjectAsync(subjectId, token)).ConfigureAwait(false);
+            IGraphRepository subjectGraph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
+            await TryExternalAsync(() => subjectGraph.DeleteBySubjectAsync(subjectId, token)).ConfigureAwait(false);
 
             // The subject, its links, its jobs, and all job events are removed in one transaction.
             return await _Db.Subjects.DeleteWithSubordinatesAsync(tenantId, subjectId, linkIds, jobIds, token).ConfigureAwait(false);
@@ -134,8 +135,12 @@ namespace Pneuma.Server.Services
         private async Task CleanupJobExternalsAsync(IngestionJob job, CancellationToken token)
         {
             // Best-effort removal of a job's contributions to the external stores; never block the cascade.
-            await TryExternalAsync(() => _Graph.DeleteByJobAsync(job.Id, token)).ConfigureAwait(false);
-            await TryExternalAsync(() => _Verbex.DeleteDocumentsAsync(job.VerbexDocumentIds, token)).ConfigureAwait(false);
+            IGraphRepository jobGraph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
+            await TryExternalAsync(() => jobGraph.DeleteByJobAsync(job.Id, token)).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(job.CollectionId))
+            {
+                await TryExternalAsync(() => _Vectors.DeleteByTagAsync(job.TenantId, job.CollectionId!, "jobId", job.Id, token)).ConfigureAwait(false);
+            }
             if (!String.IsNullOrEmpty(job.BlobKey))
             {
                 await TryExternalAsync(() => _Blobs.DeleteAsync(job.BlobKey!, token)).ConfigureAwait(false);

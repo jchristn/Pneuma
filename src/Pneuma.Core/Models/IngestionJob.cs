@@ -71,11 +71,11 @@ namespace Pneuma.Core.Models
         /// <summary>Chosen Partio completion endpoint identifier (e.g. "default"); null to resolve server-side.</summary>
         public string? CompletionEndpointId { get; set; } = null;
 
+        /// <summary>RecallDB collection identifier the ingested chunks are stored in and searched from.</summary>
+        public string? CollectionId { get; set; } = null;
+
         /// <summary>Graph node identifiers created or updated during merge.</summary>
         public List<string> GraphNodeIds { get; set; } = new List<string>();
-
-        /// <summary>Verbex document identifiers created during indexing.</summary>
-        public List<string> VerbexDocumentIds { get; set; } = new List<string>();
 
         /// <summary>UTC time processing started, if started.</summary>
         public DateTime? StartedUtc { get; set; } = null;

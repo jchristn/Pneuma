@@ -90,7 +90,7 @@ namespace Pneuma.Core.Observability
         }
 
         /// <summary>Record an integration (downstream service) request result and duration.</summary>
-        /// <param name="service">Service name: documentatom, partio, verbex, litegraph, or polyprompt.</param>
+        /// <param name="service">Service name: documentatom, partio, recalldb, litegraph, or polyprompt.</param>
         /// <param name="operation">Low-cardinality operation label (normalized path).</param>
         /// <param name="outcome">Outcome: ok or error.</param>
         /// <param name="seconds">Request duration in seconds.</param>

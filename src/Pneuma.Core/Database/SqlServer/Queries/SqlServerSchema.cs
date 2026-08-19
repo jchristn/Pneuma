@@ -22,6 +22,15 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "ALTER TABLE dbo.ingestionjobs ADD embeddingendpointid NVARCHAR(MAX);",
                     "ALTER TABLE dbo.ingestionjobs ADD completionendpointid NVARCHAR(MAX);"
                 }));
+                list.Add(new SchemaMigration(3, "Add ingestion job RecallDB collection id", new List<string>
+                {
+                    "ALTER TABLE dbo.ingestionjobs ADD collectionid NVARCHAR(MAX);"
+                }));
+                list.Add(new SchemaMigration(4, "Add tenant LiteGraph tenant/graph GUIDs", new List<string>
+                {
+                    "ALTER TABLE dbo.tenants ADD litegraphtenantguid NVARCHAR(MAX);",
+                    "ALTER TABLE dbo.tenants ADD litegraphgraphguid NVARCHAR(MAX);"
+                }));
                 return list;
             }
         }

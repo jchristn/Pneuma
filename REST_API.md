@@ -63,7 +63,7 @@ Response envelope:
 
 ## Tenants (admin)
 
-`GET /v1.0/tenants` · `POST /v1.0/tenants` · `GET /v1.0/tenants/{id}` · `PUT /v1.0/tenants/{id}` · `DELETE /v1.0/tenants/{id}`. Requires admin.
+`GET /v1.0/tenants` · `POST /v1.0/tenants` · `GET /v1.0/tenants/{id}` · `PUT /v1.0/tenants/{id}` · `DELETE /v1.0/tenants/{id}`. Requires admin. Creating a tenant cascades to provision its first administrator + API key **and** its subordinate-service resources — a RecallDB tenant (same id) with a default collection, and an **isolated LiteGraph tenant + graph** (its GUIDs are recorded on the tenant as `liteGraphTenantGuid`/`liteGraphGraphGuid`). Each tenant's knowledge graph lives in its own LiteGraph tenant, so graphs never cross tenant boundaries. Provisioning is best-effort — an unavailable subordinate service never blocks tenant creation and is retried on next boot.
 
 ## Users
 
@@ -95,18 +95,18 @@ Response envelope:
 
 ## Subjects
 
-`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}`. A subject has `displayName`, `type` (Person…), `description`, `graphRootNodeId`. **`DELETE` cascades** through every subordinate object: all of the subject's links (each with its full link cascade — jobs, per-step processing logs, S3 pipeline artifacts + raw blobs, and Verbex index documents) and the subject's entire LiteGraph subgraph (nodes/edges matched on the `subjectId` tag; entity nodes are resolved per subject, so other subjects are unaffected). External-store cleanup is best-effort so an unavailable subordinate service never blocks removal. When `graphRootNodeId` is omitted on create it is derived from `displayName` as a slug (lowercased, non-alphanumeric runs collapsed to single dashes) — e.g. `"The Bomb Squad"` → `the-bomb-squad`.
+`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}`. A subject has `displayName`, `type` (Person…), `description`, `graphRootNodeId`. **`DELETE` cascades** through every subordinate object: all of the subject's links (each with its full link cascade — jobs, per-step processing logs, S3 pipeline artifacts + raw blobs, and RecallDB chunk documents) and the subject's entire LiteGraph subgraph (nodes/edges matched on the `subjectId` tag; entity nodes are resolved per subject, so other subjects are unaffected). External-store cleanup is best-effort so an unavailable subordinate service never blocks removal. When `graphRootNodeId` is omitted on create it is derived from `displayName` as a slug (lowercased, non-alphanumeric runs collapsed to single dashes) — e.g. `"The Bomb Squad"` → `the-bomb-squad`.
 
 ## Content Links & Ingestion
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1.0/subjects/{subjectId}/links` | Submit a link `{ url, title?, embeddingEndpointId, completionEndpointId }` → creates the link and **enqueues an ingestion job**. `embeddingEndpointId` and `completionEndpointId` are **required** (Partio endpoint ids from `GET /v1.0/ingestion/endpoints`) |
-| POST | `/v1.0/subjects/{subjectId}/links/bulk` | Submit many links at once `{ urls: [string], embeddingEndpointId, completionEndpointId }` → `{ created, links: [...] }` (one link + job per URL) |
+| POST | `/v1.0/subjects/{subjectId}/links` | Submit a link `{ url, title?, embeddingEndpointId, completionEndpointId, collectionId }` → creates the link and **enqueues an ingestion job**. `embeddingEndpointId` and `completionEndpointId` are **required** (Partio endpoint ids from `GET /v1.0/ingestion/endpoints`); `collectionId` is **required** (a RecallDB collection from `GET /v1.0/collections`) and selects where the ingested chunks are stored and searched |
+| POST | `/v1.0/subjects/{subjectId}/links/bulk` | Submit many links at once `{ urls: [string], embeddingEndpointId, completionEndpointId, collectionId }` → `{ created, links: [...] }` (one link + job per URL) |
 | GET | `/v1.0/ingestion/endpoints` | Available model endpoints for ingestion → `{ embedding: [{ id, name, model, apiFormat, active }], completion: [...] }` (sourced from Partio) |
 | GET | `/v1.0/subjects/{subjectId}/links` | List a subject's links (with `status`, `lastIngestedUtc`, `lastError`). Paginated `EnumerationResult` |
 | GET | `/v1.0/links` / `GET /v1.0/links/{id}` | List / read links |
-| DELETE | `/v1.0/links/{id}` | Delete a link and **cascade** through everything it produced: ingestion jobs + per-step processing logs, pipeline document artifacts (source/atoms/chunks/vectors/subgraph + raw blobs), the search-index documents (Verbex), and the graph nodes/edges it asserted (LiteGraph). Shared entity nodes reused by other links are preserved. Returns 204; external-store cleanup is best-effort so an unavailable subordinate service never blocks removal of the link. |
+| DELETE | `/v1.0/links/{id}` | Delete a link and **cascade** through everything it produced: ingestion jobs + per-step processing logs, pipeline document artifacts (source/atoms/chunks/vectors/subgraph + raw blobs), the chunk documents (RecallDB), and the graph nodes/edges it asserted (LiteGraph). Shared entity nodes reused by other links are preserved. Returns 204; external-store cleanup is best-effort so an unavailable subordinate service never blocks removal of the link. |
 | GET | `/v1.0/links/{id}/log` | **Per-step ingestion log** for a link → `[{ job, events }]` (one entry per ingestion run, newest last). Each `event` is `{ stage, status, message, durationMs, createdUtc }`. |
 | GET | `/v1.0/links/{id}/source` | **Pipeline artifact** — the raw crawled source document in its original content type (may be HTML/PDF/binary). `404` if not present yet. |
 | GET | `/v1.0/links/{id}/atoms` | **Pipeline artifact** — DocumentAtom semantic cells as `application/json`. `404` if that stage hasn't run yet. |
@@ -118,7 +118,7 @@ Response envelope:
 | GET | `/v1.0/jobs/{id}/log` | Live per-stage log for a job → `{ job, events }` (poll for a "follow logs" view) |
 | POST | `/v1.0/jobs/{id}/restart` | Requeue a failed job |
 | POST | `/v1.0/jobs/{id}/stop` | Stop (cancel) a queued or in-flight job → job set to `Cancelled`. 409 if already finished |
-| DELETE | `/v1.0/jobs/{id}` | Delete an ingestion job (queue/job entry) and **cascade** its per-step processing log, the graph nodes/edges it asserted (LiteGraph), its indexed documents (Verbex), and its raw blob. The link and its per-link S3 pipeline artifacts are left intact (they belong to the link). Returns 204; external-store cleanup is best-effort. |
+| DELETE | `/v1.0/jobs/{id}` | Delete an ingestion job (queue/job entry) and **cascade** its per-step processing log, the graph nodes/edges it asserted (LiteGraph), its chunk documents (RecallDB, deleted by `jobId` tag), and its raw blob. The link and its per-link S3 pipeline artifacts are left intact (they belong to the link). Returns 204; external-store cleanup is best-effort. |
 
 Ingestion stages, each written to the log with a descriptive message and duration: **TypeDetection → CellExtraction → Classification (ontology mapping) → GraphMerge (knowledge-graph insertion) → Embedding (chunking + embedding generation) → Indexing (search index)**. Unknown document types fail at TypeDetection. Each stage records a completion log entry with counts (e.g. cells extracted, chunks produced, embeddings generated, nodes/edges inserted, documents indexed); failures record the stage and error.
 
@@ -160,10 +160,23 @@ Server configuration, restricted to the **system administrator** (`isAdmin`). No
 | GET | `/v1.0/graph/nodes/{id}/neighbors` | Adjacent nodes |
 | GET | `/v1.0/graph/nodes/{id}/edges` | Relationships (edges) for the node |
 
+## Collections
+
+Vector collections live in the retrieval store (RecallDB), which is the **authority** for tenants and collections; Pneuma simply relays administration to it (the same way model runners are proxied to Partio) and keeps no local collection state. Collections are **per-tenant**: each Pneuma tenant maps to a RecallDB tenant of the same id, and these endpoints operate within the caller's tenant. RecallDB assigns collection ids. A collection's `dimensionality` is **fixed at creation** and must match the embedding model used to ingest into it. Collections are create/read/list/delete (no update).
+
+Provisioning is automatic: at first-boot and whenever a **tenant is created** (`POST /v1.0/tenants`), Pneuma provisions the tenant on RecallDB and creates a **default collection** for it, so ingestion has a target out of the box.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/collections` | List vector collections → paginated `EnumerationResult` of `{ id, name, description, dimensionality, active }` |
+| GET | `/v1.0/collections/{id}` | Read one collection |
+| PUT | `/v1.0/collections` | Create a collection `{ name, description?, dimensionality }` (dimensionality defaults to 768) → `201` with the created collection |
+| DELETE | `/v1.0/collections/{id}` | Delete a collection **and all of its documents** → `204` |
+
 ## Search & Ask (user)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/v1.0/search?q=<query>&max=20` | Full-text search (Verbex) resolved to a representative set of graph nodes → `{ query, results: [{ node, score, snippet }] }` |
-| GET | `/v1.0/subjects/{subjectId}/search?q=<query>&maxResults=20&skip=0` | Search a single subject's ingested documents (Verbex, filtered by `subjectId`). Returns a paginated `EnumerationResult` ranked by score; each hit is `{ documentId, score, snippet, linkId, linkUrl, linkTitle, nodeId }`, linked back to the originating content link. |
+| GET | `/v1.0/search?q=<query>&max=20&collection=<id>` | Full-text search (RecallDB) resolved to a representative set of graph nodes → `{ query, results: [{ node, score, snippet }] }`. `collection` is optional — when omitted the configured default (or the tenant's first active) collection is used |
+| GET | `/v1.0/subjects/{subjectId}/search?q=<query>&maxResults=20&skip=0&collection=<id>` | Search a single subject's ingested documents (RecallDB, filtered by `subjectId`). Returns a paginated `EnumerationResult` ranked by score; each hit is `{ documentId, score, snippet, linkId, linkUrl, linkTitle, nodeId }`, linked back to the originating content link. |
 | POST | `/v1.0/query` | Grounded answer. Body `{ question, maxResults? }` → `{ answer, sources: [node], grounded }` |

@@ -51,9 +51,8 @@ namespace Pneuma.Server.Services
         /// <param name="db">Database driver.</param>
         /// <param name="documentAtom">DocumentAtom client.</param>
         /// <param name="partio">Partio client.</param>
-        /// <param name="verbex">Verbex client.</param>
-        /// <param name="graph">LiteGraph client.</param>
-        /// <param name="vectors">Vector repository.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        /// <param name="vectors">Vector repository (RecallDB) that stores chunk content + embeddings.</param>
         /// <param name="blobs">Blob store.</param>
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="fetcher">Source content fetcher.</param>
@@ -66,8 +65,7 @@ namespace Pneuma.Server.Services
             DatabaseDriverBase db,
             IAtomizer documentAtom,
             IPartioClient partio,
-            IInvertedIndex verbex,
-            IGraphRepository graph,
+            IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
             IBlobStore blobs,
             IArtifactStore artifacts,
@@ -90,7 +88,7 @@ namespace Pneuma.Server.Services
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _Journal = new IngestionJournal(db, logging);
-            _Stages = new IngestionStages(db, partio, verbex, graph, vectors, artifacts, _Journal, retrieval.UseInvertedIndex, logging);
+            _Stages = new IngestionStages(db, partio, graphFactory, vectors, artifacts, _Journal, logging);
         }
 
         #endregion
@@ -245,11 +243,10 @@ namespace Pneuma.Server.Services
                 token).ConfigureAwait(false);
             await _Stages.PersistChunkArtifactsAsync(job, embeddedChunks, token).ConfigureAwait(false);
 
-            List<string> verbexIds = await RunStageAsync(job, IngestionStageEnum.Indexing,
+            await RunStageAsync(job, IngestionStageEnum.Indexing,
                 stageToken => _Stages.IndexAsync(job, merge, embeddedChunks, stageToken),
-                result => "Search indexing complete — indexed " + result.Count + " document(s), each linked back to its knowledge-graph node.",
+                result => "Search indexing complete — stored " + result + " chunk document(s) in collection " + job.CollectionId + ", each linked back to its knowledge-graph node.",
                 token).ConfigureAwait(false);
-            job.VerbexDocumentIds = verbexIds;
 
             // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish;
             // its "Hydration started" marker now has a matching completion before the job itself completes.

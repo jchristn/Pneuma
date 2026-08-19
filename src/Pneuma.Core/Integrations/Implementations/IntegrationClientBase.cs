@@ -9,7 +9,7 @@ namespace Pneuma.Core.Integrations.Implementations
     using Pneuma.Core.Observability;
 
     /// <summary>
-    /// Shared resilient transport for outbound integration clients (DocumentAtom, Partio, Verbex,
+    /// Shared resilient transport for outbound integration clients (DocumentAtom, Partio, RecallDB,
     /// LiteGraph). Provides transient-aware retry with per-attempt timeout, a per-service concurrency
     /// bulkhead, uniform structured failures via <see cref="IntegrationClientException"/>, and per-call
     /// telemetry through <see cref="PneumaMetrics.RecordIntegration"/>. Write operations opt out of retry

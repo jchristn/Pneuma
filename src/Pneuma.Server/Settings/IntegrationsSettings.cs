@@ -11,8 +11,8 @@ namespace Pneuma.Server.Settings
         /// <summary>Partio settings.</summary>
         public PartioSettings Partio { get; set; } = new PartioSettings();
 
-        /// <summary>Verbex settings.</summary>
-        public VerbexSettings Verbex { get; set; } = new VerbexSettings();
+        /// <summary>RecallDB settings (retrieval store: vector + full-text search).</summary>
+        public RecallDbSettings RecallDb { get; set; } = new RecallDbSettings();
 
         /// <summary>LiteGraph settings.</summary>
         public LiteGraphSettings LiteGraph { get; set; } = new LiteGraphSettings();

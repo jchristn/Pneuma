@@ -67,7 +67,7 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_get_job` | Fetch one full ingestion job by id. | IngestionJob / Read |
 | `pneuma_enumerate_links` | Page content-link summaries (id, url, title, status). | Subject / Read |
 | `pneuma_get_link` | Fetch one full content link by id. | Subject / Read |
-| `pneuma_search` | Full-text search the corpus; bounded, ranked node summaries (a top-N query, not an enumeration). | GraphNode / Read |
+| `pneuma_search` | Full-text search the corpus (RecallDB) against the resolved default collection; bounded, ranked node summaries (a top-N query, not an enumeration). | GraphNode / Read |
 | `pneuma_get_node` | Fetch one full knowledge-graph node by id. | GraphNode / Read |
 | `pneuma_get_neighbors` | Fetch a node's adjacent nodes as a bounded set of summaries. | GraphNode / Read |
 | `pneuma_query` | Ask a grounded question; returns a cited answer, supporting sources, and an `insufficientSupport` flag. | GraphNode / Read |

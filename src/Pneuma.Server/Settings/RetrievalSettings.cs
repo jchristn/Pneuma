@@ -4,7 +4,7 @@ namespace Pneuma.Server.Settings
 
     /// <summary>
     /// Retrieval settings controlling how search resolves and enriches results. Governs whether the
-    /// external inverted index (Verbex) is used, whether graph-neighbor expansion enriches the hit set,
+    /// external full-text index (RecallDB) is used, whether graph-neighbor expansion enriches the hit set,
     /// and the vector-search parameters used once semantic vectors live in the graph store.
     /// </summary>
     public class RetrievalSettings
@@ -20,11 +20,16 @@ namespace Pneuma.Server.Settings
         #region Public-Members
 
         /// <summary>
-        /// When true, the external inverted index (Verbex) is queried for lexical search. When the
-        /// semantic vector path in the graph store reaches parity this can be turned off to drop the
-        /// dependency. Default true.
+        /// When true, the lexical (full-text) search path over the RecallDB collection is used in addition
+        /// to vector search. Default true.
         /// </summary>
         public bool UseInvertedIndex { get; set; } = true;
+
+        /// <summary>
+        /// Default RecallDB collection id used by grounded query / chat when no collection is otherwise
+        /// resolved. When empty, the tenant's first active collection is used.
+        /// </summary>
+        public string? DefaultCollectionId { get; set; } = null;
 
         /// <summary>
         /// When true, primary search hits are enriched with their graph neighbors (bounded by

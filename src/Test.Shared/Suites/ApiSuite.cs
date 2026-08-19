@@ -79,7 +79,9 @@ namespace Test.Shared.Suites
                             string subjectId = ExtractString(subjectBody, "id");
                             if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
 
-                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/a\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\"}", ct);
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/a\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"" + collectionId + "\"}", ct);
                             if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
 
                             HttpResponseMessage jobsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs", token, null, ct);
@@ -176,7 +178,8 @@ namespace Test.Shared.Suites
 
                             HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Stop Test\",\"type\":\"Person\"}", ct);
                             string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
-                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/stop\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\"}", ct);
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/stop\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"" + collectionId + "\"}", ct);
                             if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
 
                             HttpResponseMessage jobsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs?status=Queued", token, null, ct);
@@ -461,6 +464,15 @@ namespace Test.Shared.Suites
             TokenResponse? token = Json.Deserialize<TokenResponse>(text);
             if (token == null || String.IsNullOrEmpty(token.Token)) throw new Exception("login returned no token");
             return token.Token;
+        }
+
+        private static async Task<string> CreateCollectionAsync(string baseUrl, string token, CancellationToken ct)
+        {
+            HttpResponseMessage response = await Send(HttpMethod.Put, baseUrl + "/v1.0/collections", token, "{\"name\":\"test\",\"dimensionality\":8}", ct);
+            if (response.StatusCode != HttpStatusCode.Created) throw new Exception("collection create failed: " + (int)response.StatusCode);
+            string id = ExtractString(await response.Content.ReadAsStringAsync(ct), "id");
+            if (String.IsNullOrEmpty(id)) throw new Exception("collection create returned no id");
+            return id;
         }
 
         private static async Task<HttpResponseMessage> Send(HttpMethod method, string url, string? token, string? body, CancellationToken ct)

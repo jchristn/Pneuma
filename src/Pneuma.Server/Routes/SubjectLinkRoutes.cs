@@ -6,6 +6,7 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
+    using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
@@ -27,6 +28,7 @@ namespace Pneuma.Server.Routes
         private readonly AuthorizationService _Authz;
         private readonly IArtifactStore _Artifacts;
         private readonly CascadeDeletionService _Cascade;
+        private readonly ICollectionStore _Collections;
 
         #endregion
 
@@ -37,16 +39,20 @@ namespace Pneuma.Server.Routes
         /// <param name="authz">Authorization service.</param>
         /// <param name="artifacts">Per-stage S3 artifact store used by the artifact-view endpoints.</param>
         /// <param name="cascade">Cascade deletion service, used to remove a link's subordinate objects.</param>
-        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, CascadeDeletionService cascade)
+        /// <param name="collections">Collection store, used to validate the target collection at submit time.</param>
+        /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
+        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, CascadeDeletionService cascade, ICollectionStore collections)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
             if (cascade == null) throw new ArgumentNullException(nameof(cascade));
+            if (collections == null) throw new ArgumentNullException(nameof(collections));
             _Db = db;
             _Authz = authz;
             _Artifacts = artifacts;
             _Cascade = cascade;
+            _Collections = collections;
         }
 
         #endregion
@@ -129,6 +135,17 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
+            if (String.IsNullOrWhiteSpace(request.CollectionId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A collection is required.").ConfigureAwait(false);
+                return;
+            }
+            if (!await _Collections.CollectionExistsAsync(tenantId, request.CollectionId!, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "The specified collection does not exist.").ConfigureAwait(false);
+                return;
+            }
+
             SubjectLink link = new SubjectLink
             {
                 TenantId = tenantId,
@@ -147,7 +164,8 @@ namespace Pneuma.Server.Routes
                 Status = IngestionStatusEnum.Queued,
                 Stage = IngestionStageEnum.Pending,
                 EmbeddingEndpointId = request.EmbeddingEndpointId,
-                CompletionEndpointId = request.CompletionEndpointId
+                CompletionEndpointId = request.CompletionEndpointId,
+                CollectionId = request.CollectionId
             };
             SubjectLink createdLink = await _Db.SubjectLinks.CreateWithJobAsync(link, job, ctx.Token).ConfigureAwait(false);
 
@@ -178,6 +196,17 @@ namespace Pneuma.Server.Routes
             if (request == null || String.IsNullOrWhiteSpace(request.EmbeddingEndpointId) || String.IsNullOrWhiteSpace(request.CompletionEndpointId))
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "An embedding endpoint and completion endpoint are required.").ConfigureAwait(false);
+                return;
+            }
+
+            if (String.IsNullOrWhiteSpace(request.CollectionId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A collection is required.").ConfigureAwait(false);
+                return;
+            }
+            if (!await _Collections.CollectionExistsAsync(tenantId, request.CollectionId!, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "The specified collection does not exist.").ConfigureAwait(false);
                 return;
             }
 
@@ -216,7 +245,8 @@ namespace Pneuma.Server.Routes
                     Status = IngestionStatusEnum.Queued,
                     Stage = IngestionStageEnum.Pending,
                     EmbeddingEndpointId = request.EmbeddingEndpointId,
-                    CompletionEndpointId = request.CompletionEndpointId
+                    CompletionEndpointId = request.CompletionEndpointId,
+                    CollectionId = request.CollectionId
                 };
                 SubjectLink createdLink = await _Db.SubjectLinks.CreateWithJobAsync(link, job, ctx.Token).ConfigureAwait(false);
 

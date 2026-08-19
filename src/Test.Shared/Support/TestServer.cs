@@ -1,6 +1,7 @@
 namespace Test.Shared.Support
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Net;
     using System.Net.Sockets;
@@ -27,6 +28,9 @@ namespace Test.Shared.Support
 
         /// <summary>The underlying database driver.</summary>
         public DatabaseDriverBase Database { get; private set; } = null!;
+
+        /// <summary>The in-memory RecallDB fake the server is wired to (tenants, collections, documents).</summary>
+        public FakeRecallDbClient Recall { get; private set; } = null!;
 
         #endregion
 
@@ -96,7 +100,15 @@ namespace Test.Shared.Support
             DiskBlobStore blobs = new DiskBlobStore(Path.Combine(dir, "blobs-" + Guid.NewGuid().ToString("N")));
             FakePartioClient partio = new FakePartioClient();
             ModelHealthMonitor modelHealth = new ModelHealthMonitor(partio, logging);
-            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeLiteGraphClient(), new FakeVectorRepository(), new FakeVerbexClient(), partio, modelHealth, new NullArtifactStore(), blobs, logging, telemetry);
+            FakeRecallDbClient recall = new FakeRecallDbClient();
+            Recall = recall;
+            TenantProvisioningService provisioning = new TenantProvisioningService(
+                new List<ITenantProvisioner>
+                {
+                    new RecallDbTenantProvisioner(recall, "default", 8),
+                    new LiteGraphTenantProvisioner(Database, new FakeLiteGraphTenantAdmin())
+                }, logging);
+            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, partio, provisioning, modelHealth, new NullArtifactStore(), blobs, logging, telemetry);
             _Server.Start();
 
             BaseUrl = "http://127.0.0.1:" + port;

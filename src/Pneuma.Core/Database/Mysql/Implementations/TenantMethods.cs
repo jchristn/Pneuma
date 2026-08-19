@@ -22,9 +22,9 @@ namespace Pneuma.Core.Database.Mysql.Implementations
             tenant.LastUpdateUtc = tenant.CreatedUtc;
 
             string sql =
-                "INSERT INTO tenants (id, accountid, parentid, name, region, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO tenants (id, accountid, parentid, name, region, litegraphtenantguid, litegraphgraphguid, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(tenant.Id) + ", " + Sanitizer.Str(tenant.AccountId) + ", " + Sanitizer.Str(tenant.ParentId) + ", " +
-                Sanitizer.Str(tenant.Name) + ", " + Sanitizer.Str(tenant.Region) + ", " + Sanitizer.Bit(tenant.Active) + ", " +
+                Sanitizer.Str(tenant.Name) + ", " + Sanitizer.Str(tenant.Region) + ", " + Sanitizer.Str(tenant.LiteGraphTenantGuid) + ", " + Sanitizer.Str(tenant.LiteGraphGraphGuid) + ", " + Sanitizer.Bit(tenant.Active) + ", " +
                 Sanitizer.Bit(tenant.IsProtected) + ", " + Sanitizer.Ts(tenant.CreatedUtc) + ", " + Sanitizer.Ts(tenant.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return tenant;
@@ -58,6 +58,8 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", parentid = " + Sanitizer.Str(tenant.ParentId) +
                 ", name = " + Sanitizer.Str(tenant.Name) +
                 ", region = " + Sanitizer.Str(tenant.Region) +
+                ", litegraphtenantguid = " + Sanitizer.Str(tenant.LiteGraphTenantGuid) +
+                ", litegraphgraphguid = " + Sanitizer.Str(tenant.LiteGraphGraphGuid) +
                 ", active = " + Sanitizer.Bit(tenant.Active) +
                 ", isprotected = " + Sanitizer.Bit(tenant.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(tenant.LastUpdateUtc) +
@@ -84,6 +86,8 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ParentId = RowReader.GetNullableString(row, "parentid"),
                 Name = RowReader.GetString(row, "name"),
                 Region = RowReader.GetNullableString(row, "region"),
+                LiteGraphTenantGuid = RowReader.GetNullableString(row, "litegraphtenantguid"),
+                LiteGraphGraphGuid = RowReader.GetNullableString(row, "litegraphgraphguid"),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

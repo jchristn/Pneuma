@@ -25,7 +25,7 @@ namespace Pneuma.Server.Mcp
 
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
-        private readonly IGraphRepository _Graph;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly GroundedQueryService _Query;
         private readonly McpEntityTools _Entities;
         private readonly McpGraphTools _GraphTools;
@@ -37,23 +37,26 @@ namespace Pneuma.Server.Mcp
         /// <summary>Instantiate the tool executor.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="verbex">Inverted-index client for search.</param>
-        /// <param name="graph">Graph repository.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store used to resolve the target collection.</param>
+        /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public PneumaToolExecutor(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex verbex, IGraphRepository graph, GroundedQueryService query)
+        public PneumaToolExecutor(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
-            if (verbex == null) throw new ArgumentNullException(nameof(verbex));
-            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (search == null) throw new ArgumentNullException(nameof(search));
+            if (collections == null) throw new ArgumentNullException(nameof(collections));
+            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (query == null) throw new ArgumentNullException(nameof(query));
             _Db = db;
             _Authz = authz;
-            _Graph = graph;
+            _GraphFactory = graphFactory;
             _Query = query;
             _Entities = new McpEntityTools(db);
-            _GraphTools = new McpGraphTools(verbex, graph, query);
+            _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
         }
 
         #endregion
@@ -92,7 +95,7 @@ namespace Pneuma.Server.Mcp
                     return ToolInvocationResult.Ok(await _Entities.EnumerateLinksAsync(rc, arguments, token).ConfigureAwait(false));
 
                 case "pneuma_search":
-                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(arguments, token).ConfigureAwait(false));
+                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(tenantId, arguments, token).ConfigureAwait(false));
 
                 case "pneuma_get_subject":
                     return await GetSubjectAsync(tenantId, arguments, token).ConfigureAwait(false);
@@ -104,10 +107,10 @@ namespace Pneuma.Server.Mcp
                     return await GetLinkAsync(tenantId, arguments, token).ConfigureAwait(false);
 
                 case "pneuma_get_node":
-                    return await GetNodeAsync(arguments, token).ConfigureAwait(false);
+                    return await GetNodeAsync(tenantId, arguments, token).ConfigureAwait(false);
 
                 case "pneuma_get_neighbors":
-                    return await GetNeighborsAsync(arguments, token).ConfigureAwait(false);
+                    return await GetNeighborsAsync(tenantId, arguments, token).ConfigureAwait(false);
 
                 case "pneuma_query":
                     return await GroundedQueryAsync(tenantId, arguments, token).ConfigureAwait(false);
@@ -148,21 +151,21 @@ namespace Pneuma.Server.Mcp
             return ToolInvocationResult.Ok(link);
         }
 
-        private async Task<ToolInvocationResult> GetNodeAsync(JsonElement arguments, CancellationToken token)
+        private async Task<ToolInvocationResult> GetNodeAsync(string tenantId, JsonElement arguments, CancellationToken token)
         {
             string id = McpJsonRpc.GetStringArgument(arguments, "id");
             if (String.IsNullOrEmpty(id)) return ToolInvocationResult.Fail("'id' is required.");
-            GraphNode? node = await _Graph.ReadNodeAsync(id, token).ConfigureAwait(false);
+            GraphNode? node = await (await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false)).ReadNodeAsync(id, token).ConfigureAwait(false);
             if (node == null) return ToolInvocationResult.Fail("Graph node not found.");
             return ToolInvocationResult.Ok(node);
         }
 
-        private async Task<ToolInvocationResult> GetNeighborsAsync(JsonElement arguments, CancellationToken token)
+        private async Task<ToolInvocationResult> GetNeighborsAsync(string tenantId, JsonElement arguments, CancellationToken token)
         {
             string id = McpJsonRpc.GetStringArgument(arguments, "id");
             if (String.IsNullOrEmpty(id)) return ToolInvocationResult.Fail("'id' is required.");
 
-            List<GraphNode> neighbors = await _Graph.GetNeighborsAsync(id, token).ConfigureAwait(false);
+            List<GraphNode> neighbors = await (await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false)).GetNeighborsAsync(id, token).ConfigureAwait(false);
             List<object> summaries = new List<object>();
             foreach (GraphNode neighbor in neighbors)
             {

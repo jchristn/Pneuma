@@ -10,6 +10,7 @@
     { "key": "adminEmail", "value": "admin@pneuma" },
     { "key": "adminPassword", "value": "password" },
     { "key": "subjectId", "value": "" },
+    { "key": "collectionId", "value": "" },
     { "key": "nodeId", "value": "" }
   ],
   "auth": {
@@ -114,6 +115,24 @@
       ]
     },
     {
+      "name": "Collections",
+      "item": [
+        {
+          "name": "Create Collection",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "var d = pm.response.json(); if (d && (d.id || d.Id)) pm.collectionVariables.set('collectionId', d.id || d.Id);" ] } } ],
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"general-knowledge\",\n  \"description\": \"Default ingestion collection\",\n  \"dimensionality\": 768\n}" },
+            "url": "{{baseUrl}}/v1.0/collections"
+          }
+        },
+        { "name": "List Collections", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/collections" } },
+        { "name": "Read Collection", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}" } },
+        { "name": "Delete Collection", "request": { "method": "DELETE", "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}" } }
+      ]
+    },
+    {
       "name": "Subjects & Ingestion",
       "item": [
         {
@@ -131,11 +150,11 @@
         { "name": "List Ingestion Endpoints (models)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/ingestion/endpoints" } },
         {
           "name": "Submit Link",
-          "description": "embeddingEndpointId and completionEndpointId are required (ids from GET /v1.0/ingestion/endpoints).",
+          "description": "embeddingEndpointId and completionEndpointId are required (ids from GET /v1.0/ingestion/endpoints); collectionId is required (a RecallDB collection from GET /v1.0/collections — run 'Create Collection' first to capture it).",
           "request": {
             "method": "POST",
             "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}" },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links"
           }
         },
@@ -144,7 +163,7 @@
           "request": {
             "method": "POST",
             "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}" },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links/bulk"
           }
         },

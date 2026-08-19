@@ -44,7 +44,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         internal static string InsertSql(IngestionJob job)
         {
             return
-                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, verbexdocumentids, startedutc, completedutc, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(job.Id) + ", " + Sanitizer.Str(job.TenantId) + ", " +
                 Sanitizer.Str(job.SubjectId) + ", " + Sanitizer.Str(job.LinkId) + ", " +
                 Sanitizer.Str(job.SourceUrl) + ", " + Sanitizer.Str(job.Status.ToString()) + ", " +
@@ -52,7 +52,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 Sanitizer.Str(job.Error) + ", " + Sanitizer.Str(job.DocumentType) + ", " +
                 Sanitizer.Str(job.BlobKey) + ", " + Sanitizer.Str(job.EmbeddingEndpointId) + ", " +
                 Sanitizer.Str(job.CompletionEndpointId) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.GraphNodeIds)) + ", " +
-                Sanitizer.Str(JsonColumn.FromStrings(job.VerbexDocumentIds)) + ", " + Sanitizer.Ts(job.StartedUtc) + ", " +
+                Sanitizer.Str(job.CollectionId) + ", " + Sanitizer.Ts(job.StartedUtc) + ", " +
                 Sanitizer.Ts(job.CompletedUtc) + ", " + Sanitizer.Ts(job.CreatedUtc) + ", " +
                 Sanitizer.Ts(job.LastUpdateUtc) + ");";
         }
@@ -146,7 +146,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", embeddingendpointid = " + Sanitizer.Str(job.EmbeddingEndpointId) +
                 ", completionendpointid = " + Sanitizer.Str(job.CompletionEndpointId) +
                 ", graphnodeids = " + Sanitizer.Str(JsonColumn.FromStrings(job.GraphNodeIds)) +
-                ", verbexdocumentids = " + Sanitizer.Str(JsonColumn.FromStrings(job.VerbexDocumentIds)) +
+                ", collectionid = " + Sanitizer.Str(job.CollectionId) +
                 ", startedutc = " + Sanitizer.Ts(job.StartedUtc) +
                 ", completedutc = " + Sanitizer.Ts(job.CompletedUtc) +
                 ", lastupdateutc = " + Sanitizer.Ts(job.LastUpdateUtc) +
@@ -179,7 +179,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 EmbeddingEndpointId = RowReader.GetNullableString(row, "embeddingendpointid"),
                 CompletionEndpointId = RowReader.GetNullableString(row, "completionendpointid"),
                 GraphNodeIds = RowReader.GetStringList(row, "graphnodeids"),
-                VerbexDocumentIds = RowReader.GetStringList(row, "verbexdocumentids"),
+                CollectionId = RowReader.GetNullableString(row, "collectionid"),
                 StartedUtc = RowReader.GetNullableDateTime(row, "startedutc"),
                 CompletedUtc = RowReader.GetNullableDateTime(row, "completedutc"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

@@ -10,7 +10,7 @@ namespace Pneuma.Server.Services
     using SyslogLogging;
 
     /// <summary>
-    /// Probes every configured external integration (DocumentAtom, Partio, Verbex, LiteGraph) at
+    /// Probes every configured external integration (DocumentAtom, Partio, RecallDB, LiteGraph) at
     /// startup and logs a formatted, secret-safe connectivity report so a misconfigured or unreachable
     /// dependency surfaces in seconds rather than at first ingestion. A probe failure is logged as a
     /// warning; when fail-fast is enabled an unreachable service throws instead.

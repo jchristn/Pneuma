@@ -4,7 +4,7 @@ namespace Pneuma.Core.Integrations.Implementations
 
     /// <summary>
     /// Uniform exception raised when an outbound integration request to a downstream service
-    /// (DocumentAtom, Partio, Verbex, LiteGraph) returns a non-success status after any retries are
+    /// (DocumentAtom, Partio, RecallDB, LiteGraph) returns a non-success status after any retries are
     /// exhausted. Carries structured context — the logical service name, the operation label, the
     /// HTTP status code, and a truncated response body — so failures are diagnosable without leaking
     /// full payloads.
@@ -13,7 +13,7 @@ namespace Pneuma.Core.Integrations.Implementations
     {
         #region Public-Members
 
-        /// <summary>Logical service name (for example "documentatom", "partio", "verbex", "litegraph").</summary>
+        /// <summary>Logical service name (for example "documentatom", "partio", "recalldb", "litegraph").</summary>
         public string ServiceName { get; }
 
         /// <summary>Low-cardinality operation label (typically the normalized request path).</summary>

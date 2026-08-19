@@ -25,8 +25,10 @@ namespace Pneuma.Server.Mcp
     {
         #region Private-Members
 
-        private readonly IInvertedIndex _Verbex;
-        private readonly IGraphRepository _Graph;
+        private readonly IInvertedIndex _Search;
+        private readonly ICollectionStore _Collections;
+        private readonly string? _DefaultCollectionId;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly GroundedQueryService _Query;
 
         #endregion
@@ -34,14 +36,18 @@ namespace Pneuma.Server.Mcp
         #region Constructors-and-Factories
 
         /// <summary>Instantiate the graph tools.</summary>
-        /// <param name="verbex">Inverted-index client for search.</param>
-        /// <param name="graph">Graph repository.</param>
+        /// <param name="search">Full-text search client (RecallDB).</param>
+        /// <param name="collections">Collection store used to resolve the target collection.</param>
+        /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpGraphTools(IInvertedIndex verbex, IGraphRepository graph, GroundedQueryService query)
+        public McpGraphTools(IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
         {
-            _Verbex = verbex ?? throw new ArgumentNullException(nameof(verbex));
-            _Graph = graph ?? throw new ArgumentNullException(nameof(graph));
+            _Search = search ?? throw new ArgumentNullException(nameof(search));
+            _Collections = collections ?? throw new ArgumentNullException(nameof(collections));
+            _DefaultCollectionId = defaultCollectionId;
+            _GraphFactory = graphFactory ?? throw new ArgumentNullException(nameof(graphFactory));
             _Query = query ?? throw new ArgumentNullException(nameof(query));
         }
 
@@ -50,10 +56,11 @@ namespace Pneuma.Server.Mcp
         #region Public-Methods
 
         /// <summary>Full-text search the corpus, returning a bounded, ranked set of node summaries.</summary>
+        /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked results payload.</returns>
-        public async Task<object> SearchAsync(JsonElement arguments, CancellationToken token)
+        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, CancellationToken token)
         {
             string query = McpJsonRpc.GetStringArgument(arguments, "query");
             int max = 20;
@@ -68,15 +75,21 @@ namespace Pneuma.Server.Mcp
                 return new { query = String.Empty, count = 0, results };
             }
 
-            string indexId = await _Verbex.EnsureIndexAsync(token).ConfigureAwait(false);
-            List<VerbexHit> hits = await _Verbex.SearchAsync(indexId, query, max, token).ConfigureAwait(false);
+            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _DefaultCollectionId, token).ConfigureAwait(false);
+            if (String.IsNullOrEmpty(collectionId))
+            {
+                return new { query, count = 0, results };
+            }
 
+            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, token).ConfigureAwait(false);
+
+            IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (VerbexHit hit in hits)
+            foreach (SearchHit hit in hits)
             {
                 if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                 if (!seen.Add(nodeId)) continue;
-                GraphNode? node = await _Graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
+                GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
                 if (node == null) continue;
                 results.Add(new { id = node.Id, name = node.Name, nodeType = node.NodeType, score = hit.Score });
                 if (results.Count >= max) break;
@@ -86,12 +99,13 @@ namespace Pneuma.Server.Mcp
         }
 
         /// <summary>Fetch a single full graph node by id.</summary>
+        /// <param name="tenantId">Tenant whose graph is read.</param>
         /// <param name="ctx">HTTP context (for error responses).</param>
         /// <param name="id">JSON-RPC request id.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The node, or null when an error response was already sent.</returns>
-        public async Task<object?> GetNodeAsync(HttpContextBase ctx, object? id, JsonElement arguments, CancellationToken token)
+        public async Task<object?> GetNodeAsync(string tenantId, HttpContextBase ctx, object? id, JsonElement arguments, CancellationToken token)
         {
             string nodeId = McpJsonRpc.GetStringArgument(arguments, "id");
             if (String.IsNullOrEmpty(nodeId))
@@ -100,7 +114,7 @@ namespace Pneuma.Server.Mcp
                 return null;
             }
 
-            GraphNode? node = await _Graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
+            GraphNode? node = await (await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false)).ReadNodeAsync(nodeId, token).ConfigureAwait(false);
             if (node == null)
             {
                 await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Graph node not found.").ConfigureAwait(false);
@@ -111,12 +125,13 @@ namespace Pneuma.Server.Mcp
         }
 
         /// <summary>Fetch a node's adjacent nodes as a bounded set of summaries.</summary>
+        /// <param name="tenantId">Tenant whose graph is read.</param>
         /// <param name="ctx">HTTP context (for error responses).</param>
         /// <param name="id">JSON-RPC request id.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The neighbors payload, or null when an error response was already sent.</returns>
-        public async Task<object?> GetNeighborsAsync(HttpContextBase ctx, object? id, JsonElement arguments, CancellationToken token)
+        public async Task<object?> GetNeighborsAsync(string tenantId, HttpContextBase ctx, object? id, JsonElement arguments, CancellationToken token)
         {
             string nodeId = McpJsonRpc.GetStringArgument(arguments, "id");
             if (String.IsNullOrEmpty(nodeId))
@@ -125,7 +140,7 @@ namespace Pneuma.Server.Mcp
                 return null;
             }
 
-            List<GraphNode> neighbors = await _Graph.GetNeighborsAsync(nodeId, token).ConfigureAwait(false);
+            List<GraphNode> neighbors = await (await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false)).GetNeighborsAsync(nodeId, token).ConfigureAwait(false);
             List<object> summaries = new List<object>();
             foreach (GraphNode neighbor in neighbors)
             {
@@ -196,7 +211,7 @@ namespace Pneuma.Server.Mcp
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(question, max, token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, token).ConfigureAwait(false);
                 List<object> sourceSummaries = new List<object>();
                 foreach (GraphNode source in sources)
                 {

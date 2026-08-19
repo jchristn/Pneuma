@@ -33,6 +33,18 @@ namespace Pneuma.Core.Models
         /// <summary>Optional geographic region label.</summary>
         public string? Region { get; set; } = null;
 
+        /// <summary>
+        /// GUID of this tenant's dedicated LiteGraph tenant. Each Pneuma tenant owns an isolated LiteGraph
+        /// tenant so graphs never cross tenant boundaries; set during provisioning. Null until provisioned.
+        /// </summary>
+        public string? LiteGraphTenantGuid { get; set; } = null;
+
+        /// <summary>
+        /// GUID of the graph created inside this tenant's LiteGraph tenant, where its knowledge graph is
+        /// stored. Set during provisioning. Null until provisioned.
+        /// </summary>
+        public string? LiteGraphGraphGuid { get; set; } = null;
+
         /// <summary>Whether the tenant is enabled.</summary>
         public bool Active { get; set; } = true;
 

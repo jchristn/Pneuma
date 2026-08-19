@@ -7,6 +7,7 @@ namespace Test.Shared.Suites
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
@@ -17,7 +18,8 @@ namespace Test.Shared.Suites
 
     /// <summary>
     /// Ingestion pipeline state-machine tests using in-memory integration fakes and a real database.
-    /// Classification degrades to an empty subgraph (no live model), which the pipeline handles.
+    /// Classification degrades to an empty subgraph (no live model), which the pipeline handles. Chunk
+    /// documents (content + embedding) are stored in a RecallDB collection that ingestion requires.
     /// </summary>
     public static class IngestionSuite
     {
@@ -34,11 +36,11 @@ namespace Test.Shared.Suites
                         executeAsync: async ct =>
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
-                            FakeVerbexClient verbex = new FakeVerbexClient();
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
                             FakeLiteGraphClient graph = new FakeLiteGraphClient();
-                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Unknown"), verbex, graph);
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Unknown"), recall, graph);
 
-                            Context context = await SeedJobAsync(db, ct);
+                            Context context = await SeedJobAsync(db, recall, true, ct);
                             IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
                             await processor.ProcessAsync(claimed, ct);
 
@@ -51,16 +53,35 @@ namespace Test.Shared.Suites
                             if (String.IsNullOrEmpty(link.LastError)) throw new Exception("link should carry an error");
                         }),
 
+                    new TestCaseDescriptor("Ingestion", "NoCollection_FailsAtIndexing", "A job with no collection assigned fails at the indexing stage",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            FakeLiteGraphClient graph = new FakeLiteGraphClient();
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), recall, graph);
+
+                            // Intentionally seed a job with no CollectionId to prove indexing enforces the requirement.
+                            Context context = await SeedJobAsync(db, recall, false, ct);
+                            IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
+                            await processor.ProcessAsync(claimed, ct);
+
+                            IngestionJob after = await db.IngestionJobs.ReadAsync(context.TenantId, claimed.Id, ct) ?? throw new Exception("job gone");
+                            if (after.Status != IngestionStatusEnum.Failed) throw new Exception("expected Failed, got " + after.Status + " (" + after.Error + ")");
+                            if (after.Stage != IngestionStageEnum.Indexing) throw new Exception("expected failure at Indexing, got " + after.Stage);
+                            if (recall.DocumentCount != 0) throw new Exception("no chunk documents should be stored without a collection");
+                        }),
+
                     new TestCaseDescriptor("Ingestion", "HappyPath_Completes", "A known document runs through all stages to Completed",
                         executeAsync: async ct =>
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
 
-                            FakeVerbexClient verbex = new FakeVerbexClient();
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
                             FakeLiteGraphClient graph = new FakeLiteGraphClient();
-                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), verbex, graph);
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), recall, graph);
 
-                            Context context = await SeedJobAsync(db, ct);
+                            Context context = await SeedJobAsync(db, recall, true, ct);
                             IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
                             await processor.ProcessAsync(claimed, ct);
 
@@ -68,9 +89,9 @@ namespace Test.Shared.Suites
                             if (after.Status != IngestionStatusEnum.Completed) throw new Exception("expected Completed, got " + after.Status + " (" + after.Error + ")");
                             if (after.Stage != IngestionStageEnum.Done) throw new Exception("expected stage Done");
                             if (after.GraphNodeIds.Count < 1) throw new Exception("expected at least the Source graph node");
-                            if (after.VerbexDocumentIds.Count < 1) throw new Exception("expected at least one indexed chunk");
+                            if (after.CollectionId != context.CollectionId) throw new Exception("job should record its collection id");
                             if (graph.NodeCount < 1) throw new Exception("no graph node was created");
-                            if (verbex.DocumentCount < 1) throw new Exception("no document was indexed");
+                            if (recall.DocumentCount < 1) throw new Exception("no chunk document was stored in the collection");
 
                             // Chunks are modeled as first-class Chunk nodes linked to their source.
                             List<GraphNode> chunkNodes = await graph.SearchNodesByTagsAsync(new Dictionary<string, string> { { "nodeType", "Chunk" } }, 100, ct);
@@ -108,35 +129,35 @@ namespace Test.Shared.Suites
                             if (!log.Contains("Prompt provenance")) throw new Exception("ingestion log missing the prompt-provenance (reproducibility) event. Log: " + log);
                         }),
 
-                    new TestCaseDescriptor("Ingestion", "CascadeDelete_RemovesArtifacts", "Deleting a subject cascades through links, jobs, logs, graph nodes, and indexed documents",
+                    new TestCaseDescriptor("Ingestion", "CascadeDelete_RemovesArtifacts", "Deleting a subject cascades through links, jobs, logs, graph nodes, and stored chunk documents",
                         executeAsync: async ct =>
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
 
-                            FakeVerbexClient verbex = new FakeVerbexClient();
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
                             FakeLiteGraphClient graph = new FakeLiteGraphClient();
-                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), verbex, graph);
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), recall, graph);
 
-                            Context context = await SeedJobAsync(db, ct);
+                            Context context = await SeedJobAsync(db, recall, true, ct);
                             IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
                             await processor.ProcessAsync(claimed, ct);
 
-                            // Precondition: ingestion produced a graph node, an indexed document, and a processing log.
+                            // Precondition: ingestion produced a graph node, a stored chunk document, and a processing log.
                             if (graph.NodeCount < 1) throw new Exception("precondition: expected at least one graph node");
-                            if (verbex.DocumentCount < 1) throw new Exception("precondition: expected at least one indexed document");
+                            if (recall.DocumentCount < 1) throw new Exception("precondition: expected at least one stored chunk document");
                             List<IngestionJobEvent> before = await db.IngestionJobEvents.EnumerateByJobAsync(context.TenantId, claimed.Id, ct);
                             if (before.Count < 1) throw new Exception("precondition: expected job events");
 
                             // Cascade delete the whole subject via the shared service used by the routes.
                             IBlobStore blobs = new DiskBlobStore(Path.Combine(Path.GetTempPath(), "pneuma-test-blobs", Guid.NewGuid().ToString("N")));
-                            CascadeDeletionService cascade = new CascadeDeletionService(db, new NullArtifactStore(), verbex, graph, blobs);
+                            CascadeDeletionService cascade = new CascadeDeletionService(db, new NullArtifactStore(), recall, new FakeGraphRepositoryFactory(graph), blobs);
                             bool deleted = await cascade.DeleteSubjectCascadeAsync(context.TenantId, context.SubjectId, ct);
                             if (!deleted) throw new Exception("subject delete returned false");
 
                             // Postcondition: subject and every subordinate object were cascaded away.
                             if (graph.NodeCount != 0) throw new Exception("graph nodes not cascaded, remaining: " + graph.NodeCount);
                             if (graph.EdgeCount != 0) throw new Exception("graph edges not cascaded, remaining: " + graph.EdgeCount);
-                            if (verbex.DocumentCount != 0) throw new Exception("indexed documents not cascaded, remaining: " + verbex.DocumentCount);
+                            if (recall.DocumentCount != 0) throw new Exception("stored chunk documents not cascaded, remaining: " + recall.DocumentCount);
                             List<IngestionJobEvent> afterEvents = await db.IngestionJobEvents.EnumerateByJobAsync(context.TenantId, claimed.Id, ct);
                             if (afterEvents.Count != 0) throw new Exception("job events not cascaded, remaining: " + afterEvents.Count);
                             if (await db.IngestionJobs.ReadAsync(context.TenantId, claimed.Id, ct) != null) throw new Exception("ingestion job not deleted");
@@ -146,7 +167,7 @@ namespace Test.Shared.Suites
                 });
         }
 
-        private static IngestionProcessor BuildProcessor(DatabaseDriverBase db, FakeDocumentAtomClient docAtom, FakeVerbexClient verbex, FakeLiteGraphClient graph)
+        private static IngestionProcessor BuildProcessor(DatabaseDriverBase db, FakeDocumentAtomClient docAtom, FakeRecallDbClient recall, FakeLiteGraphClient graph)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -155,19 +176,30 @@ namespace Test.Shared.Suites
             Pneuma.Server.Settings.IngestionSettings settings = new Pneuma.Server.Settings.IngestionSettings();
             Pneuma.Server.Settings.TelemetrySettings telemetrySettings = new Pneuma.Server.Settings.TelemetrySettings { Enabled = false };
             Pneuma.Server.Services.TelemetryService telemetry = new Pneuma.Server.Services.TelemetryService(telemetrySettings, logging);
-            return new IngestionProcessor(db, docAtom, new FakePartioClient(), verbex, graph, new FakeVectorRepository(), blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), logging, telemetry);
+            return new IngestionProcessor(db, docAtom, new FakePartioClient(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), logging, telemetry);
         }
 
-        private static async Task<Context> SeedJobAsync(DatabaseDriverBase db, System.Threading.CancellationToken ct)
+        // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the
+        // (RecallDB) fake under the tenant and assigned to the job, so ingestion has a valid target.
+        private static async Task<Context> SeedJobAsync(DatabaseDriverBase db, FakeRecallDbClient recall, bool createCollection, System.Threading.CancellationToken ct)
         {
             Tenant tenant = await db.Tenants.CreateAsync(new Tenant { Name = "IngestTenant" }, ct);
             Subject subject = await db.Subjects.CreateAsync(new Subject { TenantId = tenant.Id, DisplayName = "Chuck D" }, ct);
             SubjectLink link = await db.SubjectLinks.CreateAsync(new SubjectLink { TenantId = tenant.Id, SubjectId = subject.Id, Url = "https://example.com/artifact" }, ct);
+
+            string? collectionId = null;
+            if (createCollection)
+            {
+                await recall.EnsureTenantAsync(tenant.Id, tenant.Name, ct);
+                RecallCollection collection = await recall.CreateCollectionAsync(tenant.Id, new RecallCollection { Name = "test", Dimensionality = 8 }, ct);
+                collectionId = collection.Id;
+            }
+
             await db.IngestionJobs.CreateAsync(new IngestionJob
             {
-                TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, SourceUrl = link.Url, Status = IngestionStatusEnum.Queued
+                TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, SourceUrl = link.Url, Status = IngestionStatusEnum.Queued, CollectionId = collectionId
             }, ct);
-            return new Context { TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id };
+            return new Context { TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, CollectionId = collectionId };
         }
 
         private sealed class Context
@@ -175,6 +207,7 @@ namespace Test.Shared.Suites
             public string TenantId { get; set; } = String.Empty;
             public string SubjectId { get; set; } = String.Empty;
             public string LinkId { get; set; } = String.Empty;
+            public string? CollectionId { get; set; } = null;
         }
     }
 }

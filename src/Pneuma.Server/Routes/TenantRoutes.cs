@@ -25,6 +25,7 @@ namespace Pneuma.Server.Routes
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
         private readonly Aes256Cipher _Cipher;
+        private readonly TenantProvisioningService _Provisioning;
 
         #endregion
 
@@ -34,14 +35,17 @@ namespace Pneuma.Server.Routes
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
         /// <param name="cipher">Cipher used to encrypt provisioned credential secrets.</param>
-        public TenantRoutes(DatabaseDriverBase db, AuthorizationService authz, Aes256Cipher cipher)
+        /// <param name="provisioning">Tenant provisioning service that creates subordinate-service resources on tenant creation.</param>
+        public TenantRoutes(DatabaseDriverBase db, AuthorizationService authz, Aes256Cipher cipher, TenantProvisioningService provisioning)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (cipher == null) throw new ArgumentNullException(nameof(cipher));
+            if (provisioning == null) throw new ArgumentNullException(nameof(provisioning));
             _Db = db;
             _Authz = authz;
             _Cipher = cipher;
+            _Provisioning = provisioning;
         }
 
         #endregion
@@ -107,6 +111,10 @@ namespace Pneuma.Server.Routes
                 Active = request.Active
             };
             Tenant created = await _Db.Tenants.CreateAsync(tenant, ctx.Token).ConfigureAwait(false);
+
+            // Provision the tenant's resources on subordinate services (RecallDB tenant + default collection).
+            // Best-effort: an unavailable subordinate service must not fail tenant creation.
+            await _Provisioning.ProvisionAsync(created.Id, created.Name, ctx.Token).ConfigureAwait(false);
 
             // Cascade: provision the tenant's first administrator, TenantAdmin assignment, and default API key.
             string adminEmail = String.IsNullOrWhiteSpace(request.AdminEmail) ? "admin@" + created.Id : request.AdminEmail!;

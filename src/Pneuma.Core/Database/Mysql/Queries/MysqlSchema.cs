@@ -22,6 +22,15 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "ALTER TABLE ingestionjobs ADD COLUMN embeddingendpointid TEXT;",
                     "ALTER TABLE ingestionjobs ADD COLUMN completionendpointid TEXT;"
                 }));
+                list.Add(new SchemaMigration(3, "Add ingestion job RecallDB collection id", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN collectionid TEXT;"
+                }));
+                list.Add(new SchemaMigration(4, "Add tenant LiteGraph tenant/graph GUIDs", new List<string>
+                {
+                    "ALTER TABLE tenants ADD COLUMN litegraphtenantguid TEXT;",
+                    "ALTER TABLE tenants ADD COLUMN litegraphgraphguid TEXT;"
+                }));
                 return list;
             }
         }

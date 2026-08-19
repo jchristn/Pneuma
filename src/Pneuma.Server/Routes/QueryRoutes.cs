@@ -121,7 +121,7 @@ namespace Pneuma.Server.Routes
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(request.Question, max, ctx.Token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, request.Question, max, ctx.Token).ConfigureAwait(false);
                 await sse.SendAsync(new { type = "metadata", grounded = sources.Count > 0, sourceCount = sources.Count }, false, ctx.Token).ConfigureAwait(false);
 
                 if (sources.Count == 0)

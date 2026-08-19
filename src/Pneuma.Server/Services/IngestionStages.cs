@@ -3,6 +3,7 @@ namespace Pneuma.Server.Services
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Globalization;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
@@ -30,15 +31,12 @@ namespace Pneuma.Server.Services
 
         private readonly DatabaseDriverBase _Db;
         private readonly IPartioClient _Partio;
-        private readonly IInvertedIndex _Verbex;
-        private readonly IGraphRepository _Graph;
+        private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IVectorRepository _Vectors;
         private readonly IArtifactStore _Artifacts;
         private readonly PolyPromptClassifier _Classifier;
-        private readonly SubgraphMerger _Merger;
         private readonly IngestionJournal _Journal;
         private readonly LoggingModule _Logging;
-        private readonly bool _UseInvertedIndex;
 
         #endregion
 
@@ -47,36 +45,29 @@ namespace Pneuma.Server.Services
         /// <summary>Instantiate the pipeline stages.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="partio">Partio client.</param>
-        /// <param name="verbex">Verbex client.</param>
-        /// <param name="graph">LiteGraph client.</param>
-        /// <param name="vectors">Vector repository.</param>
+        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        /// <param name="vectors">Vector repository (RecallDB) that stores chunk content + embeddings.</param>
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="journal">Journal for stage events and best-effort artifact writes.</param>
-        /// <param name="useInvertedIndex">Whether the lexical inverted index is enabled.</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public IngestionStages(
             DatabaseDriverBase db,
             IPartioClient partio,
-            IInvertedIndex verbex,
-            IGraphRepository graph,
+            IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
             IArtifactStore artifacts,
             IngestionJournal journal,
-            bool useInvertedIndex,
             LoggingModule logging)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Partio = partio ?? throw new ArgumentNullException(nameof(partio));
-            _Verbex = verbex ?? throw new ArgumentNullException(nameof(verbex));
-            _Graph = graph ?? throw new ArgumentNullException(nameof(graph));
+            _GraphFactory = graphFactory ?? throw new ArgumentNullException(nameof(graphFactory));
             _Vectors = vectors ?? throw new ArgumentNullException(nameof(vectors));
             _Artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
             _Journal = journal ?? throw new ArgumentNullException(nameof(journal));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _UseInvertedIndex = useInvertedIndex;
             _Classifier = new PolyPromptClassifier(logging);
-            _Merger = new SubgraphMerger(graph);
         }
 
         #endregion
@@ -122,7 +113,8 @@ namespace Pneuma.Server.Services
         /// <returns>The merge result (created/linked node and edge ids).</returns>
         public async Task<MergeResult> MergeAsync(IngestionJob job, CandidateSubgraph subgraph, CancellationToken token)
         {
-            await _Graph.EnsureGraphAsync(token).ConfigureAwait(false);
+            IGraphRepository graph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
+            await graph.EnsureGraphAsync(token).ConfigureAwait(false);
 
             GraphNode source = new GraphNode
             {
@@ -135,9 +127,9 @@ namespace Pneuma.Server.Services
             source.Tags[Ontology.TagSubjectId] = job.SubjectId;
             source.Tags[Ontology.TagNodeType] = Ontology.NodeSource;
             source.Tags[Ontology.TagAssertedByJob] = job.Id;
-            GraphNode createdSource = await _Graph.CreateNodeAsync(source, token).ConfigureAwait(false);
+            GraphNode createdSource = await graph.CreateNodeAsync(source, token).ConfigureAwait(false);
 
-            MergeResult merge = await _Merger.MergeAsync(subgraph, job.TenantId, job.SubjectId, createdSource.Id, job.Id, token).ConfigureAwait(false);
+            MergeResult merge = await new SubgraphMerger(graph).MergeAsync(subgraph, job.TenantId, job.SubjectId, createdSource.Id, job.Id, token).ConfigureAwait(false);
             if (!merge.NodeIds.Contains(createdSource.Id)) merge.NodeIds.Insert(0, createdSource.Id);
             return merge;
         }
@@ -232,83 +224,68 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
-        /// Index the source into the lexical index as a single Verbex document (all chunk text concatenated),
-        /// tagged back to Pneuma identifiers, while still creating a Chunk node per chunk and upserting its
-        /// vector so semantic retrieval resolves to chunk-level content. Indexing one document per source
-        /// means a lexical search returns one hit per ingested source (link), not one per chunk.
+        /// Store each chunk as a RecallDB document (content + embedding + provenance tags) in the job's
+        /// collection, creating a first-class Chunk node per chunk in the graph so retrieval hits resolve to
+        /// chunk-level content. The chunk node holds structure and text only; its vector lives exclusively in
+        /// RecallDB (tagged <c>litegraphNodeId</c>) — vectors are no longer stored on graph nodes. Both the
+        /// vector and full-text search paths operate over these same per-chunk documents. Chunks with no text
+        /// or no embedding are skipped (RecallDB requires an embedding matching the collection dimensionality).
         /// </summary>
-        /// <param name="job">The job.</param>
+        /// <param name="job">The job; its <see cref="IngestionJob.CollectionId"/> selects the target collection.</param>
         /// <param name="merge">The graph merge result (its first node id is the source).</param>
-        /// <param name="chunks">The chunks to index.</param>
+        /// <param name="chunks">The chunks to store.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The Verbex document ids created (empty when the lexical index is disabled or there is no text).</returns>
-        public async Task<List<string>> IndexAsync(IngestionJob job, MergeResult merge, List<PartioChunk> chunks, CancellationToken token)
+        /// <returns>The number of chunk documents stored in the collection.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the job has no target collection assigned.</exception>
+        public async Task<int> IndexAsync(IngestionJob job, MergeResult merge, List<PartioChunk> chunks, CancellationToken token)
         {
-            // The inverted index is optional: when disabled, retrieval is served from the graph vector
-            // store alone and the lexical index is skipped.
-            string? indexId = _UseInvertedIndex ? await _Verbex.EnsureIndexAsync(token).ConfigureAwait(false) : null;
-            string sourceNodeId = merge.NodeIds.Count > 0 ? merge.NodeIds[0] : String.Empty;
-            List<string> docIds = new List<string>();
+            if (String.IsNullOrEmpty(job.CollectionId)) throw new InvalidOperationException("Ingestion job " + job.Id + " has no target collection assigned.");
 
-            // Accumulate the full source text while keeping chunk-level graph nodes and vectors so semantic
-            // (vector) retrieval still resolves to specific passages.
-            StringBuilder fullText = new StringBuilder();
+            string sourceNodeId = merge.NodeIds.Count > 0 ? merge.NodeIds[0] : String.Empty;
+            List<ChunkDocument> documents = new List<ChunkDocument>();
+            int position = 0;
+
             foreach (PartioChunk chunk in chunks)
             {
                 if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
+                if (chunk.Embeddings == null || chunk.Embeddings.Count == 0) continue;
 
-                if (fullText.Length > 0) fullText.Append("\n\n");
-                fullText.Append(chunk.Text);
-
-                // Each chunk becomes a first-class Chunk node linked to its source, so semantic retrieval
-                // resolves to chunk-level content. Falls back to the source node if chunk-node creation fails.
+                // Each chunk becomes a first-class Chunk node linked to its source so retrieval resolves to
+                // chunk-level content. Falls back to the source node if chunk-node creation fails.
                 string chunkNodeId = await CreateChunkNodeAsync(job, sourceNodeId, chunk.Text, token).ConfigureAwait(false);
                 string targetNodeId = String.IsNullOrEmpty(chunkNodeId) ? sourceNodeId : chunkNodeId;
 
-                // Store the chunk embedding on its chunk node so semantic (vector) retrieval works alongside the
-                // lexical index. Best-effort: the vector store is complementary, so a failure here must not fail
-                // ingestion (the base already records the failure metric).
-                if (!String.IsNullOrEmpty(targetNodeId) && chunk.Embeddings != null && chunk.Embeddings.Count > 0)
+                // Provenance tags round-trip on search hits: litegraphNodeId resolves the hit to a graph node,
+                // jobId scopes cascade deletion, and linkId/tenantId/subjectId scope search filters.
+                Dictionary<string, string> tags = new Dictionary<string, string>
                 {
-                    Dictionary<string, string> vectorTags = new Dictionary<string, string>
-                    {
-                        { "litegraphNodeId", targetNodeId },
-                        { "tenantId", job.TenantId },
-                        { "subjectId", job.SubjectId },
-                        { "jobId", job.Id },
-                        { "linkId", job.LinkId }
-                    };
-                    try
-                    {
-                        await _Vectors.UpsertVectorAsync(targetNodeId, chunk.Embeddings, vectorTags, token).ConfigureAwait(false);
-                    }
-                    catch (Exception vectorException)
-                    {
-                        _Logging.Warn("[IngestionStages] vector upsert failed for node " + targetNodeId + ": " + vectorException.Message);
-                    }
-                }
-            }
-
-            // Index the entire source as ONE lexical document, tagged back to the Pneuma identifiers the search
-            // surfaces resolve against (link, tenant, subject, job) plus useful metadata (source url, type).
-            if (_UseInvertedIndex && indexId != null && fullText.Length > 0)
-            {
-                Dictionary<string, string> documentTags = new Dictionary<string, string>
-                {
-                    { "litegraphNodeId", sourceNodeId },
+                    { "litegraphNodeId", targetNodeId },
                     { "linkId", job.LinkId },
                     { "tenantId", job.TenantId },
                     { "subjectId", job.SubjectId },
                     { "jobId", job.Id },
                     { "sourceUrl", job.SourceUrl }
                 };
-                if (!String.IsNullOrEmpty(job.DocumentType)) documentTags["documentType"] = job.DocumentType!;
+                if (!String.IsNullOrEmpty(job.DocumentType)) tags["documentType"] = job.DocumentType!;
 
-                string docId = await _Verbex.AddDocumentAsync(indexId, fullText.ToString(), documentTags, token).ConfigureAwait(false);
-                if (!String.IsNullOrEmpty(docId)) docIds.Add(docId);
+                documents.Add(new ChunkDocument
+                {
+                    DocumentKey = job.Id + "_" + position.ToString(CultureInfo.InvariantCulture),
+                    DocumentId = job.LinkId,
+                    Position = position,
+                    Content = chunk.Text,
+                    Embedding = chunk.Embeddings,
+                    Tags = tags
+                });
+                position++;
             }
 
-            return docIds;
+            if (documents.Count > 0)
+            {
+                await _Vectors.StoreChunksAsync(job.TenantId, job.CollectionId, documents, token).ConfigureAwait(false);
+            }
+
+            return documents.Count;
         }
 
         /// <summary>Persist the chunk texts and embedding vectors as per-link artifacts (best-effort).</summary>
@@ -410,7 +387,8 @@ namespace Pneuma.Server.Services
                 chunkNode.Tags[Ontology.TagAssertedByJob] = job.Id;
                 if (!String.IsNullOrEmpty(sourceNodeId)) chunkNode.Tags[Ontology.TagSourceId] = sourceNodeId;
 
-                GraphNode created = await _Graph.CreateNodeAsync(chunkNode, token).ConfigureAwait(false);
+                IGraphRepository graph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
+                GraphNode created = await graph.CreateNodeAsync(chunkNode, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(created.Id) && !String.IsNullOrEmpty(sourceNodeId))
                 {
                     GraphEdge edge = new GraphEdge
@@ -420,7 +398,7 @@ namespace Pneuma.Server.Services
                         EdgeType = Ontology.EdgeHasChunk
                     };
                     edge.Tags[Ontology.TagAssertedByJob] = job.Id;
-                    await _Graph.CreateEdgeAsync(edge, token).ConfigureAwait(false);
+                    await graph.CreateEdgeAsync(edge, token).ConfigureAwait(false);
                 }
                 return created.Id;
             }

@@ -3,20 +3,20 @@ namespace Pneuma.Core.Responses
     using System;
 
     /// <summary>
-    /// A single search result for a subject-scoped Verbex search, aggregated to one row per source document
-    /// (content link). A source link is indexed as many Verbex documents (one per chunk), so a result rolls
+    /// A single search result for a subject-scoped RecallDB search, aggregated to one row per source document
+    /// (content link). A source link is stored as many RecallDB chunk documents (one per chunk), so a result rolls
     /// its matching chunks up to the link: the score is the best matching chunk's score and
     /// <see cref="MatchCount"/> is how many chunks matched.
     /// </summary>
     public class SubjectSearchResult
     {
-        /// <summary>Verbex document identifier of the best-matching chunk.</summary>
+        /// <summary>RecallDB document identifier of the best-matching chunk.</summary>
         public string DocumentId { get; set; } = String.Empty;
 
         /// <summary>Best relevance score across the source's matching chunks (higher is better).</summary>
         public double Score { get; set; } = 0;
 
-        /// <summary>How many chunks (Verbex documents) from this source matched the query.</summary>
+        /// <summary>How many chunks (RecallDB documents) from this source matched the query.</summary>
         public int MatchCount { get; set; } = 0;
 
         /// <summary>A text snippet from the best-matching chunk, when available.</summary>
