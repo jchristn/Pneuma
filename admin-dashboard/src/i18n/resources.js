@@ -64,6 +64,7 @@ const en = {
       ask: 'Ask',
       subjects: 'Subjects',
       links: 'Links',
+      collections: 'Collections',
       search: 'Search',
       jobs: 'Ingestion Queue',
       ingestionJobs: 'Ingestion Jobs',
@@ -221,11 +222,26 @@ const en = {
       embeddingModel: 'Embedding Model',
       completionModel: 'Completion Model',
       selectModel: 'Select a model…',
+      collection: 'Collection',
+      selectCollection: 'Select a collection…',
       noEndpoints: 'No model endpoints are configured. Configure embedding and completion models before submitting links.',
+      noCollections: 'No vector collections are defined. Create a collection on the Collections page before submitting links.',
       addMultiple: 'Add Multiple',
       urls: 'URLs (one per line)',
       urlsPlaceholder: 'https://example.com/one\nhttps://example.com/two',
       bulkCreated: '{{count}} link(s) submitted for ingestion.'
+    },
+    collections: {
+      title: 'Collections',
+      subtitle: 'Vector collections in the retrieval store (RecallDB). Ingestion stores chunk content and embeddings in the collection you choose.',
+      name: 'Name',
+      namePlaceholder: 'e.g. general-knowledge',
+      description: 'Description',
+      dimensionality: 'Dimensionality',
+      dimensionalityHelp: 'Fixed at creation; must match the embedding model used to ingest into this collection.',
+      active: 'Active',
+      activeYes: 'Active',
+      activeNo: 'Inactive'
     },
     subjects: {
       viewLinks: 'View Links'

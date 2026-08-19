@@ -20,6 +20,15 @@ function endpointOptions(list) {
   }));
 }
 
+// Build { value, label } option lists from a vector-collection entry (name + dimensionality).
+function collectionSelectOptions(list) {
+  return (Array.isArray(list) ? list : []).map((c) => {
+    const dims = c.dimensionality ?? c.Dimensionality;
+    const name = c.name || c.Name || c.id || c.Id;
+    return { value: c.id ?? c.Id, label: dims ? `${name} (${dims}d)` : name };
+  });
+}
+
 function LinksView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
@@ -29,6 +38,7 @@ function LinksView() {
   const [selectedSubjectId, setSelectedSubjectId] = useState(searchParams.get('subjectId') || '');
   const [embeddingOptions, setEmbeddingOptions] = useState([]);
   const [completionOptions, setCompletionOptions] = useState([]);
+  const [collectionOptions, setCollectionOptions] = useState([]);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkCreated, setBulkCreated] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -64,6 +74,15 @@ function LinksView() {
     return () => { cancelled = true; };
   }, [apiClient]);
 
+  // Load the vector collections operators have defined, for the create + bulk forms.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.listCollections()
+      .then((resp) => { if (!cancelled) setCollectionOptions(collectionSelectOptions(normalizeList(resp).items)); })
+      .catch(() => { if (!cancelled) setCollectionOptions([]); });
+    return () => { cancelled = true; };
+  }, [apiClient]);
+
   // Keep local selection in sync when arriving via a subjectId query param.
   useEffect(() => {
     setSelectedSubjectId(searchParams.get('subjectId') || '');
@@ -89,14 +108,16 @@ function LinksView() {
 
   const subjectOptions = subjects.map((c) => ({ value: c.id, label: c.displayName || c.name || c.id }));
 
-  const noEndpoints = embeddingOptions.length === 0 || completionOptions.length === 0;
+  const noEndpoints = embeddingOptions.length === 0 || completionOptions.length === 0 || collectionOptions.length === 0;
+  const noCollections = collectionOptions.length === 0;
 
   const formFields = [
     { name: 'subjectId', label: t('links.subject'), type: 'select', required: true, placeholder: t('links.selectSubject'), default: selectedSubjectId || '', options: subjectOptions },
     { name: 'url', label: 'URL', required: true, placeholder: 'https://...' },
     { name: 'title', label: t('links.title') },
     { name: 'embeddingEndpointId', label: t('links.embeddingModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: embeddingOptions, default: embeddingOptions.length === 1 ? embeddingOptions[0].value : undefined },
-    { name: 'completionEndpointId', label: t('links.completionModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: completionOptions, default: completionOptions.length === 1 ? completionOptions[0].value : undefined }
+    { name: 'completionEndpointId', label: t('links.completionModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: completionOptions, default: completionOptions.length === 1 ? completionOptions[0].value : undefined },
+    { name: 'collectionId', label: t('links.collection'), type: 'select', required: true, placeholder: t('links.selectCollection'), options: collectionOptions, default: collectionOptions.length === 1 ? collectionOptions[0].value : undefined }
   ];
 
   // Links are created via /v1.0/subjects/{subjectId}/links which enqueues ingestion.
@@ -105,7 +126,8 @@ function LinksView() {
       url: body.url,
       title: body.title,
       embeddingEndpointId: body.embeddingEndpointId,
-      completionEndpointId: body.completionEndpointId
+      completionEndpointId: body.completionEndpointId,
+      collectionId: body.collectionId
     });
 
   // Server-side filtering via the subject's links endpoint when a subject is chosen.
@@ -192,7 +214,7 @@ function LinksView() {
           </button>
         )}
         createDisabled={noEndpoints}
-        createNotice={noEndpoints ? t('links.noEndpoints') : null}
+        createNotice={noEndpoints ? (noCollections ? t('links.noCollections') : t('links.noEndpoints')) : null}
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
         extraActions={[
@@ -228,6 +250,7 @@ function LinksView() {
           subjectOptions={subjectOptions}
           embeddingOptions={embeddingOptions}
           completionOptions={completionOptions}
+          collectionOptions={collectionOptions}
           onClose={() => setShowBulk(false)}
           onCreated={(created) => {
             setShowBulk(false);

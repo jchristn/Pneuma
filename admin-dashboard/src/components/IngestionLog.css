@@ -51,7 +51,9 @@
   gap: 0.4rem;
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  white-space: nowrap;
 }
+.ilog-refresh > span { white-space: nowrap; }
 .ilog-refresh select {
   font-size: var(--font-size-xs);
   padding: 0.2rem 0.4rem;
@@ -158,6 +160,7 @@
   gap: 0.4rem;
   color: var(--color-success, #16a34a);
   font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 .ilog-live::before {
   content: '';

@@ -15,19 +15,20 @@ function parseUrls(text) {
  * Modal for enqueuing ingestion of many URLs at once for a single subject.
  * Requires a subject, at least one URL, and both model endpoints.
  */
-function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions, onClose, onCreated }) {
+function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions, collectionOptions = [], onClose, onCreated }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
   const [subjectId, setSubjectId] = useState('');
   const [urlsText, setUrlsText] = useState('');
-  // Auto-select the sole model endpoint when only one is available.
+  // Auto-select the sole model endpoint / collection when only one is available.
   const [embeddingEndpointId, setEmbeddingEndpointId] = useState(embeddingOptions.length === 1 ? embeddingOptions[0].value : '');
   const [completionEndpointId, setCompletionEndpointId] = useState(completionOptions.length === 1 ? completionOptions[0].value : '');
+  const [collectionId, setCollectionId] = useState(collectionOptions.length === 1 ? collectionOptions[0].value : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const urls = useMemo(() => parseUrls(urlsText), [urlsText]);
-  const canSubmit = !!subjectId && urls.length > 0 && !!embeddingEndpointId && !!completionEndpointId && !busy;
+  const canSubmit = !!subjectId && urls.length > 0 && !!embeddingEndpointId && !!completionEndpointId && !!collectionId && !busy;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -35,7 +36,7 @@ function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions
     setBusy(true);
     setError('');
     try {
-      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId });
+      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId, collectionId });
       const created = resp?.created ?? resp?.Created ?? (resp?.links || resp?.Links || []).length;
       onCreated(created);
     } catch (err) {
@@ -81,6 +82,15 @@ function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions
             <select id="bulk-completion" value={completionEndpointId} required onChange={(e) => setCompletionEndpointId(e.target.value)}>
               <option value="">{t('links.selectModel')}</option>
               {completionOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="bulk-collection">{t('links.collection')}</label>
+            <select id="bulk-collection" value={collectionId} required onChange={(e) => setCollectionId(e.target.value)}>
+              <option value="">{t('links.selectCollection')}</option>
+              {collectionOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>

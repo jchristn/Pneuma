@@ -28,6 +28,18 @@
   color: var(--text-primary);
   margin-bottom: 12px;
 }
+.login-name {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+.login-tagline {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 2px;
+  margin-bottom: 20px;
+}
 .login-subtitle {
   color: var(--text-secondary);
   font-size: 0.88rem;

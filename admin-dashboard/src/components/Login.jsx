@@ -37,6 +37,8 @@ function Login() {
         </div>
         <div className="login-brand">
           <img src={logo} alt="Pneuma" />
+          <div className="login-name">Pneuma</div>
+          <p className="login-tagline">Information brought to life</p>
           <h1>{t('login.title')}</h1>
           <p>{t('login.subtitle')}</p>
         </div>

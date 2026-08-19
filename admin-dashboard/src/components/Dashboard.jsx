@@ -16,6 +16,7 @@ import ModelRunnersView from '../views/ModelRunnersView';
 import PromptsView from '../views/PromptsView';
 import SubjectsView from '../views/SubjectsView';
 import LinksView from '../views/LinksView';
+import CollectionsView from '../views/CollectionsView';
 import SearchView from '../views/SearchView';
 import AskView from '../views/AskView';
 import TenantsView from '../views/TenantsView';
@@ -37,6 +38,7 @@ const VIEWS = {
   prompts: PromptsView,
   subjects: SubjectsView,
   links: LinksView,
+  collections: CollectionsView,
   search: SearchView,
   ask: AskView,
   tenants: TenantsView,

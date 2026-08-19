@@ -37,14 +37,15 @@ function LinksView() {
 
   const [embeddingEndpoints, setEmbeddingEndpoints] = useState([]);
   const [completionEndpoints, setCompletionEndpoints] = useState([]);
+  const [collections, setCollections] = useState([]);
 
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [form, setForm] = useState({ subjectId: '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '' });
+  const [form, setForm] = useState({ subjectId: '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '', embeddingEndpointId: '', completionEndpointId: '' });
+  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: '' });
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [notice, setNotice] = useState('');
@@ -68,10 +69,11 @@ function LinksView() {
       if (showSpinner) setLoading(true);
       setError('');
       try {
-        const [l, c, e] = await Promise.allSettled([
+        const [l, c, e, col] = await Promise.allSettled([
           apiClient.getLinks({ maxResults: 1000 }),
           apiClient.getSubjects({ maxResults: 1000 }),
-          apiClient.listIngestionEndpoints()
+          apiClient.listIngestionEndpoints(),
+          apiClient.listCollections()
         ]);
         if (l.status === 'fulfilled') setLinks(asArray(l.value, 'links'));
         else setError(l.reason?.message || 'Failed to load links');
@@ -80,6 +82,7 @@ function LinksView() {
           setEmbeddingEndpoints(asArray(e.value?.embedding).filter((x) => x.active !== false));
           setCompletionEndpoints(asArray(e.value?.completion).filter((x) => x.active !== false));
         }
+        if (col.status === 'fulfilled') setCollections(asArray(col.value).filter((x) => (x.active ?? x.Active) !== false));
       } finally {
         if (showSpinner) setLoading(false);
       }
@@ -100,10 +103,10 @@ function LinksView() {
     return () => window.clearInterval(id);
   }, [autoRefreshMs]);
 
-  const hasEndpoints = embeddingEndpoints.length > 0 && completionEndpoints.length > 0;
+  const hasEndpoints = embeddingEndpoints.length > 0 && completionEndpoints.length > 0 && collections.length > 0;
 
   const openSubmit = () => {
-    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '' });
+    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: collections.length === 1 ? (collections[0].id ?? collections[0].Id) : '' });
     setFormError('');
     setNotice('');
     setSubmitOpen(true);
@@ -123,6 +126,10 @@ function LinksView() {
       setFormError(t('links.selectModelsRequired'));
       return;
     }
+    if (!form.collectionId) {
+      setFormError(t('links.selectCollectionRequired'));
+      return;
+    }
     setSubmitting(true);
     setFormError('');
     try {
@@ -130,7 +137,8 @@ function LinksView() {
         url: form.url.trim(),
         title: form.title.trim(),
         embeddingEndpointId: form.embeddingEndpointId,
-        completionEndpointId: form.completionEndpointId
+        completionEndpointId: form.completionEndpointId,
+        collectionId: form.collectionId
       });
       setSubmitOpen(false);
       await load(false);
@@ -142,7 +150,7 @@ function LinksView() {
   };
 
   const openBulk = () => {
-    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '', embeddingEndpointId: '', completionEndpointId: '' });
+    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: collections.length === 1 ? (collections[0].id ?? collections[0].Id) : '' });
     setBulkError('');
     setNotice('');
     setBulkOpen(true);
@@ -166,13 +174,18 @@ function LinksView() {
       setBulkError(t('links.selectModelsRequired'));
       return;
     }
+    if (!bulkForm.collectionId) {
+      setBulkError(t('links.selectCollectionRequired'));
+      return;
+    }
     setBulkSubmitting(true);
     setBulkError('');
     try {
       const result = await apiClient.bulkSubmitLinks(bulkForm.subjectId, {
         urls,
         embeddingEndpointId: bulkForm.embeddingEndpointId,
-        completionEndpointId: bulkForm.completionEndpointId
+        completionEndpointId: bulkForm.completionEndpointId,
+        collectionId: bulkForm.collectionId
       });
       const created = typeof result?.created === 'number' ? result.created : asArray(result, 'links').length;
       setBulkOpen(false);
@@ -318,6 +331,7 @@ function LinksView() {
         subjects={subjects}
         embeddingEndpoints={embeddingEndpoints}
         completionEndpoints={completionEndpoints}
+        collections={collections}
         hasEndpoints={hasEndpoints}
         form={form}
         setForm={setForm}
@@ -332,6 +346,7 @@ function LinksView() {
         subjects={subjects}
         embeddingEndpoints={embeddingEndpoints}
         completionEndpoints={completionEndpoints}
+        collections={collections}
         hasEndpoints={hasEndpoints}
         bulkForm={bulkForm}
         setBulkForm={setBulkForm}

@@ -173,18 +173,23 @@ class ApiClient {
   async listIngestionEndpoints(options = {}) {
     return this._request('GET', '/v1.0/ingestion/endpoints', options);
   }
-  // Submitting a link enqueues an ingestion job server-side. The backend requires
-  // both an embedding and a completion endpoint id.
-  async submitLink(subjectId, { url, title, embeddingEndpointId, completionEndpointId }) {
+  // Vector collections (RecallDB) available as ingestion + search targets.
+  async listCollections(options = {}) {
+    return this._request('GET', '/v1.0/collections', options);
+  }
+  // Submitting a link enqueues an ingestion job server-side. The backend requires an embedding
+  // endpoint, a completion endpoint, and a target collection.
+  async submitLink(subjectId, { url, title, embeddingEndpointId, completionEndpointId, collectionId }) {
     const body = { url };
     if (title) body.title = title;
     if (embeddingEndpointId) body.embeddingEndpointId = embeddingEndpointId;
     if (completionEndpointId) body.completionEndpointId = completionEndpointId;
+    if (collectionId) body.collectionId = collectionId;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, { body });
   }
   // Bulk submit multiple links for a subject in a single request.
-  async bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId }) {
-    const body = { urls, embeddingEndpointId, completionEndpointId };
+  async bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId, collectionId }) {
+    const body = { urls, embeddingEndpointId, completionEndpointId, collectionId };
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
   }
 

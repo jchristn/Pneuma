@@ -17,7 +17,7 @@ const SYSTEMS = [
   { name: 'User Dashboard', url: 'http://localhost:3012', cred: 'admin@pneuma / password' },
   { name: 'Subject Dashboard', url: 'http://localhost:3011', cred: 'admin@pneuma / password' },
   { name: 'Partio', url: 'http://localhost:8401', cred: 'token: partioadmin' },
-  { name: 'Verbex', url: 'http://localhost:8601', cred: 'token: verbexadmin' },
+  { name: 'RecallDB', url: 'http://localhost:8601', cred: 'token: recalldbadmin' },
   { name: 'DocumentAtom', url: 'http://localhost:3002', cred: 'no auth' },
   { name: 'LiteGraph', url: 'http://localhost:3001', cred: 'token: litegraphadmin' },
   { name: 'Less3 (S3)', url: 'http://localhost:3003', cred: 'admin key: less3admin' }

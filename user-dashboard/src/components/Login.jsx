@@ -37,7 +37,9 @@ export default function Login() {
 
       <div className="login-panel">
         <div className="login-brand">
-          <img src="/logo.png" alt="Pneuma — Pneuma - information brought to life" className="login-logo" />
+          <img src="/logo.png" alt="Pneuma" className="login-logo" />
+          <div className="login-name">Pneuma</div>
+          <p className="login-tagline">Information brought to life</p>
         </div>
 
         <h1 className="login-title">{t('login.title')}</h1>

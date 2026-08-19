@@ -5,12 +5,19 @@ function endpointLabel(ep) {
   return ep.name || ep.model || ep.id;
 }
 
+function collectionLabel(c) {
+  const name = c.name || c.Name || c.id || c.Id;
+  const dims = c.dimensionality ?? c.Dimensionality;
+  return dims ? `${name} (${dims}d)` : name;
+}
+
 function LinkBulkSubmitModal({
   isOpen,
   onClose,
   subjects,
   embeddingEndpoints,
   completionEndpoints,
+  collections = [],
   hasEndpoints,
   bulkForm,
   setBulkForm,
@@ -100,7 +107,28 @@ function LinkBulkSubmitModal({
             ))}
           </select>
         </div>
-        {!hasEndpoints && <div className="form-error">{t('links.noEndpoints')}</div>}
+        <div className="form-group">
+          <label htmlFor="bulk-collection">
+            {t('links.collection')} <span className="required-mark">*</span>
+          </label>
+          <select
+            id="bulk-collection"
+            value={bulkForm.collectionId}
+            onChange={(e) => setBulkForm({ ...bulkForm, collectionId: e.target.value })}
+            required
+            disabled={collections.length === 0}
+          >
+            <option value="" disabled>
+              {t('links.selectCollection')}
+            </option>
+            {collections.map((c) => (
+              <option key={c.id ?? c.Id} value={c.id ?? c.Id}>
+                {collectionLabel(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!hasEndpoints && <div className="form-error">{collections.length === 0 ? t('links.noCollections') : t('links.noEndpoints')}</div>}
         <div className="form-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={bulkSubmitting}>
             {t('common.cancel')}
@@ -108,7 +136,7 @@ function LinkBulkSubmitModal({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={bulkSubmitting || !hasEndpoints || !bulkForm.embeddingEndpointId || !bulkForm.completionEndpointId}
+            disabled={bulkSubmitting || !hasEndpoints || !bulkForm.embeddingEndpointId || !bulkForm.completionEndpointId || !bulkForm.collectionId}
           >
             {bulkSubmitting ? t('common.loading') : t('common.submit')}
           </button>

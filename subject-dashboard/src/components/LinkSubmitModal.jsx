@@ -5,12 +5,19 @@ function endpointLabel(ep) {
   return ep.name || ep.model || ep.id;
 }
 
+function collectionLabel(c) {
+  const name = c.name || c.Name || c.id || c.Id;
+  const dims = c.dimensionality ?? c.Dimensionality;
+  return dims ? `${name} (${dims}d)` : name;
+}
+
 function LinkSubmitModal({
   isOpen,
   onClose,
   subjects,
   embeddingEndpoints,
   completionEndpoints,
+  collections = [],
   hasEndpoints,
   form,
   setForm,
@@ -108,7 +115,28 @@ function LinkSubmitModal({
             ))}
           </select>
         </div>
-        {!hasEndpoints && <div className="form-error">{t('links.noEndpoints')}</div>}
+        <div className="form-group">
+          <label htmlFor="ln-collection">
+            {t('links.collection')} <span className="required-mark">*</span>
+          </label>
+          <select
+            id="ln-collection"
+            value={form.collectionId}
+            onChange={(e) => setForm({ ...form, collectionId: e.target.value })}
+            required
+            disabled={collections.length === 0}
+          >
+            <option value="" disabled>
+              {t('links.selectCollection')}
+            </option>
+            {collections.map((c) => (
+              <option key={c.id ?? c.Id} value={c.id ?? c.Id}>
+                {collectionLabel(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!hasEndpoints && <div className="form-error">{collections.length === 0 ? t('links.noCollections') : t('links.noEndpoints')}</div>}
         <p className="field-hint">{t('links.submitHint')}</p>
         <div className="form-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
@@ -117,7 +145,7 @@ function LinkSubmitModal({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || !hasEndpoints || !form.embeddingEndpointId || !form.completionEndpointId}
+            disabled={submitting || !hasEndpoints || !form.embeddingEndpointId || !form.completionEndpointId || !form.collectionId}
           >
             {submitting ? t('common.loading') : t('common.submit')}
           </button>

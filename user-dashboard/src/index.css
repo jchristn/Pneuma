@@ -343,13 +343,26 @@ input[type='search']::-webkit-search-cancel-button {
 }
 .login-brand {
   display: flex;
-  justify-content: center;
-  margin-bottom: 24px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
   color: var(--color-text);
 }
 .login-logo {
   height: 56px;
   width: auto;
+}
+.login-name {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+}
+.login-tagline {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
 }
 .login-title {
   font-size: 24px;

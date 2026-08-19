@@ -242,12 +242,27 @@ class ApiClient {
     return this._request('GET', '/v1.0/ingestion/endpoints');
   }
 
-  // Search a subject's ingested documents (Verbex), paginated and ranked by score.
+  // Search a subject's ingested documents (RecallDB), paginated and ranked by score.
   // Returns an EnumerationResult of { documentId, score, snippet, linkId, linkUrl, linkTitle, nodeId }.
   searchSubjectDocuments(subjectId, query, { maxResults = 20, skip = 0 } = {}) {
     return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/search`, {
       query: { q: query, maxResults, skip }
     });
+  }
+
+  // Vector collections (RecallDB). Returns an EnumerationResult of { id, name, description, dimensionality, active }.
+  listCollections() {
+    return this._request('GET', '/v1.0/collections');
+  }
+
+  // Create a vector collection. body: { name, description?, dimensionality }.
+  createCollection(body) {
+    return this._request('PUT', '/v1.0/collections', { body });
+  }
+
+  // Delete a vector collection and all of its documents.
+  deleteCollection(id) {
+    return this._request('DELETE', `/v1.0/collections/${encodeURIComponent(id)}`);
   }
 
   // Health of every model endpoint (deduplicated by base URL). Array of health status objects.

@@ -131,12 +131,12 @@ function FollowLogsModal({ job, onClose }) {
         {(events.length > 0 || showCurrentStep) && (
           <span className="ilog-total">{t('jobs.totalRuntime')}: <strong>{formatDuration(totalRuntimeMs)}</strong></span>
         )}
+        {running && refreshSeconds > 0 && (
+          <span className="ilog-live" aria-live="polite">
+            {t('jobs.autoRefreshing', { seconds: refreshSeconds })}
+          </span>
+        )}
         <span className="ilog-run-times">
-          {running && refreshSeconds > 0 && (
-            <span className="ilog-live" aria-live="polite">
-              {t('jobs.autoRefreshing', { seconds: refreshSeconds })}
-            </span>
-          )}
           {lastUpdated && <span>{t('jobs.lastUpdated')}: {formatDateTime(lastUpdated.toISOString())}</span>}
           <label className="ilog-refresh">
             <span>{t('jobs.autoRefresh')}</span>

@@ -11,6 +11,7 @@ export const NAV_GROUPS = [
     items: [
       { section: 'subjects', labelKey: 'nav.subjects', icon: 'users' },
       { section: 'links', labelKey: 'nav.links', icon: 'link' },
+      { section: 'collections', labelKey: 'nav.collections', icon: 'database' },
       { section: 'search', labelKey: 'nav.search', icon: 'search' },
       { section: 'ask', labelKey: 'nav.ask', icon: 'chat' },
       { section: 'jobs', labelKey: 'nav.jobs', icon: 'queue' },
@@ -56,6 +57,7 @@ export const SECTION_META = {
   home: { titleKey: 'home.title', subtitleKey: 'home.subtitle' },
   subjects: { titleKey: 'nav.subjects' },
   links: { titleKey: 'nav.links' },
+  collections: { titleKey: 'collections.title', subtitleKey: 'collections.subtitle' },
   search: { titleKey: 'search.title', subtitleKey: 'search.subtitle' },
   ask: { titleKey: 'nav.ask' },
   jobs: { titleKey: 'jobs.title', subtitleKey: 'jobs.subtitle' },

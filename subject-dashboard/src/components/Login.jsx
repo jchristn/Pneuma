@@ -61,6 +61,8 @@ function Login() {
 
         <div className="login-header">
           <img src="/logo.png" alt="Pneuma" className="login-logo" />
+          <div className="login-name">Pneuma</div>
+          <p className="login-tagline">Information brought to life</p>
           <p className="login-subtitle">{t('login.subtitle')}</p>
         </div>
 
