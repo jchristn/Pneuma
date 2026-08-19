@@ -14,6 +14,7 @@ namespace Pneuma.Server.Settings
         private int _NeighborExpansionMaxNodes = 10;
         private int _VectorTopK = 20;
         private double _VectorMinimumScore = 0.0;
+        private int _ChatMaxToolIterations = 6;
 
         #endregion
 
@@ -36,6 +37,17 @@ namespace Pneuma.Server.Settings
         /// <see cref="NeighborExpansionMaxNodes"/>). Default false.
         /// </summary>
         public bool NeighborExpansionEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Maximum number of tool-calling iterations the agentic chat assistant may take before it is forced
+        /// to produce a final answer. Higher values let the assistant gather more evidence at the cost of more
+        /// model round-trips and latency. Default 6; minimum 1; maximum 20.
+        /// </summary>
+        public int ChatMaxToolIterations
+        {
+            get { return _ChatMaxToolIterations; }
+            set { _ChatMaxToolIterations = Math.Clamp(value, 1, 20); }
+        }
 
         /// <summary>
         /// Maximum number of neighbor nodes added during expansion. Default 10; minimum 1; maximum 200.

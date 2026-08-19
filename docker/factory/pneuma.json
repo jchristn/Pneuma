@@ -91,7 +91,8 @@
     "NeighborExpansionEnabled": false,
     "NeighborExpansionMaxNodes": 10,
     "VectorTopK": 20,
-    "VectorMinimumScore": 0.0
+    "VectorMinimumScore": 0.0,
+    "ChatMaxToolIterations": 6
   },
   "S3": {
     "Enabled": true,

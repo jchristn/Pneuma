@@ -28,7 +28,7 @@ namespace Pneuma.Server.Services
     {
         #region Private-Members
 
-        private const int _MaxIterations = 6;
+        private readonly int _MaxIterations;
 
         private const string _FallbackSystemPrompt =
             "You are Pneuma's knowledge assistant. Answer questions about the curated knowledge graph using the " +
@@ -51,9 +51,10 @@ namespace Pneuma.Server.Services
         /// <param name="query">Shared grounded query service (runner resolution).</param>
         /// <param name="tools">Context-free tool executor.</param>
         /// <param name="cipher">Cipher for decrypting model-runner keys.</param>
+        /// <param name="maxToolIterations">Maximum tool-calling iterations before a final answer is forced (>= 1).</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public AgenticChatService(DatabaseDriverBase db, GroundedQueryService query, PneumaToolExecutor tools, Aes256Cipher cipher, LoggingModule logging)
+        public AgenticChatService(DatabaseDriverBase db, GroundedQueryService query, PneumaToolExecutor tools, Aes256Cipher cipher, int maxToolIterations, LoggingModule logging)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -64,6 +65,7 @@ namespace Pneuma.Server.Services
             _Query = query;
             _Tools = tools;
             _Cipher = cipher;
+            _MaxIterations = Math.Max(1, maxToolIterations);
             _Logging = logging;
         }
 
@@ -138,10 +140,17 @@ namespace Pneuma.Server.Services
                     };
 
                     // On the final permitted iteration, force a text answer so the loop always terminates.
+                    // Disabling tools alone is not enough — small local models can return an empty completion
+                    // when simply told "no tools", so add an explicit instruction to synthesize an answer now
+                    // from what has already been gathered.
                     if (iteration == _MaxIterations - 1)
                     {
                         request.Tools = new List<ToolDefinition>();
                         request.ToolChoice = "none";
+                        messages.Add(ChatMessage.User(
+                            "Using the information already gathered from the tools above, write your final answer to my question now. "
+                            + "Do not call any tools. If the archive does not contain enough information to answer fully, say so briefly "
+                            + "and summarize whatever relevant material was found."));
                     }
 
                     ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
