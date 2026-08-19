@@ -1,0 +1,133 @@
+{
+  "CreatedUtc": "2026-01-01T00:00:00.000Z",
+  "Rest": {
+    "Hostname": "*",
+    "Port": 8080,
+    "Ssl": false
+  },
+  "Cors": {
+    "AllowOrigins": "*",
+    "AllowMethods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+    "AllowHeaders": "Content-Type, Authorization, X-Api-Key, x-token, x-tenant-guid, x-email, x-password, x-access-key, x-secret-key",
+    "ExposeHeaders": "*",
+    "MaxAgeSeconds": 86400
+  },
+  "Logging": {
+    "ConsoleLogging": true,
+    "FileLogging": true,
+    "LogDirectory": "/app/logs",
+    "LogFilename": "pneuma.log",
+    "MinimumSeverity": 1,
+    "LogHttpRequests": false
+  },
+  "Database": {
+    "Type": "Postgresql",
+    "Filename": "pneuma.db",
+    "Hostname": "pneuma-postgres",
+    "Port": 5432,
+    "DatabaseName": "pneuma",
+    "Username": "pneuma",
+    "Password": "pneuma",
+    "Schema": null,
+    "MaxConnections": 32,
+    "CommandTimeoutSeconds": 30
+  },
+  "Auth": {
+    "Issuer": "pneuma",
+    "TokenSigningKey": "pneuma-development-signing-key-change-me-please-0001",
+    "TokenLifetimeMinutes": 60,
+    "AdminApiKeys": [ "pneumaadmin" ]
+  },
+  "RequestHistory": {
+    "Enabled": true,
+    "MaxRequestBodyBytes": 65536,
+    "MaxResponseBodyBytes": 65536,
+    "RetentionDays": 30,
+    "PruneIntervalMinutes": 60
+  },
+  "Ingestion": {
+    "MaxConcurrentTasks": 4,
+    "PollIntervalMs": 2000,
+    "MaxAttempts": 3,
+    "StageTimeoutSeconds": 1800,
+    "UseHeadlessBrowser": true,
+    "BrowserNavigationTimeoutMs": 60000
+  },
+  "Integrations": {
+    "DocumentAtom": {
+      "Endpoint": "http://documentatom:8000/"
+    },
+    "Partio": {
+      "Endpoint": "http://partio-server:8400/",
+      "BearerToken": "partioadmin",
+      "EmbeddingEndpointId": null,
+      "CompletionEndpointId": null
+    },
+    "Verbex": {
+      "Endpoint": "http://verbex-server:8080/",
+      "BearerToken": "verbexadmin",
+      "TenantId": "default",
+      "IndexName": "pneuma"
+    },
+    "LiteGraph": {
+      "Endpoint": "http://litegraph:8701/",
+      "BearerToken": "litegraphadmin",
+      "TenantGuid": "00000000-0000-0000-0000-000000000000",
+      "GraphGuid": null
+    },
+    "Blob": {
+      "Provider": "Disk",
+      "Directory": "/app/blobs"
+    },
+    "Resilience": {
+      "TimeoutMilliseconds": 100000,
+      "MaxConcurrentRequests": 8,
+      "RetryCount": 2,
+      "RetryDelayMilliseconds": 500
+    }
+  },
+  "Retrieval": {
+    "UseInvertedIndex": true,
+    "NeighborExpansionEnabled": false,
+    "NeighborExpansionMaxNodes": 10,
+    "VectorTopK": 20,
+    "VectorMinimumScore": 0.0
+  },
+  "S3": {
+    "Enabled": true,
+    "Endpoint": "http://less3:8000",
+    "Region": "us-west-1",
+    "AccessKey": "default",
+    "SecretKey": "default",
+    "ForcePathStyle": true,
+    "Buckets": {
+      "Source": "pneuma-source",
+      "Atoms": "pneuma-atoms",
+      "Chunks": "pneuma-chunks",
+      "Embeddings": "pneuma-embeddings",
+      "Subgraph": "pneuma-subgraph"
+    }
+  },
+  "Telemetry": {
+    "Enabled": true,
+    "ServiceName": "pneuma-server",
+    "OtlpEndpoint": "http://tempo:4317",
+    "OtlpProtocol": "grpc",
+    "PrometheusEnabled": true
+  },
+  "Diagnostics": {
+    "RunStartupProbes": true,
+    "FailFastOnStartupProbe": false
+  },
+  "Seed": {
+    "AccountName": "Pneuma",
+    "TenantName": "System",
+    "AdminEmail": "admin@pneuma",
+    "AdminPassword": "password",
+    "AdminFirstName": "Pneuma",
+    "AdminLastName": "Administrator",
+    "OllamaBaseUrl": "http://ollama:11434",
+    "OpenAiBaseUrl": "https://api.openai.com/v1",
+    "GeminiBaseUrl": "https://generativelanguage.googleapis.com/v1beta"
+  }
+}

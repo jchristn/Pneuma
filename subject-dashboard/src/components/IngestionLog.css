@@ -1,0 +1,134 @@
+/* Per-step ingestion log modal: vertical step timeline + per-run headers.
+   Mirrors the stage-timeline look used in the Ingestion view. */
+.ilog-run {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.ilog-run:last-child {
+  margin-bottom: 0;
+}
+.ilog-run-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.ilog-run-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.ilog-doctype {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.ilog-run-times {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.ilog-error {
+  border-left: 3px solid var(--color-danger);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
+.ilog-timeline {
+  display: flex;
+  flex-direction: column;
+}
+.ilog-row {
+  display: flex;
+  gap: 14px;
+}
+.ilog-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.ilog-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  margin-top: 4px;
+  z-index: 1;
+}
+.ilog-line {
+  flex: 1;
+  width: 2px;
+  background: var(--border-color);
+  margin: 2px 0;
+  min-height: 24px;
+}
+.ilog-row.is-done .ilog-dot {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+.ilog-row.is-failed .ilog-dot {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+.ilog-row.is-processing .ilog-dot {
+  border-color: var(--color-warning);
+  background: var(--color-warning);
+}
+.ilog-content {
+  flex: 1;
+  padding-bottom: 20px;
+  min-width: 0;
+}
+.ilog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.ilog-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.ilog-message {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.ilog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.ilog-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 8px 0;
+}
+.ilog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}

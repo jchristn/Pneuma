@@ -1,0 +1,9 @@
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}

@@ -1,0 +1,61 @@
+{
+  "CreatedUtc": "2026-08-15T02:54:21.6293411Z",
+  "Logging": {
+    "SyslogServers": [
+      {
+        "Hostname": "127.0.0.1",
+        "Port": 514,
+        "IpPort": "127.0.0.1:514"
+      }
+    ],
+    "ConsoleLogging": true,
+    "EnableColors": true,
+    "MinimumSeverity": 0,
+    "LogDirectory": "logs",
+    "LogFilename": "verbex.log",
+    "FileLogging": true,
+    "IncludeDateInFilename": true
+  },
+  "Rest": {
+    "Hostname": "*",
+    "Port": 8080,
+    "Ssl": false,
+    "SslCertificateFile": null,
+    "SslCertificatePassword": null,
+    "EnableOpenApi": true,
+    "EnableSwaggerUi": true
+  },
+  "Database": {
+    "Type": "Postgresql",
+    "Filename": "./verbex.db",
+    "InMemory": false,
+    "Hostname": "pneuma-postgres",
+    "Port": 5432,
+    "DatabaseName": "verbex",
+    "Username": "pneuma",
+    "Password": "pneuma",
+    "RequireEncryption": false,
+    "Schema": "public",
+    "MinPoolSize": 1,
+    "MaxPoolSize": 100,
+    "CommandTimeout": 30,
+    "ConnectionTimeout": 30,
+    "AutoFlushInterval": 100
+  },
+  "DataDirectory": "./data",
+  "AdminBearerToken": "verbexadmin",
+  "RequestHistory": {
+    "Enabled": true,
+    "Directory": "./request-history",
+    "RetentionDays": 30,
+    "CleanupIntervalMinutes": 60,
+    "MaxRequestBodyBytes": 131072,
+    "MaxResponseBodyBytes": 131072
+  },
+  "Debug": {
+    "Authentication": false,
+    "Exceptions": true,
+    "Requests": false,
+    "DatabaseQueries": false
+  }
+}

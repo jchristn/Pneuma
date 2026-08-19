@@ -1,0 +1,163 @@
+namespace Pneuma.Core.Database.Sqlite.Queries
+{
+    using System.Collections.Generic;
+    using Pneuma.Core.Database;
+
+    /// <summary>
+    /// SQLite schema definition, expressed as ordered, idempotent migrations.
+    /// </summary>
+    internal static class SqliteSchema
+    {
+        /// <summary>
+        /// All schema migrations in version order.
+        /// </summary>
+        internal static List<SchemaMigration> Migrations
+        {
+            get
+            {
+                List<SchemaMigration> list = new List<SchemaMigration>();
+                list.Add(new SchemaMigration(1, "Initial Pneuma schema", InitialStatements()));
+                list.Add(new SchemaMigration(2, "Add ingestion job embedding/completion endpoint ids", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN embeddingendpointid TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN completionendpointid TEXT;"
+                }));
+                return list;
+            }
+        }
+
+        private static List<string> InitialStatements()
+        {
+            return new List<string>
+            {
+                "CREATE TABLE IF NOT EXISTS accounts (" +
+                    "id TEXT PRIMARY KEY, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, " +
+                    "isprotected INTEGER NOT NULL DEFAULT 0, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+
+                "CREATE TABLE IF NOT EXISTS tenants (" +
+                    "id TEXT PRIMARY KEY, accountid TEXT, parentid TEXT, name TEXT NOT NULL, region TEXT, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+
+                "CREATE TABLE IF NOT EXISTS administrators (" +
+                    "id TEXT PRIMARY KEY, accountid TEXT, firstname TEXT, lastname TEXT, email TEXT NOT NULL, " +
+                    "passwordsha256 TEXT, telephone TEXT, active INTEGER NOT NULL DEFAULT 1, " +
+                    "isprotected INTEGER NOT NULL DEFAULT 0, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_administrators_email ON administrators (email);",
+
+                "CREATE TABLE IF NOT EXISTS users (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, firstname TEXT, lastname TEXT, email TEXT NOT NULL, " +
+                    "passwordsha256 TEXT, isadmin INTEGER NOT NULL DEFAULT 0, istenantadmin INTEGER NOT NULL DEFAULT 0, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tenant_email ON users (tenantid, email);",
+
+                "CREATE TABLE IF NOT EXISTS credentials (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, userid TEXT NOT NULL, name TEXT, accesskey TEXT NOT NULL, " +
+                    "secretkeyencrypted TEXT, secretkeylast4 TEXT, authmode TEXT, lastusedutc TEXT, expiresutc TEXT, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_accesskey ON credentials (accesskey);",
+                "CREATE INDEX IF NOT EXISTS idx_credentials_tenant_user ON credentials (tenantid, userid);",
+
+                "CREATE TABLE IF NOT EXISTS authsessions (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, accountid TEXT, administratorid TEXT, userid TEXT, credentialid TEXT, " +
+                    "principaltype TEXT, authscheme TEXT, tokenid TEXT, sourceip TEXT, useragent TEXT, expiresutc TEXT NOT NULL, " +
+                    "lastusedutc TEXT, revokedutc TEXT, revocationreason TEXT, active INTEGER NOT NULL DEFAULT 1, " +
+                    "isprotected INTEGER NOT NULL DEFAULT 0, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_authsessions_tenant ON authsessions (tenantid);",
+
+                "CREATE TABLE IF NOT EXISTS userroles (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, name TEXT NOT NULL, isbuiltin INTEGER NOT NULL DEFAULT 0, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_userroles_tenant_name ON userroles (tenantid, name);",
+
+                "CREATE TABLE IF NOT EXISTS permissions (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, name TEXT, resourcetypes TEXT, operationtypes TEXT, " +
+                    "permissiontype TEXT, active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+
+                "CREATE TABLE IF NOT EXISTS rolepermissionmaps (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, roleid TEXT NOT NULL, permissionid TEXT NOT NULL, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_rpm_role ON rolepermissionmaps (roleid);",
+
+                "CREATE TABLE IF NOT EXISTS userroleassignments (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, userid TEXT NOT NULL, roleid TEXT, rolename TEXT, " +
+                    "resourcescope TEXT, resourceid TEXT, inheritstochildren INTEGER NOT NULL DEFAULT 1, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_ura_tenant_user ON userroleassignments (tenantid, userid);",
+
+                "CREATE TABLE IF NOT EXISTS userrolemaps (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, userid TEXT NOT NULL, roleid TEXT NOT NULL, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_urm_tenant_user ON userrolemaps (tenantid, userid);",
+
+                "CREATE TABLE IF NOT EXISTS credentialscopeassignments (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, credentialid TEXT NOT NULL, roleid TEXT, rolename TEXT, " +
+                    "resourcescope TEXT, resourceid TEXT, permissions TEXT, resourcetypes TEXT, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_csa_tenant_cred ON credentialscopeassignments (tenantid, credentialid);",
+
+                "CREATE TABLE IF NOT EXISTS audit (" +
+                    "id TEXT PRIMARY KEY, eventtype TEXT, tenantid TEXT, userid TEXT, credentialid TEXT, sessionid TEXT, " +
+                    "resourceid TEXT, principaltype TEXT, authscheme TEXT, requestid TEXT, httpmethod TEXT, urlpath TEXT, " +
+                    "sourceip TEXT, authenticationresult TEXT, authorizationresult TEXT, requiredresourcetype TEXT, " +
+                    "requiredoperation TEXT, denialreason TEXT, bypassreason TEXT, statuscode INTEGER, createdutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_audit_tenant_created ON audit (tenantid, createdutc);",
+
+                "CREATE TABLE IF NOT EXISTS requesthistory (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, userid TEXT, principalname TEXT, method TEXT, path TEXT, url TEXT, " +
+                    "statuscode INTEGER, durationms REAL, sourceip TEXT, requestheaders TEXT, requestbody TEXT, " +
+                    "requestbodybytes INTEGER, requestbodytruncated INTEGER, responseheaders TEXT, responsebody TEXT, " +
+                    "responsebodybytes INTEGER, responsebodytruncated INTEGER, createdutc TEXT NOT NULL, completedutc TEXT);",
+                "CREATE INDEX IF NOT EXISTS idx_reqhist_tenant_created ON requesthistory (tenantid, createdutc);",
+                "CREATE INDEX IF NOT EXISTS idx_reqhist_created ON requesthistory (createdutc);",
+
+                "CREATE TABLE IF NOT EXISTS subjects (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, displayname TEXT NOT NULL, type TEXT, description TEXT, " +
+                    "graphrootnodeid TEXT, active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_subjects_tenant ON subjects (tenantid);",
+
+                "CREATE TABLE IF NOT EXISTS subjectlinks (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, url TEXT NOT NULL, title TEXT, " +
+                    "submittedbyuserid TEXT, status TEXT, lastingestedutc TEXT, lasterror TEXT, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_subjectlinks_tenant_subject ON subjectlinks (tenantid, subjectid);",
+
+                "CREATE TABLE IF NOT EXISTS ingestionjobs (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, linkid TEXT NOT NULL, sourceurl TEXT, " +
+                    "status TEXT, stage TEXT, attemptcount INTEGER NOT NULL DEFAULT 0, error TEXT, documenttype TEXT, blobkey TEXT, " +
+                    "graphnodeids TEXT, verbexdocumentids TEXT, startedutc TEXT, completedutc TEXT, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_tenant_status ON ingestionjobs (tenantid, status);",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON ingestionjobs (status, createdutc);",
+
+                "CREATE TABLE IF NOT EXISTS ingestionjobevents (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, jobid TEXT NOT NULL, stage TEXT, status TEXT, message TEXT, " +
+                    "durationms REAL, createdutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_jobevents_job ON ingestionjobevents (jobid, createdutc);",
+
+                "CREATE TABLE IF NOT EXISTS modelrunners (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, name TEXT NOT NULL, provider TEXT, baseurl TEXT, apitype TEXT, " +
+                    "authmaterialencrypted TEXT, capabilities TEXT, runnerusage TEXT, defaultmodel TEXT, defaultembeddingmodel TEXT, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_modelrunners_tenant_name ON modelrunners (tenantid, name);",
+
+                "CREATE TABLE IF NOT EXISTS prompts (" +
+                    "id TEXT PRIMARY KEY, tenantid TEXT, promptkey TEXT NOT NULL, name TEXT, content TEXT, version INTEGER NOT NULL DEFAULT 1, " +
+                    "active INTEGER NOT NULL DEFAULT 1, isprotected INTEGER NOT NULL DEFAULT 0, " +
+                    "createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                "CREATE INDEX IF NOT EXISTS idx_prompts_tenant_key ON prompts (tenantid, promptkey);"
+            };
+        }
+    }
+}

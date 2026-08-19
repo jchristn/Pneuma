@@ -1,0 +1,169 @@
+# Pneuma REST API
+
+Base URL (local): `http://127.0.0.1:8080`. All JSON is camelCase; enums are strings. OpenAPI lives at `GET /openapi.json`.
+
+## Authentication
+
+Most routes require a bearer token: `Authorization: Bearer <token>`. Obtain one by logging in with email/password. Machine credentials (access key + secret) may authenticate directly with `x-access-key` + `x-secret-key`, and a system admin key may be sent as `x-api-key`.
+
+| Header | Purpose |
+|--------|---------|
+| `Authorization: Bearer <token>` | Session token (preferred) |
+| `x-token` | Alternate carrier for the session token |
+| `x-api-key` | System administrator API key |
+| `x-access-key` / `x-secret-key` | Credential (API key) authentication |
+| `x-email` / `x-password` / `x-tenant-guid` | Header login (session-creation only) |
+
+Errors use `{ "error": "<code>", "message": "<text>", "context": <optional> }`. Status codes: 200 OK, 201 Created, 204 No Content, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Too Many Requests, 500 Internal Server Error.
+
+## Pagination (list endpoints)
+
+Every collection `GET` (tenants, users, credentials, roles, permissions, assignments, audit, subjects, links, jobs, model-runners, prompts) returns a paginated **`EnumerationResult`** envelope rather than a bare array. Paging is controlled with query-string parameters:
+
+| Query param | Default | Description |
+|-------------|---------|-------------|
+| `maxResults` | `100` | Page size, clamped to `1..1000` |
+| `skip` | `0` | Records to skip from the start of the ordered set |
+| `order` | `desc` | `asc` or `desc` by creation time (`CreatedAscending`/`CreatedDescending`) |
+| `search` | — | Case-insensitive substring filter over the entity's primary label (name/email/url/etc.) |
+
+Response envelope:
+
+```json
+{
+  "success": true,
+  "maxResults": 100,
+  "skip": 0,
+  "totalRecords": 42,
+  "recordsRemaining": 0,
+  "endOfResults": true,
+  "objects": [ /* the page of records */ ]
+}
+```
+
+`totalRecords` is the count after filtering (before paging), so a client can read a total cheaply with `?maxResults=1`. `recordsRemaining` and `endOfResults` describe whether more pages follow.
+
+## System
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/` | none | Server banner |
+| HEAD | `/` | none | Liveness |
+| GET | `/v1.0/api/health` | none | Health check → `{ status, serviceName, version, timeUtc }` |
+| GET | `/openapi.json` | none | OpenAPI 3 document |
+
+## Tokens
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v1.0/token` | none | Create a session token. Body `{ email, password, tenantId? }` → `{ token, expiresUtc, principalType, tenantId, userId, displayName, email, isAdmin, isTenantAdmin }` |
+| GET | `/v1.0/token` | bearer | Validate the current token; returns principal summary |
+| GET | `/v1.0/token/details` | bearer | Decoded authentication context |
+| DELETE | `/v1.0/token` | bearer | Revoke the current session (logout), 204 |
+
+## Tenants (admin)
+
+`GET /v1.0/tenants` · `POST /v1.0/tenants` · `GET /v1.0/tenants/{id}` · `PUT /v1.0/tenants/{id}` · `DELETE /v1.0/tenants/{id}`. Requires admin.
+
+## Users
+
+`GET /v1.0/users` (tenant-scoped; admin may pass `?tenantId=`) · `POST /v1.0/users` (body `CreateUserRequest { tenantId?, firstName, lastName, email, password, isAdmin, isTenantAdmin }`) · `GET|PUT|DELETE /v1.0/users/{id}`. Passwords are never returned.
+
+## Credentials
+
+`GET /v1.0/credentials` · `POST /v1.0/credentials` (body `{ name, userId?, expiresUtc? }`; the raw `secretKey` is returned **once**) · `GET /v1.0/credentials/{id}` · `DELETE /v1.0/credentials/{id}`.
+
+## Roles, Permissions, Assignments (RBAC, admin)
+
+- Roles: `GET|POST /v1.0/roles`, `GET|PUT|DELETE /v1.0/roles/{id}` (built-in roles are protected).
+- Permissions: `GET|POST /v1.0/permissions`, `GET|PUT|DELETE /v1.0/permissions/{id}`.
+- Assignments: `GET /v1.0/assignments?userId=<id>`, `POST /v1.0/assignments`, `DELETE /v1.0/assignments/{id}`.
+
+## Audit
+
+`GET /v1.0/audit` — recent security events (denials, bypasses, session/RBAC changes), tenant-scoped; admin may pass `?tenantId=`. Returns a paginated `EnumerationResult` (see [Pagination](#pagination-list-endpoints)).
+
+## Request History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/api/request-history` | Paginated list; filters `method, statusCode, pathContains, fromUtc, toUtc, pageNumber, pageSize` (admin `tenantId, userId`). Bodies omitted. |
+| GET | `/v1.0/api/request-history/summary` | Time-bucketed counts; `fromUtc, toUtc, bucketMinutes` |
+| GET | `/v1.0/api/request-history/{id}` | Full entry including headers and bodies |
+| DELETE | `/v1.0/api/request-history/{id}` | Delete one, 204 |
+| DELETE | `/v1.0/api/request-history` | Bulk delete matching a filter → `{ deletedCount }` |
+
+## Subjects
+
+`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}`. A subject has `displayName`, `type` (Person…), `description`, `graphRootNodeId`. **`DELETE` cascades** through every subordinate object: all of the subject's links (each with its full link cascade — jobs, per-step processing logs, S3 pipeline artifacts + raw blobs, and Verbex index documents) and the subject's entire LiteGraph subgraph (nodes/edges matched on the `subjectId` tag; entity nodes are resolved per subject, so other subjects are unaffected). External-store cleanup is best-effort so an unavailable subordinate service never blocks removal. When `graphRootNodeId` is omitted on create it is derived from `displayName` as a slug (lowercased, non-alphanumeric runs collapsed to single dashes) — e.g. `"The Bomb Squad"` → `the-bomb-squad`.
+
+## Content Links & Ingestion
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1.0/subjects/{subjectId}/links` | Submit a link `{ url, title?, embeddingEndpointId, completionEndpointId }` → creates the link and **enqueues an ingestion job**. `embeddingEndpointId` and `completionEndpointId` are **required** (Partio endpoint ids from `GET /v1.0/ingestion/endpoints`) |
+| POST | `/v1.0/subjects/{subjectId}/links/bulk` | Submit many links at once `{ urls: [string], embeddingEndpointId, completionEndpointId }` → `{ created, links: [...] }` (one link + job per URL) |
+| GET | `/v1.0/ingestion/endpoints` | Available model endpoints for ingestion → `{ embedding: [{ id, name, model, apiFormat, active }], completion: [...] }` (sourced from Partio) |
+| GET | `/v1.0/subjects/{subjectId}/links` | List a subject's links (with `status`, `lastIngestedUtc`, `lastError`). Paginated `EnumerationResult` |
+| GET | `/v1.0/links` / `GET /v1.0/links/{id}` | List / read links |
+| DELETE | `/v1.0/links/{id}` | Delete a link and **cascade** through everything it produced: ingestion jobs + per-step processing logs, pipeline document artifacts (source/atoms/chunks/vectors/subgraph + raw blobs), the search-index documents (Verbex), and the graph nodes/edges it asserted (LiteGraph). Shared entity nodes reused by other links are preserved. Returns 204; external-store cleanup is best-effort so an unavailable subordinate service never blocks removal of the link. |
+| GET | `/v1.0/links/{id}/log` | **Per-step ingestion log** for a link → `[{ job, events }]` (one entry per ingestion run, newest last). Each `event` is `{ stage, status, message, durationMs, createdUtc }`. |
+| GET | `/v1.0/links/{id}/source` | **Pipeline artifact** — the raw crawled source document in its original content type (may be HTML/PDF/binary). `404` if not present yet. |
+| GET | `/v1.0/links/{id}/atoms` | **Pipeline artifact** — DocumentAtom semantic cells as `application/json`. `404` if that stage hasn't run yet. |
+| GET | `/v1.0/links/{id}/chunks` | **Pipeline artifact** — Partio chunks as `application/json`. `404` if that stage hasn't run yet. |
+| GET | `/v1.0/links/{id}/vectors` | **Pipeline artifact** — Partio embeddings as `application/json`. `404` if that stage hasn't run yet. |
+| GET | `/v1.0/links/{id}/subgraph` | **Pipeline artifact** — candidate subgraph as `application/json`. `404` if that stage hasn't run yet. |
+| GET | `/v1.0/jobs?status=` | List ingestion jobs (optional status filter). Paginated `EnumerationResult` |
+| GET | `/v1.0/jobs/{id}` | Job detail with per-stage events → `{ job, events }` |
+| GET | `/v1.0/jobs/{id}/log` | Live per-stage log for a job → `{ job, events }` (poll for a "follow logs" view) |
+| POST | `/v1.0/jobs/{id}/restart` | Requeue a failed job |
+| POST | `/v1.0/jobs/{id}/stop` | Stop (cancel) a queued or in-flight job → job set to `Cancelled`. 409 if already finished |
+| DELETE | `/v1.0/jobs/{id}` | Delete an ingestion job (queue/job entry) and **cascade** its per-step processing log, the graph nodes/edges it asserted (LiteGraph), its indexed documents (Verbex), and its raw blob. The link and its per-link S3 pipeline artifacts are left intact (they belong to the link). Returns 204; external-store cleanup is best-effort. |
+
+Ingestion stages, each written to the log with a descriptive message and duration: **TypeDetection → CellExtraction → Classification (ontology mapping) → GraphMerge (knowledge-graph insertion) → Embedding (chunking + embedding generation) → Indexing (search index)**. Unknown document types fail at TypeDetection. Each stage records a completion log entry with counts (e.g. cells extracted, chunks produced, embeddings generated, nodes/edges inserted, documents indexed); failures record the stage and error.
+
+## Model Runners (admin)
+
+`GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. This is a **pass-through proxy to Partio's model endpoints** — Pneuma stores no local model state. Each item is a Partio embedding or completion endpoint: `{ id, type (Embedding|Completion), name, model, endpoint, apiFormat, active }`. Create/update body `{ type (Embedding|Completion), name?, model, endpoint, apiFormat?, apiKey?, active }` (the `apiKey` is forwarded to Partio and never returned). Deletes resolve the endpoint type automatically.
+
+### Model endpoint health
+
+A background monitor probes each model endpoint's **base URL**, deduplicated so a host shared by several endpoints is checked once and the result is shared. Healthy/unhealthy transitions use a two-consecutive-check hysteresis; uptime, a rolling 24-hour history, latency, and the last HTTP status code are accumulated in memory.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/model-runners/health` | Health of **every** model endpoint (deduplicated by base URL). Array of `ModelEndpointHealth`. |
+| GET | `/v1.0/model-runners/{id}/health` | Health of a single model endpoint. `404` if the endpoint is not found. |
+
+`ModelEndpointHealth`: `{ endpointId, endpointName, type, baseUrl, isHealthy, statusCode?, latencyMs?, firstCheckUtc?, lastCheckUtc?, lastHealthyUtc?, lastUnhealthyUtc?, lastStateChangeUtc?, totalUptimeMs, totalDowntimeMs, uptimePercentage, consecutiveSuccesses, consecutiveFailures, lastError?, history: [{ timestampUtc, success }] }`. Before a base URL's first probe, timestamps are null (a "pending" state).
+
+## Prompts (admin)
+
+`GET|POST /v1.0/prompts` · `GET|PUT|DELETE /v1.0/prompts/{id}`. Keyed prompts: `ontology.classify`, `cell.summarize`, `user.answer`.
+
+## Settings (admin)
+
+Server configuration, restricted to the **system administrator** (`isAdmin`). Non-admins receive 403.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/settings` | Read the current settings. Secrets are masked as `********`. Returns `{ success, settings, meta }` |
+| PUT | `/v1.0/settings` | Overwrite the settings file with the supplied `AppSettings` body → `{ success, restartRequired, message, meta }` |
+
+`meta` describes the form: `sections[] { key, label, requiresRestart }` annotates which top-level sections need a server restart, `secretFields[]` lists the masked dot-paths, and `secretMask` is the sentinel. **Submitting a secret field unchanged (still equal to the mask) preserves the stored secret**; supplying a new value replaces it. Most sections require a restart to take effect; `cors` and `requestHistory` are applied live.
+
+## Knowledge Graph (user)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/graph/nodes/{id}` | Node contents |
+| GET | `/v1.0/graph/nodes/{id}/neighbors` | Adjacent nodes |
+| GET | `/v1.0/graph/nodes/{id}/edges` | Relationships (edges) for the node |
+
+## Search & Ask (user)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/search?q=<query>&max=20` | Full-text search (Verbex) resolved to a representative set of graph nodes → `{ query, results: [{ node, score, snippet }] }` |
+| GET | `/v1.0/subjects/{subjectId}/search?q=<query>&maxResults=20&skip=0` | Search a single subject's ingested documents (Verbex, filtered by `subjectId`). Returns a paginated `EnumerationResult` ranked by score; each hit is `{ documentId, score, snippet, linkId, linkUrl, linkTitle, nodeId }`, linked back to the originating content link. |
+| POST | `/v1.0/query` | Grounded answer. Body `{ question, maxResults? }` → `{ answer, sources: [node], grounded }` |

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>1701;1702;CS1591</NoWarn>
+    <Version>0.2.0</Version>
+    <Authors>Joel Christner</Authors>
+    <Description>Pneuma (Pneuma - information brought to life) core library: models, data layer, security, graph, and ingestion.</Description>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.24" />
+    <PackageReference Include="Blobject.Core" Version="5.0.19" />
+    <PackageReference Include="Caching" Version="5.0.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <!-- Pin patched native SQLite to clear NU1903 (GHSA-2m69-gcr7-jv3q) from the transitive. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="PolyPrompt" Version="2.2.0" />
+    <PackageReference Include="PrettyId" Version="2.0.1" />
+    <PackageReference Include="RestWrapper" Version="3.2.0" />
+    <PackageReference Include="SyslogLogging" Version="2.2.1" />
+    <PackageReference Include="Timestamps" Version="1.0.12" />
+  </ItemGroup>
+
+</Project>

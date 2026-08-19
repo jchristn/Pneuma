@@ -1,0 +1,87 @@
+{
+  "CreatedUtc": "2026-01-01T00:00:00.000Z",
+  "Rest": {
+    "Hostname": "127.0.0.1",
+    "Port": 8080,
+    "Ssl": false
+  },
+  "Cors": {
+    "AllowOrigins": "*",
+    "AllowMethods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+    "AllowHeaders": "Content-Type, Authorization, X-Api-Key, x-token, x-tenant-guid, x-email, x-password, x-access-key, x-secret-key",
+    "ExposeHeaders": "*",
+    "MaxAgeSeconds": 86400
+  },
+  "Logging": {
+    "ConsoleLogging": true,
+    "FileLogging": true,
+    "LogDirectory": "logs",
+    "LogFilename": "pneuma.log",
+    "MinimumSeverity": 1,
+    "LogHttpRequests": false
+  },
+  "Database": {
+    "Type": "Sqlite",
+    "Filename": "pneuma.db",
+    "Hostname": null,
+    "Port": 0,
+    "DatabaseName": null,
+    "Username": null,
+    "Password": null,
+    "Schema": null,
+    "MaxConnections": 32,
+    "CommandTimeoutSeconds": 30
+  },
+  "Auth": {
+    "Issuer": "pneuma",
+    "TokenSigningKey": "pneuma-development-signing-key-change-me-please-0001",
+    "TokenLifetimeMinutes": 60,
+    "AdminApiKeys": [ "pneumaadmin" ]
+  },
+  "RequestHistory": {
+    "Enabled": true,
+    "MaxRequestBodyBytes": 65536,
+    "MaxResponseBodyBytes": 65536,
+    "RetentionDays": 30,
+    "PruneIntervalMinutes": 60
+  },
+  "Ingestion": {
+    "MaxConcurrentTasks": 4,
+    "PollIntervalMs": 2000,
+    "MaxAttempts": 3,
+    "StageTimeoutSeconds": 300
+  },
+  "Integrations": {
+    "DocumentAtom": {
+      "Endpoint": "http://127.0.0.1:8000/"
+    },
+    "Partio": {
+      "Endpoint": "http://127.0.0.1:8400/",
+      "BearerToken": "partioadmin",
+      "EmbeddingEndpointId": null,
+      "CompletionEndpointId": null
+    },
+    "Verbex": {
+      "Endpoint": "http://127.0.0.1:8600/",
+      "BearerToken": "verbexadmin",
+      "TenantId": "default",
+      "IndexName": "pneuma"
+    },
+    "LiteGraph": {
+      "Endpoint": "http://127.0.0.1:8701/",
+      "BearerToken": null,
+      "TenantGuid": null,
+      "GraphGuid": null
+    },
+    "Blob": {
+      "Provider": "Disk",
+      "Directory": "blobs"
+    }
+  },
+  "Telemetry": {
+    "Enabled": true,
+    "ServiceName": "pneuma-server",
+    "OtlpEndpoint": "http://127.0.0.1:4318",
+    "PrometheusEnabled": true
+  }
+}

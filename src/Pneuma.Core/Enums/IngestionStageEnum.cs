@@ -1,0 +1,35 @@
+namespace Pneuma.Core.Enums
+{
+    using System.Text.Json.Serialization;
+
+    /// <summary>
+    /// The pipeline stage an ingestion job is on (or failed at).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum IngestionStageEnum
+    {
+        /// <summary>Not yet started.</summary>
+        Pending,
+        /// <summary>DocumentAtom type detection.</summary>
+        TypeDetection,
+        /// <summary>DocumentAtom semantic cell extraction.</summary>
+        CellExtraction,
+        /// <summary>PolyPrompt ontology classification into a candidate subgraph.</summary>
+        Classification,
+        /// <summary>
+        /// End of the categorization phase: a candidate plan (proposed subgraph) has been produced and,
+        /// under auto-approval, is committed by the hydration phase.
+        /// </summary>
+        Categorization,
+        /// <summary>Start of the hydration phase: the approved candidate plan is committed to the graph and index.</summary>
+        Hydration,
+        /// <summary>LiteGraph subgraph merge.</summary>
+        GraphMerge,
+        /// <summary>Partio summarize, chunk, and embed.</summary>
+        Embedding,
+        /// <summary>Verbex indexing.</summary>
+        Indexing,
+        /// <summary>Terminal stage after successful indexing.</summary>
+        Done
+    }
+}

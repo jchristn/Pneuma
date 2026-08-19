@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PackageId>Pneuma.Sdk</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Joel Christner</Authors>
+		<Description>C# SDK for the Pneuma REST API - subject knowledge-graph ingestion, search, and grounded query.</Description>
+		<PackageTags>pneuma;sdk;rest;knowledge-graph;ingestion;search;llm</PackageTags>
+		<RepositoryType>git</RepositoryType>
+		<Copyright>(c)2026 Joel Christner</Copyright>
+	</PropertyGroup>
+
+</Project>

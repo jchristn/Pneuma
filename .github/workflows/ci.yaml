@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore src/Pneuma.sln
+
+      - name: Build
+        run: dotnet build src/Pneuma.sln --configuration Release --no-restore
+
+      - name: Automated suite (console runner)
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 --no-build --configuration Release
+
+      - name: xUnit (per-case)
+        run: dotnet test src/Test.Xunit/Test.Xunit.csproj -f net8.0 --no-build --configuration Release --logger "trx;LogFileName=xunit.trx"
+
+      - name: NUnit (per-case)
+        run: dotnet test src/Test.Nunit/Test.Nunit.csproj -f net8.0 --no-build --configuration Release --logger "trx;LogFileName=nunit.trx"
+
+  postgresql-live:
+    name: Backend against live PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: pneuma
+          POSTGRES_PASSWORD: pneumapassword
+          POSTGRES_DB: pneuma
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pneuma"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The four-provider contract suite reads these to target a live provider (see TestDatabase).
+      PNEUMA_TEST_DB_TYPE: Postgresql
+      PNEUMA_TEST_DB_HOST: 127.0.0.1
+      PNEUMA_TEST_DB_PORT: "5432"
+      PNEUMA_TEST_DB_NAME: pneuma
+      PNEUMA_TEST_DB_USER: pneuma
+      PNEUMA_TEST_DB_PASSWORD: pneumapassword
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Automated suite against PostgreSQL
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 --configuration Release
+
+  dashboards:
+    name: Dashboard build & test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [admin-dashboard, subject-dashboard, user-dashboard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        working-directory: ${{ matrix.app }}
+        run: npm ci
+      - name: Lint (if configured)
+        working-directory: ${{ matrix.app }}
+        run: npm run --if-present lint
+      - name: Test (if configured)
+        working-directory: ${{ matrix.app }}
+        run: npm run --if-present test
+      - name: Build
+        working-directory: ${{ matrix.app }}
+        run: npm run build
+
+  file-size-guardrail:
+    name: File-size guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce source-file size thresholds
+        run: bash scripts/check-file-sizes.sh

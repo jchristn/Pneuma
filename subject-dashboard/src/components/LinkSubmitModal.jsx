@@ -1,0 +1,130 @@
+import { useTranslation } from 'react-i18next';
+import Modal from './Modal';
+
+function endpointLabel(ep) {
+  return ep.name || ep.model || ep.id;
+}
+
+function LinkSubmitModal({
+  isOpen,
+  onClose,
+  subjects,
+  embeddingEndpoints,
+  completionEndpoints,
+  hasEndpoints,
+  form,
+  setForm,
+  formError,
+  submitting,
+  onSubmit
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('links.submitTitle')} size="medium">
+      <form onSubmit={onSubmit}>
+        {formError && <div className="form-error">{formError}</div>}
+        <div className="form-group">
+          <label htmlFor="ln-subject">
+            {t('links.subject')} <span className="required-mark">*</span>
+          </label>
+          <select
+            id="ln-subject"
+            value={form.subjectId}
+            onChange={(e) => setForm({ ...form, subjectId: e.target.value })}
+            required
+          >
+            <option value="" disabled>
+              {t('links.selectSubject')}
+            </option>
+            {subjects.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.displayName || c.id}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="ln-url">
+            {t('links.url')} <span className="required-mark">*</span>
+          </label>
+          <input
+            id="ln-url"
+            type="url"
+            value={form.url}
+            onChange={(e) => setForm({ ...form, url: e.target.value })}
+            placeholder="https://example.com/my-content"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="ln-title">{t('links.linkTitle')}</label>
+          <input
+            id="ln-title"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Optional title"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="ln-embedding">
+            {t('links.embeddingModel')} <span className="required-mark">*</span>
+          </label>
+          <select
+            id="ln-embedding"
+            value={form.embeddingEndpointId}
+            onChange={(e) => setForm({ ...form, embeddingEndpointId: e.target.value })}
+            required
+            disabled={!hasEndpoints}
+          >
+            <option value="" disabled>
+              {t('links.selectModel')}
+            </option>
+            {embeddingEndpoints.map((ep) => (
+              <option key={ep.id} value={ep.id}>
+                {endpointLabel(ep)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="ln-completion">
+            {t('links.completionModel')} <span className="required-mark">*</span>
+          </label>
+          <select
+            id="ln-completion"
+            value={form.completionEndpointId}
+            onChange={(e) => setForm({ ...form, completionEndpointId: e.target.value })}
+            required
+            disabled={!hasEndpoints}
+          >
+            <option value="" disabled>
+              {t('links.selectModel')}
+            </option>
+            {completionEndpoints.map((ep) => (
+              <option key={ep.id} value={ep.id}>
+                {endpointLabel(ep)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!hasEndpoints && <div className="form-error">{t('links.noEndpoints')}</div>}
+        <p className="field-hint">{t('links.submitHint')}</p>
+        <div className="form-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
+            {t('common.cancel')}
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting || !hasEndpoints || !form.embeddingEndpointId || !form.completionEndpointId}
+          >
+            {submitting ? t('common.loading') : t('common.submit')}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export default LinkSubmitModal;

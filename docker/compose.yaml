@@ -1,0 +1,304 @@
+services:
+
+  # ------------------------------------------------------------------
+  # Pneuma control-plane database
+  # ------------------------------------------------------------------
+  pneuma-postgres:
+    container_name: 'pneuma-postgres'
+    image: 'postgres:17'
+    ports:
+      - '15432:5432'
+    environment:
+      POSTGRES_DB: 'pneuma'
+      POSTGRES_USER: 'pneuma'
+      POSTGRES_PASSWORD: 'pneuma'
+    volumes:
+      - pneuma-postgres-data:/var/lib/postgresql/data
+      # Creates the per-service databases (less3, litegraph, partio, verbex) on first init.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pneuma -d pneuma']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------------
+  # Pneuma backend server
+  # ------------------------------------------------------------------
+  pneuma-server:
+    container_name: 'pneuma-server'
+    build:
+      context: ..
+      dockerfile: docker/server/Dockerfile
+    ports:
+      - '8080:8080'
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+      litegraph:
+        condition: service_started
+      documentatom:
+        condition: service_started
+      partio-server:
+        condition: service_started
+      verbex-server:
+        condition: service_started
+      less3:
+        condition: service_started
+    environment:
+      PNEUMA_OLLAMA_BASE_URL: 'http://ollama:11434'
+    volumes:
+      - ./pneuma.json:/app/config/pneuma.json
+      - ./logs/pneuma:/app/logs
+      - ./blobs:/app/blobs
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:8080/v1.0/api/health || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------------
+  # Pneuma dashboards
+  # ------------------------------------------------------------------
+  admin-dashboard:
+    container_name: 'pneuma-admin-dashboard'
+    build:
+      context: ../admin-dashboard
+    ports:
+      - '3010:80'
+    depends_on:
+      - pneuma-server
+
+  subject-dashboard:
+    container_name: 'pneuma-subject-dashboard'
+    build:
+      context: ../subject-dashboard
+    ports:
+      - '3011:80'
+    depends_on:
+      - pneuma-server
+
+  user-dashboard:
+    container_name: 'pneuma-user-dashboard'
+    build:
+      context: ../user-dashboard
+    ports:
+      - '3012:80'
+    depends_on:
+      - pneuma-server
+
+  # ------------------------------------------------------------------
+  # Knowledge graph: LiteGraph + UI
+  # ------------------------------------------------------------------
+  litegraph:
+    container_name: 'litegraph'
+    image: 'jchristn77/litegraph:v7.0.0'
+    ports:
+      - '8701:8701'
+    volumes:
+      - litegraph-data:/app
+      # Override the baked-in settings so the server binds all interfaces (not container loopback).
+      - ./litegraph/litegraph.json:/app/litegraph.json
+    environment:
+      # A mounted settings file suppresses LiteGraph's first-boot seeding, so it never creates the
+      # default tenant/user/credential and the UI login (default@user.com / password) can't work.
+      # Force idempotent default-record creation so the login user always exists.
+      LITEGRAPH_CREATE_DEFAULT_RECORDS: 'true'
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+
+  litegraph-ui:
+    container_name: 'litegraph-ui'
+    image: 'jchristn77/litegraph-ui:v7.0.0'
+    ports:
+      - '3001:3000'
+    environment:
+      # Browser-reachable LiteGraph server URL for the dashboard login (host-published port).
+      LITEGRAPH_SERVER: 'http://localhost:8701'
+      NEXT_PUBLIC_LITEGRAPH_SERVER_URL: 'http://localhost:8701'
+    depends_on:
+      - litegraph
+
+  # ------------------------------------------------------------------
+  # Object storage: Less3 (S3-compatible) + UI
+  # ------------------------------------------------------------------
+  less3:
+    container_name: 'less3'
+    image: 'jchristn77/less3:v4.0.0'
+    ports:
+      - '8100:8000'
+    volumes:
+      - ./less3/system.json:/app/system.json
+      - less3-data:/less3
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+
+  less3-ui:
+    container_name: 'less3-ui'
+    image: 'jchristn77/less3-ui:v4.0.0'
+    ports:
+      - '3003:3000'
+    environment:
+      # Browser-reachable Less3 server URL (host-published port 8100 -> container 8000).
+      LESS3_SERVER_URL: 'http://localhost:8100'
+    depends_on:
+      - less3
+
+  # ------------------------------------------------------------------
+  # Type detection + cell extraction: DocumentAtom + UI
+  # ------------------------------------------------------------------
+  documentatom:
+    container_name: 'documentatom'
+    image: 'jchristn77/documentatom:v3.0.0'
+    ports:
+      - '8000:8000'
+    volumes:
+      - documentatom-data:/app
+      # Override the baked-in settings so the server binds all interfaces (not container loopback).
+      - ./documentatom/documentatom.json:/app/documentatom.json
+
+  documentatom-ui:
+    container_name: 'documentatom-ui'
+    image: 'jchristn77/documentatom-ui:v3.0.0'
+    ports:
+      - '3002:3000'
+    environment:
+      # Rendered into the browser as the API base URL, so it must be the host-published port
+      # (documentatom is mapped to localhost:8000), not the internal container hostname.
+      DOCUMENTATOM_SERVER_URL: 'http://localhost:8000'
+    depends_on:
+      - documentatom
+
+  # ------------------------------------------------------------------
+  # Local model runner (offline default for classification + embeddings)
+  # ------------------------------------------------------------------
+  ollama:
+    container_name: 'pneuma-ollama'
+    image: 'ollama/ollama:0.31.2'
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-data:/root/.ollama
+
+  # ------------------------------------------------------------------
+  # Chunking + embedding + summarization: Partio + dashboard
+  # ------------------------------------------------------------------
+  partio-server:
+    container_name: 'partio-server'
+    # Partio publishes only :latest; pinned by digest for reproducibility.
+    image: 'jchristn77/partio-server:latest@sha256:bbea59eb7405b0543d18a66916ff0d674a3033797f2ac74ebe7bd1b7617c1d53'
+    ports:
+      - '8400:8400'
+    depends_on:
+      ollama:
+        condition: service_started
+      pneuma-postgres:
+        condition: service_healthy
+    volumes:
+      - partio-data:/app
+      # Override the baked-in settings so the server binds all interfaces (not container loopback).
+      - ./partio/partio.json:/app/partio.json
+
+  partio-dashboard:
+    container_name: 'partio-dashboard'
+    # Partio publishes only :latest; pinned by digest for reproducibility.
+    image: 'jchristn77/partio-dashboard:latest@sha256:fdd19bb1101eb5618470bcd2cf78e2bb2579bc17ba9a3313a030158b7326c108'
+    ports:
+      - '8401:8401'
+    environment:
+      # Browser-reachable Partio server URL (host-published port).
+      PARTIO_SERVER_URL: 'http://localhost:8400'
+    depends_on:
+      - partio-server
+
+  # ------------------------------------------------------------------
+  # Inverted index / search: Verbex + dashboard
+  # ------------------------------------------------------------------
+  verbex-server:
+    container_name: 'verbex-server'
+    image: 'jchristn77/verbex-server:v0.1.0'
+    ports:
+      - '8600:8080'
+    volumes:
+      - verbex-data:/app
+      # Override the baked-in settings so the server binds all interfaces (not container loopback).
+      - ./verbex/verbex.json:/app/verbex.json
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+
+  verbex-dashboard:
+    container_name: 'verbex-dashboard'
+    image: 'jchristn77/verbex-dashboard:v0.1.0'
+    ports:
+      - '8601:8200'
+    environment:
+      # Rendered into the browser as the API base URL, so it must be the host-published port
+      # (verbex-server is mapped to localhost:8600), not the internal container hostname.
+      VERBEX_SERVER_URL: 'http://localhost:8600'
+      VERBEX_API_KEY: 'verbexadmin'
+    depends_on:
+      - verbex-server
+
+  # ------------------------------------------------------------------
+  # Observability: Prometheus + Grafana + Tempo
+  # ------------------------------------------------------------------
+  prometheus:
+    container_name: 'pneuma-prometheus'
+    image: 'prom/prometheus:v3.5.4'
+    ports:
+      - '9090:9090'
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - pneuma-prometheus-data:/prometheus
+    depends_on:
+      - pneuma-server
+
+  tempo:
+    container_name: 'pneuma-tempo'
+    # Pinned: 'latest' currently resolves to a v3.0.0 dev build whose config parser rejects the
+    # standard ingester/compactor sections. 2.6.1 is the last known-good stable release for this config.
+    image: 'grafana/tempo:2.6.1'
+    command: ['-config.file=/etc/tempo.yaml']
+    ports:
+      - '3200:3200'
+      - '4317:4317'
+      - '4318:4318'
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - pneuma-tempo-data:/var/tempo
+
+  grafana:
+    container_name: 'pneuma-grafana'
+    image: 'grafana/grafana-oss:13.0.2'
+    ports:
+      - '3000:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: 'admin'
+      GF_SECURITY_ADMIN_PASSWORD: 'admin'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - pneuma-grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../assets/grafana:/var/lib/grafana/dashboards/pneuma:ro
+    depends_on:
+      - prometheus
+      - tempo
+
+volumes:
+  pneuma-postgres-data:
+  litegraph-data:
+  less3-data:
+  documentatom-data:
+  partio-data:
+  verbex-data:
+  ollama-data:
+  pneuma-prometheus-data:
+  pneuma-tempo-data:
+  pneuma-grafana-data:

@@ -1,0 +1,90 @@
+{
+  "Rest": {
+    "Hostname": "*",
+    "Port": 8400,
+    "Ssl": false
+  },
+  "Database": {
+    "Type": "Postgresql",
+    "Hostname": "pneuma-postgres",
+    "Port": 5432,
+    "DatabaseName": "partio",
+    "Username": "pneuma",
+    "Password": "pneuma",
+    "RequireEncryption": false,
+    "LogQueries": false
+  },
+  "Logging": {
+    "SyslogServers": [],
+    "ConsoleLogging": true,
+    "EnableColors": false,
+    "LogDirectory": "./logs/",
+    "LogFilename": "partio.log",
+    "FileLogging": true,
+    "IncludeDateInFilename": true,
+    "MinimumSeverity": 0
+  },
+  "Debug": {
+    "Authentication": false,
+    "Exceptions": true,
+    "Requests": false,
+    "DatabaseQueries": false
+  },
+  "Cors": {
+    "Enabled": true,
+    "AllowedOrigins": "*",
+    "AllowedMethods": "GET, POST, PUT, DELETE, HEAD, OPTIONS",
+    "AllowedHeaders": "Content-Type, Authorization, X-Requested-With",
+    "ExposedHeaders": "",
+    "MaxAgeSeconds": 86400,
+    "AllowCredentials": false
+  },
+  "RequestHistory": {
+    "Enabled": true,
+    "Directory": "./request-history/",
+    "RetentionDays": 7,
+    "CleanupIntervalMinutes": 60,
+    "MaxRequestBodyBytes": 65536,
+    "MaxResponseBodyBytes": 65536
+  },
+  "TokenizationDefaults": {
+    "GlobalFallback": {
+      "TokenizerKind": "Cl100kBase",
+      "TokenizerModel": "cl100k_base",
+      "MaxInputTokens": 8192,
+      "ReservedInputTokens": 0,
+      "BatchLimitMode": "PerInput",
+      "AutoDetect": true
+    },
+    "OpenAI": {
+      "TokenizerKind": "Cl100kBase",
+      "TokenizerModel": "cl100k_base",
+      "MaxInputTokens": 8192,
+      "ReservedInputTokens": 0,
+      "BatchLimitMode": "PerInput",
+      "AutoDetect": true
+    },
+    "vLLM": {
+      "TokenizerKind": "Cl100kBase",
+      "TokenizerModel": "cl100k_base",
+      "MaxInputTokens": 8192,
+      "ReservedInputTokens": 0,
+      "BatchLimitMode": "PerInput",
+      "AutoDetect": true
+    },
+    "Gemini": {
+      "TokenizerKind": "Cl100kBase",
+      "TokenizerModel": "cl100k_base",
+      "MaxInputTokens": 2048,
+      "ReservedInputTokens": 0,
+      "BatchLimitMode": "PerInput",
+      "AutoDetect": true
+    },
+    "CapabilityCacheTtlSeconds": 300
+  },
+  "AdminApiKeys": [
+    "partioadmin"
+  ],
+  "DefaultEmbeddingEndpoints": [],
+  "DefaultInferenceEndpoints": []
+}
