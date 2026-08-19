@@ -124,7 +124,7 @@ Ingestion stages, each written to the log with a descriptive message and duratio
 
 ## Model Runners (admin)
 
-`GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. This is a **pass-through proxy to Partio's model endpoints** — Pneuma stores no local model state. Each item is a Partio embedding or completion endpoint: `{ id, type (Embedding|Completion), name, model, endpoint, apiFormat, active }`. Create/update body `{ type (Embedding|Completion), name?, model, endpoint, apiFormat?, apiKey?, active }` (the `apiKey` is forwarded to Partio and never returned). Deletes resolve the endpoint type automatically.
+`GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. This is a **pass-through proxy to Partio's model endpoints** — Pneuma stores no local model state. Each item is a Partio embedding or completion endpoint: `{ id, type (Embedding|Completion), name, model, endpoint, apiFormat, active, maxConcurrentRequests }`. Create/update body `{ type (Embedding|Completion), name?, model, endpoint, apiFormat?, apiKey?, active, maxConcurrentRequests? }` (the `apiKey` is forwarded to Partio and never returned; `maxConcurrentRequests` caps concurrent connections Partio opens to the endpoint — minimum 1, default 2). Deletes resolve the endpoint type automatically.
 
 ### Model endpoint health
 

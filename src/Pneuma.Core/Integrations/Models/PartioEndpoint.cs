@@ -27,5 +27,11 @@ namespace Pneuma.Core.Integrations.Models
 
         /// <summary>Whether the endpoint is active.</summary>
         public bool Active { get; set; } = false;
+
+        /// <summary>
+        /// Maximum number of concurrent requests Partio will send to this endpoint. Paired with Partio's
+        /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 2.
+        /// </summary>
+        public int MaxConcurrentRequests { get; set; } = 2;
     }
 }

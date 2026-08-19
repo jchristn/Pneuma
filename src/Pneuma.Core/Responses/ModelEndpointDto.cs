@@ -31,6 +31,9 @@ namespace Pneuma.Core.Responses
         /// <summary>Whether the endpoint is active.</summary>
         public bool Active { get; set; } = false;
 
+        /// <summary>Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1. Default 2.</summary>
+        public int MaxConcurrentRequests { get; set; } = 2;
+
         /// <summary>UTC creation timestamp (synthetic; endpoints have no Pneuma-side creation time).</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

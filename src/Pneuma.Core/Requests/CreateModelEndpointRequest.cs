@@ -28,6 +28,12 @@ namespace Pneuma.Core.Requests
         /// <summary>Whether the endpoint is active.</summary>
         public bool Active { get; set; } = true;
 
+        /// <summary>
+        /// Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1 (Partio clamps).
+        /// Default 2.
+        /// </summary>
+        public int MaxConcurrentRequests { get; set; } = 2;
+
         #endregion
     }
 }

@@ -296,7 +296,8 @@ namespace Pneuma.Core.Integrations.Implementations
                         Model = GetStringProperty(item, "Model", "model"),
                         ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
                         Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
-                        Active = active
+                        Active = active,
+                        MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests")
                     });
                 }
             }
@@ -315,7 +316,8 @@ namespace Pneuma.Core.Integrations.Implementations
                 Model = GetStringProperty(item, "Model", "model"),
                 ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
                 Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
-                Active = active
+                Active = active,
+                MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests")
             };
         }
 
@@ -346,7 +348,8 @@ namespace Pneuma.Core.Integrations.Implementations
                 Endpoint = endpoint.Endpoint,
                 ApiFormat = endpoint.ApiFormat,
                 ApiKey = endpoint.ApiKey,
-                Active = endpoint.Active
+                Active = endpoint.Active,
+                MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests)
             };
         }
 
@@ -520,6 +523,15 @@ namespace Pneuma.Core.Integrations.Implementations
                 return value.GetString();
             }
             return null;
+        }
+
+        private static int GetIntProperty(JsonElement element, int fallback, params string[] names)
+        {
+            if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed))
+            {
+                return parsed;
+            }
+            return fallback;
         }
 
         #endregion

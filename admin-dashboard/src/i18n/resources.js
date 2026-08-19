@@ -329,6 +329,7 @@ const en = {
       model: 'Model',
       endpoint: 'Endpoint URL',
       apiFormat: 'API Format',
+      maxConcurrency: 'Max Concurrency',
       health: 'Health',
       healthPending: 'Pending',
       healthDetailHint: 'Health status and recent history (click for details)'

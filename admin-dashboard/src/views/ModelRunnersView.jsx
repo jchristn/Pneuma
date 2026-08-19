@@ -85,6 +85,7 @@ function ModelRunnersView() {
     { key: 'apiFormat', label: t('modelRunners.apiFormat'), render: (r) => r.apiFormat || '—' },
     { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth },
     { key: 'active', label: 'Active', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
+    { key: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), render: (r) => (r.maxConcurrentRequests ?? 2) },
     { key: 'id', label: 'ID', render: (r) => <CopyableId value={r.id} truncateLen={12} /> }
   ];
 
@@ -95,6 +96,7 @@ function ModelRunnersView() {
     { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'http://ollama:11434' },
     { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })) },
     { name: 'apiKey', label: 'API Key (write-only)', type: 'password' },
+    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2' },
     { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false }
   ];
 
