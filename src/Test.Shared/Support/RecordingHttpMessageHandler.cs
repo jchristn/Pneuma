@@ -58,12 +58,14 @@ namespace Test.Shared.Support
         /// <param name="request">Request message.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The canned response.</returns>
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.RequestUri != null) _RequestUris.Add(request.RequestUri.AbsoluteUri);
-            _RequestBodies.Add(request.Content != null ? request.Content.ReadAsStringAsync().GetAwaiter().GetResult() : String.Empty);
-            HttpResponseMessage response = new HttpResponseMessage(_StatusCode) { Content = new StringContent(_ResponseBody) };
-            return Task.FromResult(response);
+            string body = request.Content != null
+                ? await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)
+                : String.Empty;
+            _RequestBodies.Add(body);
+            return new HttpResponseMessage(_StatusCode) { Content = new StringContent(_ResponseBody) };
         }
 
         #endregion
