@@ -1,0 +1,35 @@
+/* First-run setup wizard */
+.wiz-steps {
+  display: flex; gap: 0.5rem; list-style: none; margin: 0 0 1rem; padding: 0;
+  flex-wrap: wrap;
+}
+.wiz-step {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.3rem 0.7rem; border: 1px solid var(--color-border); border-radius: 999px;
+  font-size: 0.8rem; color: var(--color-text-secondary); background: var(--color-surface-alt);
+}
+.wiz-step.is-active { border-color: var(--color-primary); color: var(--color-primary); background: rgba(99, 102, 241, 0.1); }
+.wiz-step.is-done { color: #059669; border-color: #059669; }
+[data-theme='dark'] .wiz-step.is-done { color: #34d399; border-color: #34d399; }
+.wiz-step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 999px; border: 1px solid currentColor;
+  font-size: 0.68rem; font-weight: 700;
+}
+.wiz-step-title { white-space: nowrap; }
+
+.wiz-panel { display: flex; flex-direction: column; gap: 1rem; }
+.wiz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem 1rem; }
+.wiz-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.wiz-field-label { font-size: 0.78rem; font-weight: 600; color: var(--color-text-secondary); cursor: help; }
+.wiz-field input, .wiz-field select, .wiz-field textarea {
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface);
+  color: var(--color-text); padding: 0.4rem 0.55rem; font: inherit; font-size: 0.85rem; width: 100%;
+}
+.wiz-field input:focus, .wiz-field select:focus, .wiz-field textarea:focus { outline: none; border-color: var(--color-primary); }
+.wiz-field textarea { resize: vertical; }
+
+.wiz-endpoint { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.85rem; background: var(--color-surface-alt); }
+.wiz-endpoint-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.6rem; cursor: help; }
+
+.wiz-ingest-note { margin: 0 0 0.85rem; color: var(--color-text-secondary); font-size: 0.88rem; cursor: help; }

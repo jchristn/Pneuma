@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { SECTION_META } from '../config/nav';
+import { useAuth } from '../context/AuthContext';
+import { normalizeList } from '../utils/api';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import SetupWizard from './SetupWizard';
 
 import HomeView from '../views/HomeView';
 import RequestHistoryView from '../views/RequestHistoryView';
@@ -54,9 +57,28 @@ function Dashboard() {
   const { section = 'home' } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { apiClient } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   const ViewComponent = VIEWS[section] || NotFound;
+
+  // First run: with no subjects and no model endpoints yet, offer the guided setup wizard (once, unless
+  // the operator dismisses it). A reliable local check on subjects anchors the decision.
+  useEffect(() => {
+    let done = false;
+    try { if (localStorage.getItem('pneuma.setupComplete') === '1') return undefined; } catch { /* ignore */ }
+    Promise.allSettled([
+      apiClient.list('subjects', { maxResults: 1 }),
+      apiClient.list('model-runners')
+    ]).then((results) => {
+      if (done) return;
+      const noSubjects = results[0].status === 'fulfilled' && normalizeList(results[0].value).items.length === 0;
+      const noRunners = results[1].status !== 'fulfilled' || normalizeList(results[1].value).items.length === 0;
+      if (noSubjects && noRunners) setShowWizard(true);
+    });
+    return () => { done = true; };
+  }, [apiClient]);
 
   useEffect(() => {
     const meta = SECTION_META[section];
@@ -75,6 +97,7 @@ function Dashboard() {
       <main className="workspace">
         <ViewComponent />
       </main>
+      {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }
