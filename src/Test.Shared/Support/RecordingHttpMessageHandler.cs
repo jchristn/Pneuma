@@ -19,6 +19,7 @@ namespace Test.Shared.Support
         private readonly string _ResponseBody;
         private readonly HttpStatusCode _StatusCode;
         private readonly List<string> _RequestUris = new List<string>();
+        private readonly List<string> _RequestBodies = new List<string>();
 
         #endregion
 
@@ -29,6 +30,12 @@ namespace Test.Shared.Support
 
         /// <summary>The most recent request URI, or null when none has been seen.</summary>
         public string? LastRequestUri { get { return _RequestUris.Count > 0 ? _RequestUris[_RequestUris.Count - 1] : null; } }
+
+        /// <summary>The request bodies seen by the handler, in order (empty string when a request had no body).</summary>
+        public IReadOnlyList<string> RequestBodies { get { return _RequestBodies; } }
+
+        /// <summary>The most recent request body, or null when none has been seen.</summary>
+        public string? LastRequestBody { get { return _RequestBodies.Count > 0 ? _RequestBodies[_RequestBodies.Count - 1] : null; } }
 
         #endregion
 
@@ -54,6 +61,7 @@ namespace Test.Shared.Support
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.RequestUri != null) _RequestUris.Add(request.RequestUri.AbsoluteUri);
+            _RequestBodies.Add(request.Content != null ? request.Content.ReadAsStringAsync().GetAwaiter().GetResult() : String.Empty);
             HttpResponseMessage response = new HttpResponseMessage(_StatusCode) { Content = new StringContent(_ResponseBody) };
             return Task.FromResult(response);
         }

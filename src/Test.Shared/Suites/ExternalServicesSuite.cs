@@ -196,6 +196,36 @@ namespace Test.Shared.Suites
                             }
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "LiteGraph_ClampsOverlongNodeFields", "Node creates clamp Name/labels to LiteGraph's column limits (128/256)",
+                        executeAsync: async ct =>
+                        {
+                            // LiteGraph's nodes.name is varchar(128) and labels.label is varchar(256); an over-long
+                            // LLM-produced entity name/type must be clamped by the client, not rejected by the store.
+                            string longName = new string('n', 300);
+                            string longLabel = new string('l', 400);
+                            RecordingHttpMessageHandler handler = new RecordingHttpMessageHandler("{\"GUID\":\"11111111-1111-1111-1111-111111111111\"}");
+
+                            using (LiteGraphClient client = new LiteGraphClient("http://127.0.0.1:8701", null, "00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000", retryCount: 0, handler: handler))
+                            {
+                                GraphNode node = new GraphNode { NodeType = longLabel, Name = longName, Content = "content", Labels = new List<string> { longLabel } };
+                                node.Tags["subjectId"] = "sub_1";
+                                await client.CreateNodeAsync(node, ct);
+
+                                string body = handler.LastRequestBody ?? String.Empty;
+                                using (System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
+                                {
+                                    System.Text.Json.JsonElement root = doc.RootElement;
+                                    string sentName = root.GetProperty("Name").GetString() ?? String.Empty;
+                                    if (sentName.Length != 128) throw new Exception("Name must be clamped to 128, got " + sentName.Length);
+                                    foreach (System.Text.Json.JsonElement label in root.GetProperty("Labels").EnumerateArray())
+                                    {
+                                        int len = (label.GetString() ?? String.Empty).Length;
+                                        if (len > 256) throw new Exception("Label must be clamped to 256, got " + len);
+                                    }
+                                }
+                            }
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "RecallDbVectors_Live_StoreAndSearch", "RecallDB-backed vectors round-trip against a live RecallDB (gated on PNEUMA_LIVE_STACK=1)",
                         executeAsync: async ct =>
                         {

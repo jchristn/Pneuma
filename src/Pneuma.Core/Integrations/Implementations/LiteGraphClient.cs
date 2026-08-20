@@ -41,6 +41,14 @@ namespace Pneuma.Core.Integrations.Implementations
         // flags are set. Appended to node GET/neighbor reads so nodes round-trip their full structure.
         private const string _NodeReadQuery = "?incldata=true&inclsub=true";
 
+        // LiteGraph's Postgres/SQLite schema length-limits several columns we write. Node/edge Name is
+        // varchar(128); a label and a tag key are varchar(256). Data and tag VALUES are TEXT (unbounded), so
+        // full content and the canonical-name tag (used for entity resolution) are never truncated. We clamp
+        // on our side so an over-long LLM-produced entity name or relationship type can't fail a create.
+        private const int _MaxNameLength = 128;
+        private const int _MaxLabelLength = 256;
+        private const int _MaxTagKeyLength = 256;
+
         private readonly string _BaseUrl;
         private readonly string? _BearerToken;
         private readonly string _TenantGuid;
@@ -152,9 +160,9 @@ namespace Pneuma.Core.Integrations.Implementations
 
             object requestBody = new
             {
-                Name = node.Name,
-                Labels = node.Labels,
-                Tags = node.Tags,
+                Name = ClampField(node.Name, _MaxNameLength),
+                Labels = ClampLabels(node.Labels),
+                Tags = ClampTagKeys(node.Tags),
                 Data = new { content = node.Content, nodeType = node.NodeType }
             };
 
@@ -181,10 +189,10 @@ namespace Pneuma.Core.Integrations.Implementations
             {
                 From = edge.FromNodeId,
                 To = edge.ToNodeId,
-                Name = edge.EdgeType,
+                Name = ClampField(edge.EdgeType, _MaxNameLength),
                 Cost = 1,
-                Labels = new List<string> { edge.EdgeType },
-                Tags = edge.Tags
+                Labels = new List<string> { ClampField(edge.EdgeType, _MaxLabelLength) ?? String.Empty },
+                Tags = ClampTagKeys(edge.Tags)
             };
 
             string body = await SendAsync(HttpMethod.Put,
@@ -497,6 +505,43 @@ namespace Pneuma.Core.Integrations.Implementations
                 () => BuildRequest(method, url, json),
                 isWrite,
                 token).ConfigureAwait(false);
+        }
+
+        /// <summary>Clamp a value to a LiteGraph column length; returns null unchanged and never adds a suffix.</summary>
+        private static string? ClampField(string? value, int maxLength)
+        {
+            if (String.IsNullOrEmpty(value) || value!.Length <= maxLength) return value;
+            return value.Substring(0, maxLength);
+        }
+
+        /// <summary>Clamp each label to the labels column length, preserving order and dropping nulls.</summary>
+        private static List<string> ClampLabels(List<string>? labels)
+        {
+            List<string> result = new List<string>();
+            if (labels == null) return result;
+            foreach (string label in labels)
+            {
+                if (label == null) continue;
+                result.Add(ClampField(label, _MaxLabelLength) ?? String.Empty);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Clamp tag keys to the tags column length; values are left intact (LiteGraph stores tag values as
+        /// TEXT), so canonical-name and other long metadata used for entity resolution are never truncated.
+        /// </summary>
+        private static Dictionary<string, string> ClampTagKeys(Dictionary<string, string>? tags)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (tags == null) return result;
+            foreach (KeyValuePair<string, string> tag in tags)
+            {
+                string key = ClampField(tag.Key, _MaxTagKeyLength) ?? String.Empty;
+                if (String.IsNullOrEmpty(key)) continue;
+                result[key] = tag.Value;
+            }
+            return result;
         }
 
         private static GraphNode MapNode(JsonElement element)
