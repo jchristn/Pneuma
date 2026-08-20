@@ -123,10 +123,10 @@ function IngestionQueueView() {
     { key: 'updatedUtc', label: 'Updated', render: (r) => formatDateTime(r.updatedUtc || r.completedUtc) },
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => (
       <ActionMenu items={[
-        { key: 'view', label: t('common.view'), onClick: () => openDetail(job) },
-        { key: 'json', label: t('common.viewJson'), onClick: () => setModal({ type: 'json', item: job }) },
-        { key: 'restart', label: t('jobs.restart'), hidden: !isFailed(job), onClick: () => setModal({ type: 'restart', item: job }) },
-        { key: 'delete', label: t('jobs.delete'), danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
+        { key: 'view', label: t('common.view'), tip: 'Open this job’s details and its stage-by-stage progress.', onClick: () => openDetail(job) },
+        { key: 'json', label: t('common.viewJson'), tip: 'Inspect the raw job record returned by the API.', onClick: () => setModal({ type: 'json', item: job }) },
+        { key: 'restart', label: t('jobs.restart'), tip: 'Re-run this failed job from the beginning with the same settings.', hidden: !isFailed(job), onClick: () => setModal({ type: 'restart', item: job }) },
+        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
       ]} />
     ) }
   ];
@@ -136,8 +136,9 @@ function IngestionQueueView() {
       <PageHeader title={t('jobs.title')} subtitle={t('jobs.subtitle')} />
       <div className="filter-bar">
         <div className="field">
-          <label htmlFor="job-status">{t('jobs.status')}</label>
-          <select id="job-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <label htmlFor="job-status" className="has-tip" title="Filter the queue to jobs in a particular state (queued, processing, failed…). Choose all statuses to clear the filter.">{t('jobs.status')}</label>
+          <select id="job-status" value={status} onChange={(e) => setStatus(e.target.value)}
+            title="Filter the queue to jobs in a particular state (queued, processing, failed…). Choose all statuses to clear the filter.">
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || t('jobs.allStatuses')}</option>)}
           </select>
         </div>

@@ -23,9 +23,10 @@ const SYSTEMS = [
   { name: 'Less3 (S3)', url: 'http://localhost:3003', cred: 'admin key: less3admin' }
 ];
 
-function Kpi({ label, value, tone = '', onClick }) {
+function Kpi({ label, value, tone = '', onClick, tip }) {
   return (
-    <button type="button" className={`kpi-tile ${onClick ? 'clickable' : ''}`} onClick={onClick} style={!onClick ? { cursor: 'default' } : undefined}>
+    <button type="button" className={`kpi-tile ${onClick ? 'clickable' : ''}`} onClick={onClick} style={!onClick ? { cursor: 'default' } : undefined}
+      title={tip || (onClick ? `${label} — click to open.` : label)}>
       <span className="kpi-label">{label}</span>
       <span className={`kpi-value ${tone}`}>{value === null ? '—' : formatNumber(value)}</span>
     </button>
@@ -97,12 +98,12 @@ function HomeView() {
       <PageHeader title={t('home.title')} subtitle={t('home.subtitle')} />
 
       <div className="kpi-grid">
-        <Kpi label={t('home.kpiTenants')} value={counts.tenants} onClick={() => navigate('/dashboard/tenants')} />
-        <Kpi label={t('home.kpiUsers')} value={counts.users} onClick={() => navigate('/dashboard/users')} />
-        <Kpi label={t('home.kpiSubjects')} value={counts.subjects} onClick={() => navigate('/dashboard/subjects')} />
-        <Kpi label={t('home.kpiLinks')} value={counts.links} onClick={() => navigate('/dashboard/links')} />
-        <Kpi label={t('home.kpiJobsQueued')} value={counts.jobsQueued} onClick={() => navigate('/dashboard/jobs')} />
-        <Kpi label={t('home.kpiJobsFailed')} value={counts.jobsFailed} tone="danger" onClick={() => navigate('/dashboard/jobs')} />
+        <Kpi label={t('home.kpiTenants')} value={counts.tenants} onClick={() => navigate('/dashboard/tenants')} tip="Total tenants configured. Click to manage them." />
+        <Kpi label={t('home.kpiUsers')} value={counts.users} onClick={() => navigate('/dashboard/users')} tip="Total user accounts across tenants. Click to manage them." />
+        <Kpi label={t('home.kpiSubjects')} value={counts.subjects} onClick={() => navigate('/dashboard/subjects')} tip="Subjects (knowledge archives) defined. Click to manage them." />
+        <Kpi label={t('home.kpiLinks')} value={counts.links} onClick={() => navigate('/dashboard/links')} tip="Source links submitted for ingestion. Click to view them." />
+        <Kpi label={t('home.kpiJobsQueued')} value={counts.jobsQueued} onClick={() => navigate('/dashboard/jobs')} tip="Ingestion jobs waiting or in progress. Click to open the queue." />
+        <Kpi label={t('home.kpiJobsFailed')} value={counts.jobsFailed} tone="danger" onClick={() => navigate('/dashboard/jobs')} tip="Ingestion jobs that failed and may need attention. Click to review them." />
       </div>
 
       {error && <ErrorBanner message={error} onRetry={loadSummary} onDismiss={() => setError(null)} />}
@@ -113,12 +114,13 @@ function HomeView() {
           <div className="chart-controls">
             <div className="segmented">
               {Object.keys(RANGES).map((id) => (
-                <button key={id} type="button" className={rangeId === id ? 'active' : ''} onClick={() => setRangeId(id)}>
+                <button key={id} type="button" className={rangeId === id ? 'active' : ''} onClick={() => setRangeId(id)}
+                  title={`Show request activity over the last ${t(RANGES[id].labelKey).toLowerCase()}.`}>
                   {t(RANGES[id].labelKey)}
                 </button>
               ))}
             </div>
-            <button type="button" className="icon-button" onClick={loadSummary} title={t('common.refresh')} aria-label={t('common.refresh')} disabled={chartLoading}>
+            <button type="button" className="icon-button" onClick={loadSummary} title="Reload the activity chart with the latest data." aria-label={t('common.refresh')} disabled={chartLoading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={chartLoading ? { animation: 'spin 1s linear infinite' } : undefined}>
                 <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -137,11 +139,11 @@ function HomeView() {
       <div className="section">
         <h2>{t('home.quickLinks')}</h2>
         <div className="quick-links">
-          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/subjects')}><Icon name="users" /> {t('nav.subjects')}</button>
-          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/jobs')}><Icon name="queue" /> {t('nav.jobs')}</button>
-          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/model-runners')}><Icon name="cpu" /> {t('nav.modelRunners')}</button>
-          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/explorer')}><Icon name="play" /> {t('nav.explorer')}</button>
-          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/requests')}><Icon name="chart" /> {t('nav.requests')}</button>
+          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/subjects')} title="Manage subjects — the archives your content is organized under."><Icon name="users" /> {t('nav.subjects')}</button>
+          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/jobs')} title="Open the ingestion queue to watch jobs process."><Icon name="queue" /> {t('nav.jobs')}</button>
+          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/model-runners')} title="Configure the embedding and completion model endpoints."><Icon name="cpu" /> {t('nav.modelRunners')}</button>
+          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/explorer')} title="Try API calls interactively in the OpenAPI explorer."><Icon name="play" /> {t('nav.explorer')}</button>
+          <button type="button" className="quick-link" onClick={() => navigate('/dashboard/requests')} title="Inspect captured API request history."><Icon name="chart" /> {t('nav.requests')}</button>
         </div>
       </div>
 
@@ -149,7 +151,8 @@ function HomeView() {
         <h2>{t('home.systems')}</h2>
         <div className="systems-grid">
           {SYSTEMS.map((sys) => (
-            <a key={sys.name} className="system-card" href={sys.url} target="_blank" rel="noopener noreferrer">
+            <a key={sys.name} className="system-card" href={sys.url} target="_blank" rel="noopener noreferrer"
+              title={`Open the ${sys.name} console at ${sys.url} in a new tab.`}>
               <span className="system-card-head">
                 <span className="system-name">{sys.name}</span>
                 <Icon name="link" />

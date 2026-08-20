@@ -69,9 +69,9 @@ function IngestionJobsView() {
     { key: 'updatedUtc', label: t('jobs.updated'), render: (r) => formatDateTime(r.lastUpdateUtc || r.updatedUtc || r.completedUtc) },
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => (
       <ActionMenu items={[
-        { key: 'follow', label: t('jobs.followLogs'), onClick: () => setModal({ type: 'follow', item: job }) },
-        { key: 'stop', label: t('jobs.stop'), hidden: !isStoppable(job), danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
-        { key: 'delete', label: t('jobs.delete'), danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
+        { key: 'follow', label: t('jobs.followLogs'), tip: 'Watch this job’s stage log live, auto-refreshing until it finishes.', onClick: () => setModal({ type: 'follow', item: job }) },
+        { key: 'stop', label: t('jobs.stop'), tip: 'Cancel this in-progress job. Already-completed stages are kept.', hidden: !isStoppable(job), danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
+        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
       ]} />
     ) }
   ];
@@ -81,8 +81,9 @@ function IngestionJobsView() {
       <PageHeader title={t('jobs.jobsTitle')} subtitle={t('jobs.jobsSubtitle')} />
       <div className="filter-bar">
         <div className="field">
-          <label htmlFor="ingestion-job-status">{t('jobs.status')}</label>
-          <select id="ingestion-job-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <label htmlFor="ingestion-job-status" className="has-tip" title="Filter the full job history by state. Choose all statuses to clear the filter.">{t('jobs.status')}</label>
+          <select id="ingestion-job-status" value={status} onChange={(e) => setStatus(e.target.value)}
+            title="Filter the full job history by state. Choose all statuses to clear the filter.">
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || t('jobs.allStatuses')}</option>)}
           </select>
         </div>
