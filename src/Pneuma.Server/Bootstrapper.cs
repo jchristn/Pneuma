@@ -3,6 +3,7 @@ namespace Pneuma.Server
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
@@ -304,8 +305,34 @@ namespace Pneuma.Server
             }
 
             settings.SourceFilePath = path;
+
+            // Re-write the settings file so any newly-introduced fields are persisted with their defaults (and
+            // out-of-range values are normalized by the clamping setters that ran during deserialization). Done
+            // before env overrides so runtime-only overrides are never baked into the on-disk config.
+            PersistSettings(settings, path);
+
             ApplyEnvironmentOverrides(settings);
             return settings;
+        }
+
+        /// <summary>
+        /// Serialize the loaded settings back to their source file (best-effort). Adds fields introduced since
+        /// the file was written and normalizes clamped values. A read-only or unwritable config never fails
+        /// startup — the failure is reported to stderr since logging is not yet configured at this point.
+        /// </summary>
+        private static void PersistSettings(AppSettings settings, string path)
+        {
+            if (String.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                JsonSerializerOptions options = new JsonSerializerOptions(Json.Options) { WriteIndented = true };
+                string json = JsonSerializer.Serialize(settings, options);
+                File.WriteAllText(path, json);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("[Bootstrapper] could not re-write settings file '" + path + "': " + e.Message);
+            }
         }
 
         private static void ApplyEnvironmentOverrides(AppSettings settings)

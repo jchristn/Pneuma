@@ -51,7 +51,17 @@
     "MaxAttempts": 3,
     "StageTimeoutSeconds": 1800,
     "UseHeadlessBrowser": true,
-    "BrowserNavigationTimeoutMs": 60000
+    "BrowserNavigationTimeoutMs": 60000,
+    "StageConcurrency": {
+      "TypeDetection": 8,
+      "CellExtraction": 8,
+      "Classification": 4,
+      "GraphMerge": 8,
+      "Summarization": 4,
+      "Chunking": 8,
+      "Embedding": 4,
+      "Indexing": 8
+    }
   },
   "Integrations": {
     "DocumentAtom": {

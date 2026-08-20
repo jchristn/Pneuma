@@ -42,6 +42,7 @@ namespace Pneuma.Server.Services
         private readonly IngestionJournal _Journal;
         private readonly IngestionStages _Stages;
         private readonly int _StageTimeoutSeconds;
+        private readonly Dictionary<IngestionStageEnum, SemaphoreSlim> _StageGates;
 
         #endregion
 
@@ -89,6 +90,22 @@ namespace Pneuma.Server.Services
             _Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _Journal = new IngestionJournal(db, logging);
             _Stages = new IngestionStages(db, partio, graphFactory, vectors, artifacts, _Journal, logging);
+            _StageGates = BuildStageGates(settings.StageConcurrency);
+        }
+
+        private static Dictionary<IngestionStageEnum, SemaphoreSlim> BuildStageGates(IngestionStageConcurrencySettings c)
+        {
+            return new Dictionary<IngestionStageEnum, SemaphoreSlim>
+            {
+                { IngestionStageEnum.TypeDetection, new SemaphoreSlim(c.TypeDetection, c.TypeDetection) },
+                { IngestionStageEnum.CellExtraction, new SemaphoreSlim(c.CellExtraction, c.CellExtraction) },
+                { IngestionStageEnum.Classification, new SemaphoreSlim(c.Classification, c.Classification) },
+                { IngestionStageEnum.GraphMerge, new SemaphoreSlim(c.GraphMerge, c.GraphMerge) },
+                { IngestionStageEnum.Summarization, new SemaphoreSlim(c.Summarization, c.Summarization) },
+                { IngestionStageEnum.Chunking, new SemaphoreSlim(c.Chunking, c.Chunking) },
+                { IngestionStageEnum.Embedding, new SemaphoreSlim(c.Embedding, c.Embedding) },
+                { IngestionStageEnum.Indexing, new SemaphoreSlim(c.Indexing, c.Indexing) }
+            };
         }
 
         #endregion
@@ -276,33 +293,45 @@ namespace Pneuma.Server.Services
             job.Stage = stage;
             await _Journal.UpdateJobAsync(job, token).ConfigureAwait(false);
 
-            using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage, SpanKindEnum.Internal))
+            // Per-stage concurrency gate: bound how many jobs run this stage at once (independent of how many
+            // jobs run overall) so a large enqueue cannot overwhelm the model runners / backends. Acquired
+            // outside the stage timeout so time spent waiting for a slot is not charged against the timeout.
+            SemaphoreSlim? gate = _StageGates.TryGetValue(stage, out SemaphoreSlim? resolved) ? resolved : null;
+            if (gate != null) await gate.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                span?.SetTag("pneuma.stage", stage.ToString());
-                span?.SetTag("pneuma.job.id", job.Id);
-
-                Stopwatch sw = Stopwatch.StartNew();
-                try
+                using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage, SpanKindEnum.Internal))
                 {
-                    using (CancellationTokenSource stageCts = CancellationTokenSource.CreateLinkedTokenSource(token))
+                    span?.SetTag("pneuma.stage", stage.ToString());
+                    span?.SetTag("pneuma.job.id", job.Id);
+
+                    Stopwatch sw = Stopwatch.StartNew();
+                    try
                     {
-                        stageCts.CancelAfter(TimeSpan.FromSeconds(_StageTimeoutSeconds));
-                        T result = await action(stageCts.Token).ConfigureAwait(false);
+                        using (CancellationTokenSource stageCts = CancellationTokenSource.CreateLinkedTokenSource(token))
+                        {
+                            stageCts.CancelAfter(TimeSpan.FromSeconds(_StageTimeoutSeconds));
+                            T result = await action(stageCts.Token).ConfigureAwait(false);
+                            sw.Stop();
+                            PneumaMetrics.RecordIngestionStage(stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
+                            span?.SetOk(null);
+                            await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+                            return result;
+                        }
+                    }
+                    catch (Exception e)
+                    {
                         sw.Stop();
-                        PneumaMetrics.RecordIngestionStage(stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
-                        span?.SetOk(null);
-                        await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
-                        return result;
+                        PneumaMetrics.RecordIngestionStage(stage.ToString(), "failed", sw.Elapsed.TotalSeconds);
+                        span?.RecordException(e, true);
+                        span?.SetError(e.Message);
+                        throw;
                     }
                 }
-                catch (Exception e)
-                {
-                    sw.Stop();
-                    PneumaMetrics.RecordIngestionStage(stage.ToString(), "failed", sw.Elapsed.TotalSeconds);
-                    span?.RecordException(e, true);
-                    span?.SetError(e.Message);
-                    throw;
-                }
+            }
+            finally
+            {
+                gate?.Release();
             }
         }
 

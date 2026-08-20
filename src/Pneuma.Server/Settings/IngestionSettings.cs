@@ -50,6 +50,12 @@ namespace Pneuma.Server.Settings
             set { _BrowserNavigationTimeoutMs = Math.Clamp(value, 1000, 300000); }
         }
 
+        /// <summary>
+        /// Per-stage concurrency caps. Bound how many jobs may run a given pipeline step at once (independent
+        /// of <see cref="MaxConcurrentTasks"/>), so a large enqueue cannot overwhelm the model runners.
+        /// </summary>
+        public IngestionStageConcurrencySettings StageConcurrency { get; set; } = new IngestionStageConcurrencySettings();
+
         #endregion
 
         #region Private-Members
