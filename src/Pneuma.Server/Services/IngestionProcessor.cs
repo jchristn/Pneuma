@@ -296,8 +296,16 @@ namespace Pneuma.Server.Services
             // Per-stage concurrency gate: bound how many jobs run this stage at once (independent of how many
             // jobs run overall) so a large enqueue cannot overwhelm the model runners / backends. Acquired
             // outside the stage timeout so time spent waiting for a slot is not charged against the timeout.
+            // When no slot is immediately free, surface a friendly "waiting" event so the follow-logs make the
+            // contention visible rather than looking stalled.
             SemaphoreSlim? gate = _StageGates.TryGetValue(stage, out SemaphoreSlim? resolved) ? resolved : null;
-            if (gate != null) await gate.WaitAsync(token).ConfigureAwait(false);
+            if (gate != null && !gate.Wait(0))
+            {
+                await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Queued,
+                    "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
+                    0, token).ConfigureAwait(false);
+                await gate.WaitAsync(token).ConfigureAwait(false);
+            }
             try
             {
                 using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage, SpanKindEnum.Internal))

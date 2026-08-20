@@ -179,7 +179,7 @@ function FollowLogsModal({ job, onClose }) {
                 </div>
                 {ev.message && <div className="ilog-message">{ev.message}</div>}
                 <div className="ilog-meta">
-                  {ev.durationMs != null && ev.durationMs !== '' && (
+                  {Number(ev.durationMs) > 0 && (
                     <span>{t('ingestionLog.duration')}: {formatDuration(ev.durationMs)}</span>
                   )}
                   {ev.createdUtc && <span>{formatDateTime(ev.createdUtc)}</span>}

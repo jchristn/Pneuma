@@ -74,7 +74,7 @@ export default function IngestionTimeline({ jobData, events, inProgressLabel, ru
             </div>
             {ev.message && <div className="ilog-message">{ev.message}</div>}
             <div className="ilog-meta">
-              {ev.durationMs != null && ev.durationMs !== '' && <span>{formatDuration(ev.durationMs)}</span>}
+              {Number(ev.durationMs) > 0 && <span>{formatDuration(ev.durationMs)}</span>}
               {ev.createdUtc && <span>{formatDateTime(ev.createdUtc)}</span>}
             </div>
           </div>
