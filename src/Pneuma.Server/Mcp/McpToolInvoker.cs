@@ -25,6 +25,7 @@ namespace Pneuma.Server.Mcp
         private readonly AuthorizationService _Authz;
         private readonly McpEntityTools _Entities;
         private readonly McpGraphTools _GraphTools;
+        private readonly ModelRunnerGate _Gate;
 
         #endregion
 
@@ -38,8 +39,9 @@ namespace Pneuma.Server.Mcp
         /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
+        /// <param name="gate">Model-runner concurrency gate applied to the grounded-answer tool.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -47,9 +49,11 @@ namespace Pneuma.Server.Mcp
             if (collections == null) throw new ArgumentNullException(nameof(collections));
             if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (query == null) throw new ArgumentNullException(nameof(query));
+            if (gate == null) throw new ArgumentNullException(nameof(gate));
             _Authz = authz;
             _Entities = new McpEntityTools(db);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
+            _Gate = gate;
         }
 
         #endregion
@@ -125,15 +129,33 @@ namespace Pneuma.Server.Mcp
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_query":
-                    if (McpJsonRpc.IsStreamRequested(arguments))
+                {
+                    // Admit grounded-answer (model-runner) usage through the concurrency gate; a saturated
+                    // system rejects with a JSON-RPC error rather than piling onto the model runner.
+                    IDisposable lease;
+                    try
                     {
-                        // Streamable-HTTP: the tool sends its own SSE response, whose final event is the result.
-                        await _GraphTools.StreamGroundedQueryAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                        lease = await _Gate.AcquireAsync(ctx.Token).ConfigureAwait(false);
+                    }
+                    catch (ModelRunnerBusyException busy)
+                    {
+                        await McpJsonRpc.SendErrorAsync(ctx, id, -32000, busy.Message).ConfigureAwait(false);
                         return;
                     }
-                    toolResult = await _GraphTools.GroundedQueryAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
-                    if (toolResult == null) return; // error already sent
+
+                    using (lease)
+                    {
+                        if (McpJsonRpc.IsStreamRequested(arguments))
+                        {
+                            // Streamable-HTTP: the tool sends its own SSE response, whose final event is the result.
+                            await _GraphTools.StreamGroundedQueryAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                            return;
+                        }
+                        toolResult = await _GraphTools.GroundedQueryAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                        if (toolResult == null) return; // error already sent
+                    }
                     break;
+                }
                 default:
                     await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Unknown tool: " + toolName).ConfigureAwait(false);
                     return;

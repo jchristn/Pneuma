@@ -94,6 +94,10 @@
     "VectorMinimumScore": 0.0,
     "ChatMaxToolIterations": 6
   },
+  "ModelRunner": {
+    "MaxConcurrentRequests": 4,
+    "MaxQueueDepth": 16
+  },
   "S3": {
     "Enabled": true,
     "Endpoint": "http://less3:8000",

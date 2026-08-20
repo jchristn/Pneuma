@@ -25,6 +25,7 @@ namespace Pneuma.Server.Routes
 
         private readonly AuthorizationService _Authz;
         private readonly AgenticChatService _Chat;
+        private readonly ModelRunnerGate _Gate;
         private readonly LoggingModule _Logging;
 
         #endregion
@@ -34,15 +35,18 @@ namespace Pneuma.Server.Routes
         /// <summary>Instantiate chat routes.</summary>
         /// <param name="authz">Authorization service.</param>
         /// <param name="chat">Agentic chat service.</param>
+        /// <param name="gate">Model-runner concurrency gate (admission control with HTTP 429 on saturation).</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public ChatRoutes(AuthorizationService authz, AgenticChatService chat, LoggingModule logging)
+        public ChatRoutes(AuthorizationService authz, AgenticChatService chat, ModelRunnerGate gate, LoggingModule logging)
         {
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (chat == null) throw new ArgumentNullException(nameof(chat));
+            if (gate == null) throw new ArgumentNullException(nameof(gate));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _Authz = authz;
             _Chat = chat;
+            _Gate = gate;
             _Logging = logging;
         }
 
@@ -93,19 +97,37 @@ namespace Pneuma.Server.Routes
             }
 
             int max = Math.Clamp(request.MaxResults, 1, 20);
-            SseWriter sse = new SseWriter(ctx);
+
+            // Admit through the model-runner gate before starting the SSE stream, so a saturated system
+            // returns a clean HTTP 429 (rather than failing mid-stream). The slot is held for the whole
+            // request; the assistant's internal tool calls run under this one slot without re-acquiring.
+            IDisposable lease;
             try
             {
-                await _Chat.RunAsync(rc, request.Messages, max, (payload, isFinal, token) => sse.SendAsync(payload, isFinal, token), ctx.Token).ConfigureAwait(false);
+                lease = await _Gate.AcquireAsync(ctx.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (ModelRunnerBusyException busy)
             {
-                throw;
+                await RouteHelper.SendErrorAsync(ctx, 429, "TooManyRequests", busy.Message).ConfigureAwait(false);
+                return;
             }
-            catch (Exception e)
+
+            using (lease)
             {
-                _Logging.Warn("[ChatRoutes] chat stream error: " + e.Message);
-                await sse.SendAsync(new { type = "error", message = "The chat stream failed." }, true, ctx.Token).ConfigureAwait(false);
+                SseWriter sse = new SseWriter(ctx);
+                try
+                {
+                    await _Chat.RunAsync(rc, request.Messages, max, (payload, isFinal, token) => sse.SendAsync(payload, isFinal, token), ctx.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    _Logging.Warn("[ChatRoutes] chat stream error: " + e.Message);
+                    await sse.SendAsync(new { type = "error", message = "The chat stream failed." }, true, ctx.Token).ConfigureAwait(false);
+                }
             }
         }
 

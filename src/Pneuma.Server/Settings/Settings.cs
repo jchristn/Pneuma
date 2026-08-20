@@ -48,6 +48,9 @@ namespace Pneuma.Server.Settings
         /// <summary>Retrieval settings (inverted-index use, graph-neighbor expansion, vector search).</summary>
         public RetrievalSettings Retrieval { get; set; } = new RetrievalSettings();
 
+        /// <summary>Model-runner concurrency settings (concurrency cap, queue depth before HTTP 429).</summary>
+        public ModelRunnerSettings ModelRunner { get; set; } = new ModelRunnerSettings();
+
         /// <summary>S3-compatible object storage (Less3) settings and per-stage bucket names.</summary>
         public S3Settings S3 { get; set; } = new S3Settings();
 

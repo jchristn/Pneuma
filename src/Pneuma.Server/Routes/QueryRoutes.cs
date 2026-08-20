@@ -27,6 +27,7 @@ namespace Pneuma.Server.Routes
 
         private readonly AuthorizationService _Authz;
         private readonly GroundedQueryService _Query;
+        private readonly ModelRunnerGate _Gate;
         private readonly LoggingModule _Logging;
 
         #endregion
@@ -36,15 +37,18 @@ namespace Pneuma.Server.Routes
         /// <summary>Instantiate query routes.</summary>
         /// <param name="authz">Authorization service.</param>
         /// <param name="query">Shared grounded query service.</param>
+        /// <param name="gate">Model-runner concurrency gate (admission control with HTTP 429 on saturation).</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public QueryRoutes(AuthorizationService authz, GroundedQueryService query, LoggingModule logging)
+        public QueryRoutes(AuthorizationService authz, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging)
         {
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (query == null) throw new ArgumentNullException(nameof(query));
+            if (gate == null) throw new ArgumentNullException(nameof(gate));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             _Authz = authz;
             _Query = query;
+            _Gate = gate;
             _Logging = logging;
         }
 
@@ -87,16 +91,30 @@ namespace Pneuma.Server.Routes
             int max = Math.Clamp(request.MaxResults, 1, 20);
             string tenantId = rc.TenantId ?? String.Empty;
 
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, ctx.Token).ConfigureAwait(false);
-            QueryResponse response = new QueryResponse
+            IDisposable lease;
+            try
             {
-                Answer = answer.Answer,
-                Sources = answer.Sources,
-                Grounded = answer.Grounded,
-                Model = answer.AnswerModel,
-                GenerationMs = answer.GenerationMs
-            };
-            await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
+                lease = await _Gate.AcquireAsync(ctx.Token).ConfigureAwait(false);
+            }
+            catch (ModelRunnerBusyException busy)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 429, "TooManyRequests", busy.Message).ConfigureAwait(false);
+                return;
+            }
+
+            using (lease)
+            {
+                GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, ctx.Token).ConfigureAwait(false);
+                QueryResponse response = new QueryResponse
+                {
+                    Answer = answer.Answer,
+                    Sources = answer.Sources,
+                    Grounded = answer.Grounded,
+                    Model = answer.AnswerModel,
+                    GenerationMs = answer.GenerationMs
+                };
+                await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
+            }
         }
 
         private async Task QueryStreamAsync(HttpContextBase ctx)
@@ -117,6 +135,19 @@ namespace Pneuma.Server.Routes
 
             int max = Math.Clamp(request.MaxResults, 1, 20);
             string tenantId = rc.TenantId ?? String.Empty;
+
+            // Admit through the model-runner gate before starting the SSE stream so saturation returns a
+            // clean HTTP 429 rather than failing mid-stream. The slot is held for the whole request.
+            IDisposable lease;
+            try
+            {
+                lease = await _Gate.AcquireAsync(ctx.Token).ConfigureAwait(false);
+            }
+            catch (ModelRunnerBusyException busy)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 429, "TooManyRequests", busy.Message).ConfigureAwait(false);
+                return;
+            }
 
             SseWriter sse = new SseWriter(ctx);
             try
@@ -178,6 +209,10 @@ namespace Pneuma.Server.Routes
             {
                 _Logging.Warn("[QueryRoutes] streaming answer error: " + e.Message);
                 await sse.SendAsync(new { type = "error", message = "The answer stream failed." }, true, ctx.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                lease.Dispose();
             }
         }
 

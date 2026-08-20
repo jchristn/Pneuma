@@ -36,6 +36,7 @@ namespace Pneuma.Server
         private readonly IPartioClient _Partio;
         private readonly TenantProvisioningService _Provisioning;
         private readonly ModelHealthMonitor _ModelHealth;
+        private readonly ModelRunnerGate _ModelRunnerGate;
         private readonly IArtifactStore _Artifacts;
         private readonly IBlobStore _Blobs;
         private readonly LoggingModule _Logging;
@@ -109,6 +110,7 @@ namespace Pneuma.Server
             _Partio = partio;
             _Provisioning = provisioning;
             _ModelHealth = modelHealth;
+            _ModelRunnerGate = new ModelRunnerGate(_Settings.ModelRunner.MaxConcurrentRequests, _Settings.ModelRunner.MaxQueueDepth);
             _Artifacts = artifacts;
             _Blobs = blobs;
             _Logging = logging;
@@ -146,6 +148,7 @@ namespace Pneuma.Server
         public void Stop()
         {
             _Server.Stop();
+            _ModelRunnerGate.Dispose();
             _Telemetry.Dispose();
         }
 
@@ -185,11 +188,11 @@ namespace Pneuma.Server
             new GraphRoutes(_Database, _Authorization, _GraphFactory).Register(_Server);
             new SearchRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory).Register(_Server);
             GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
-            new QueryRoutes(_Authorization, groundedQuery, _Logging).Register(_Server);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery).Register(_Server);
+            new QueryRoutes(_Authorization, groundedQuery, _ModelRunnerGate, _Logging).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging);
-            new ChatRoutes(_Authorization, agenticChat, _Logging).Register(_Server);
+            new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);
         }
 
         private async Task PreflightAsync(HttpContextBase ctx)

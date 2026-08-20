@@ -38,10 +38,11 @@ namespace Pneuma.Server.Routes
         /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service for the grounded-answer tool.</param>
+        /// <param name="gate">Model-runner concurrency gate applied to the grounded-answer tool.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
+        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate)
         {
-            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query);
+            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate);
         }
 
         #endregion
