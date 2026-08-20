@@ -58,9 +58,10 @@ namespace Pneuma.Server.Mcp
         /// <summary>Full-text search the corpus, returning a bounded, ranked set of node summaries.</summary>
         /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="arguments">Tool arguments.</param>
+        /// <param name="subjectId">Optional subject to scope the search to; null searches the whole tenant.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked results payload.</returns>
-        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, CancellationToken token)
+        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, CancellationToken token)
         {
             string query = McpJsonRpc.GetStringArgument(arguments, "query");
             int max = 20;
@@ -81,7 +82,10 @@ namespace Pneuma.Server.Mcp
                 return new { query, count = 0, results };
             }
 
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, token).ConfigureAwait(false);
+            IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
+                ? null
+                : new Dictionary<string, string> { { "subjectId", subjectId } };
+            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, token).ConfigureAwait(false);
 
             IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
@@ -169,7 +173,7 @@ namespace Pneuma.Server.Mcp
 
             int max = ClampMax(arguments);
             string tenantId = rc.TenantId ?? String.Empty;
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, token).ConfigureAwait(false);
 
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
@@ -211,7 +215,7 @@ namespace Pneuma.Server.Mcp
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, token).ConfigureAwait(false);
                 List<object> sourceSummaries = new List<object>();
                 foreach (GraphNode source in sources)
                 {

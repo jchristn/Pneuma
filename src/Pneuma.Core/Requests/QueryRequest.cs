@@ -12,5 +12,11 @@ namespace Pneuma.Core.Requests
 
         /// <summary>Maximum sources to retrieve.</summary>
         public int MaxResults { get; set; } = 8;
+
+        /// <summary>
+        /// Optional subject to scope retrieval to. When set, only documents belonging to this subject are
+        /// considered. Null answers over the whole tenant.
+        /// </summary>
+        public string? SubjectId { get; set; } = null;
     }
 }

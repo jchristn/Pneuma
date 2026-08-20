@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAuth } from '../context/AuthContext';
+import { normalizeList } from '../utils/api';
 import ErrorBanner from '../components/ErrorBanner';
 import Icon from '../components/Icon';
 
@@ -184,10 +185,26 @@ function AskView() {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [subjectId, setSubjectId] = useState('');
 
   const abortRef = useRef(null);
   const textareaRef = useRef(null);
   const endRef = useRef(null);
+
+  // Load the tenant's subjects for the scope selector; auto-select when there is exactly one.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.list('subjects', { maxResults: 1000 })
+      .then((resp) => {
+        if (cancelled) return;
+        const items = normalizeList(resp).items;
+        setSubjects(items);
+        if (items.length === 1) setSubjectId(items[0].id);
+      })
+      .catch(() => { if (!cancelled) setSubjects([]); });
+    return () => { cancelled = true; };
+  }, [apiClient]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -214,7 +231,7 @@ function AskView() {
 
   const handleSend = useCallback(async () => {
     const term = input.trim();
-    if (!term || streaming) return;
+    if (!term || streaming || !subjectId) return;
 
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     history.push({ role: 'user', content: term });
@@ -234,6 +251,7 @@ function AskView() {
     try {
       await apiClient.chatStream(history, 8, {
         signal: controller.signal,
+        subjectId,
         onEvent: (evt) => {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; });
@@ -275,7 +293,7 @@ function AskView() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiClient, input, messages, patchLast, streaming, t]);
+  }, [apiClient, input, messages, patchLast, streaming, subjectId, t]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -302,11 +320,28 @@ function AskView() {
           <h1 className="page-title">{t('nav.ask', 'Ask')}</h1>
           <p className="page-subtitle">{t('ask.subtitle', 'Chat with the corpus. The assistant can search and traverse the knowledge graph to answer.')}</p>
         </div>
-        {messages.length > 0 ? (
-          <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
-            {t('ask.newChat', 'New chat')}
-          </button>
-        ) : null}
+        <div className="chat-head-actions">
+          <label className="chat-subject-picker">
+            <span className="chat-subject-label">{t('ask.subject', 'Subject')}</span>
+            <select
+              className="chat-subject-select"
+              value={subjectId}
+              onChange={(e) => setSubjectId(e.target.value)}
+              disabled={streaming || subjects.length === 0}
+              aria-label={t('ask.subject', 'Subject')}
+            >
+              <option value="">{subjects.length === 0 ? t('ask.noSubjects', 'No subjects') : t('ask.selectSubject', 'Select a subject')}</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.displayName || s.name || s.id}</option>
+              ))}
+            </select>
+          </label>
+          {messages.length > 0 ? (
+            <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
+              {t('ask.newChat', 'New chat')}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="chat-scroll">
@@ -360,15 +395,13 @@ function AskView() {
             rows={1}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t('ask.placeholder', 'Message Pneuma…')}
+            placeholder={subjectId ? t('ask.placeholder', 'Message Pneuma…') : t('ask.selectSubjectFirst', 'Select a subject to begin…')}
             aria-label={t('ask.placeholder', 'Message Pneuma…')}
+            disabled={!subjectId}
             autoFocus
           />
-          {streaming ? (
-            <button type="button" className="chat-send chat-stop" onClick={handleStop} aria-label={t('ask.stop', 'Stop')}>■</button>
-          ) : (
-            <button type="button" className="chat-send" onClick={handleSend} disabled={!input.trim()} aria-label={t('ask.submit', 'Send')}>➤</button>
-          )}
+          <button type="button" className="chat-send" onClick={handleSend} disabled={streaming || !input.trim() || !subjectId} aria-label={t('ask.submit', 'Send')}>➤</button>
+          <button type="button" className="chat-send chat-stop" onClick={handleStop} disabled={!streaming} aria-label={t('ask.stop', 'Stop')}>■</button>
         </div>
         <p className="chat-disclaimer">{t('ask.disclaimer', 'AI can make mistakes. Please verify all information.')}</p>
       </div>

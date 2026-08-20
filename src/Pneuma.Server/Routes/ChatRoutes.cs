@@ -117,7 +117,7 @@ namespace Pneuma.Server.Routes
                 SseWriter sse = new SseWriter(ctx);
                 try
                 {
-                    await _Chat.RunAsync(rc, request.Messages, max, (payload, isFinal, token) => sse.SendAsync(payload, isFinal, token), ctx.Token).ConfigureAwait(false);
+                    await _Chat.RunAsync(rc, request.Messages, max, request.SubjectId, (payload, isFinal, token) => sse.SendAsync(payload, isFinal, token), ctx.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

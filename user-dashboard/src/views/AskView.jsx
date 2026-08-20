@@ -385,11 +385,8 @@ export default function AskView() {
             aria-label={t('ask.placeholder')}
             autoFocus
           />
-          {streaming ? (
-            <button type="button" className="chat-send chat-stop" onClick={handleStop} aria-label={t('ask.stop', 'Stop')}>■</button>
-          ) : (
-            <button type="button" className="chat-send" onClick={() => send(input)} disabled={!input.trim()} aria-label={t('ask.submit')}>➤</button>
-          )}
+          <button type="button" className="chat-send" onClick={() => send(input)} disabled={streaming || !input.trim()} aria-label={t('ask.submit')}>➤</button>
+          <button type="button" className="chat-send chat-stop" onClick={handleStop} disabled={!streaming} aria-label={t('ask.stop', 'Stop')}>■</button>
         </div>
         <p className="chat-disclaimer">{t('ask.disclaimer', 'AI can make mistakes. Please verify all information.')}</p>
       </div>

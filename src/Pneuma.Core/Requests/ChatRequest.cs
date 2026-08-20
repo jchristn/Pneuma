@@ -18,6 +18,12 @@ namespace Pneuma.Core.Requests
         /// <summary>Maximum supporting sources for tool retrieval (clamped 1..20 by the handler).</summary>
         public int MaxResults { get; set; } = 8;
 
+        /// <summary>
+        /// Optional subject to scope the assistant's retrieval to. When set, the search and grounded-answer
+        /// tools are restricted to documents belonging to this subject. Null answers over the whole tenant.
+        /// </summary>
+        public string? SubjectId { get; set; } = null;
+
         #endregion
     }
 }

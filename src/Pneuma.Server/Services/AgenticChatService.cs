@@ -80,10 +80,11 @@ namespace Pneuma.Server.Services
         /// <param name="rc">Request context of the calling principal (used to authorize tool calls).</param>
         /// <param name="turns">The conversation so far, oldest first.</param>
         /// <param name="maxResults">Retrieval bound passed through to tool calls.</param>
+        /// <param name="subjectId">Optional subject to scope the assistant's retrieval tools to; null searches the whole tenant.</param>
         /// <param name="emit">Async delegate that writes one event: (payload, isFinal, token).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task.</returns>
-        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
+        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, string? subjectId, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
         {
             if (rc == null) throw new ArgumentNullException(nameof(rc));
             if (turns == null) throw new ArgumentNullException(nameof(turns));
@@ -200,7 +201,7 @@ namespace Pneuma.Server.Services
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, token).ConfigureAwait(false);
+                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, token).ConfigureAwait(false);
                         long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });
@@ -262,7 +263,7 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, CancellationToken token)
+        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, CancellationToken token)
         {
             JsonElement arguments;
             try
@@ -278,7 +279,7 @@ namespace Pneuma.Server.Services
                 return ToolInvocationResult.Fail("Tool arguments were not valid JSON.");
             }
 
-            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, token).ConfigureAwait(false);
+            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, token).ConfigureAwait(false);
         }
 
         private static string Truncate(string value, int max)

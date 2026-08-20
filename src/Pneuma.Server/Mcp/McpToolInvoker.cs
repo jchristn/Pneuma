@@ -118,7 +118,7 @@ namespace Pneuma.Server.Mcp
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_search":
-                    toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, ctx.Token).ConfigureAwait(false);
+                    toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, null, ctx.Token).ConfigureAwait(false);
                     break;
                 case "pneuma_get_node":
                     toolResult = await _GraphTools.GetNodeAsync(rc.TenantId ?? String.Empty, ctx, id, arguments, ctx.Token).ConfigureAwait(false);

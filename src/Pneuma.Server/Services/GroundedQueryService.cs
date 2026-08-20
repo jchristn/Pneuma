@@ -93,11 +93,12 @@ namespace Pneuma.Server.Services
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum sources to retrieve.</param>
+        /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The grounded answer.</returns>
-        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, CancellationToken token = default)
+        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, CancellationToken token = default)
         {
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -134,9 +135,10 @@ namespace Pneuma.Server.Services
         /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum primary sources.</param>
+        /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The supporting nodes.</returns>
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, CancellationToken token = default)
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, CancellationToken token = default)
         {
             List<GraphNode> sources = new List<GraphNode>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
@@ -146,6 +148,12 @@ namespace Pneuma.Server.Services
             string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(collectionId)) return sources;
 
+            // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
+            // exact-match subjectId tag every ingested chunk carries.
+            IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
+                ? null
+                : new Dictionary<string, string> { { "subjectId", subjectId } };
+
             // All graph reads for this request go to the tenant's own LiteGraph tenant/graph.
             IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
 
@@ -153,7 +161,7 @@ namespace Pneuma.Server.Services
             {
                 try
                 {
-                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, null, token).ConfigureAwait(false);
+                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, token).ConfigureAwait(false);
                     foreach (SearchHit hit in hits)
                     {
                         if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
@@ -173,7 +181,7 @@ namespace Pneuma.Server.Services
                 List<float>? queryEmbedding = await EmbedQueryAsync(question, token).ConfigureAwait(false);
                 if (queryEmbedding != null && queryEmbedding.Count > 0)
                 {
-                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, null, token).ConfigureAwait(false);
+                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, token).ConfigureAwait(false);
                     foreach (VectorSearchHit hit in vectorHits)
                     {
                         if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;

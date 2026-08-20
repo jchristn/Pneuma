@@ -114,11 +114,11 @@ class ApiClient {
    * Pneuma's read tools while answering. Invokes `onEvent` for each `delta` / `tool_call` /
    * `tool_result` / `complete` / `error` event. `messages` is an array of `{ role, content }` turns.
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults },
+      body: { messages, maxResults, subjectId: subjectId || null },
       signal,
       onEvent,
     });
