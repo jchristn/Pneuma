@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
@@ -27,17 +27,6 @@ export default function Shell() {
           >
             <img src="/logo.png" alt="Pneuma" className="brand-logo" />
           </button>
-
-          <nav className="app-nav" aria-label="Primary">
-            <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`}>
-              <Icon name="search" size={16} />
-              <span>{t('nav.search')}</span>
-            </NavLink>
-            <NavLink to="/ask" className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`}>
-              <Icon name="ask" size={16} />
-              <span>{t('nav.ask')}</span>
-            </NavLink>
-          </nav>
 
           <div className="app-header-actions">
             {user?.displayName ? <span className="user-chip" title={user.email}>{user.displayName}</span> : null}

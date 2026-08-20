@@ -77,7 +77,7 @@ export default function NodeView() {
   const backAffordance = (
     <button type="button" className="button button-ghost back-link" onClick={() => navigate(-1)}>
       <Icon name="arrowLeft" size={16} />
-      <span>{t('nav.backToSearch')}</span>
+      <span>{t('nav.back', 'Back')}</span>
     </button>
   );
 
@@ -102,7 +102,7 @@ export default function NodeView() {
           <h2>{t('node.notFoundTitle')}</h2>
           <p>{error || t('node.notFoundBody')}</p>
           <Link to="/" className="button button-secondary">
-            {t('nav.search')}
+            {t('nav.ask', 'Ask')}
           </Link>
         </div>
       </div>

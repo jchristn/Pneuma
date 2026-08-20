@@ -86,7 +86,23 @@ function copyText(text) {
   });
 }
 
-/** Collapsible trace of the tools the assistant called for one answer. */
+/** Format a millisecond duration compactly (e.g. "820 ms", "1.2 s"). */
+function formatMs(ms) {
+  if (ms == null) return null;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** Pretty-print a JSON string; fall back to the raw text when it isn't valid JSON. */
+function prettyJson(raw) {
+  if (raw == null || raw === '') return '';
+  try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return String(raw); }
+}
+
+/**
+ * Collapsible trace of the tools the assistant called for one answer. Each row expands to reveal the
+ * tool's query (arguments), its response (result payload), and how long the call took.
+ */
 function ToolTrace({ tools }) {
   const { t } = useTranslation();
   if (!tools || tools.length === 0) return null;
@@ -96,10 +112,27 @@ function ToolTrace({ tools }) {
       <ul>
         {tools.map((tool, index) => (
           <li key={`${tool.name}-${index}`} className={tool.running ? 'tool-running' : (tool.ok ? 'tool-ok' : 'tool-fail')}>
-            <code>{tool.name}</code>
-            <span className="tool-state">
-              {tool.running ? t('ask.toolRunning', 'running…') : (tool.ok ? t('ask.toolOk', 'ok') : t('ask.toolFail', 'failed'))}
-            </span>
+            <details className="chat-tool-item">
+              <summary>
+                <code>{tool.name}</code>
+                <span className="tool-state">
+                  {tool.running ? t('ask.toolRunning', 'running…') : (tool.ok ? t('ask.toolOk', 'ok') : t('ask.toolFail', 'failed'))}
+                </span>
+                {tool.durationMs != null ? <span className="tool-runtime">{formatMs(tool.durationMs)}</span> : null}
+              </summary>
+              <div className="chat-tool-detail">
+                <div className="chat-tool-block">
+                  <span className="chat-tool-label">{t('ask.toolQuery', 'Query')}</span>
+                  <pre className="chat-tool-pre">{prettyJson(tool.arguments) || t('ask.toolNoQuery', '(no arguments)')}</pre>
+                </div>
+                {tool.running ? null : (
+                  <div className="chat-tool-block">
+                    <span className="chat-tool-label">{t('ask.toolResponse', 'Response')}</span>
+                    <pre className="chat-tool-pre">{prettyJson(tool.result) || t('ask.toolNoResponse', '(no response)')}</pre>
+                  </div>
+                )}
+              </div>
+            </details>
           </li>
         ))}
       </ul>
@@ -107,26 +140,38 @@ function ToolTrace({ tools }) {
   );
 }
 
-/** Per-answer telemetry: time to first token, generation time, tokens, throughput, model. */
-function StatsBar({ stats }) {
+/**
+ * Per-answer telemetry (model, TTFT, total time, token counts, throughput) surfaced underneath the
+ * response behind a hover/focus (i) affordance so it stays out of the way until wanted.
+ */
+function StatsInfo({ stats }) {
   const { t } = useTranslation();
   if (!stats) return null;
   const total = stats.totalTokens || ((stats.promptTokens || 0) + (stats.completionTokens || 0));
+  const rows = [];
+  if (stats.model) rows.push([t('ask.statModel', 'Model'), stats.model]);
+  if (stats.timeToFirstTokenMs) rows.push([t('ask.statTtft', 'Time to first token'), `${stats.timeToFirstTokenMs} ms`]);
+  if (stats.generationMs) rows.push([t('ask.statGen', 'Total time'), `${(stats.generationMs / 1000).toFixed(1)} s`]);
+  if (stats.promptTokens) rows.push([t('ask.statPrompt', 'Prompt tokens'), String(stats.promptTokens)]);
+  if (stats.completionTokens) rows.push([t('ask.statCompletion', 'Completion tokens'), String(stats.completionTokens)]);
+  if (total) rows.push([t('ask.statTotal', 'Total tokens'), String(total)]);
+  if (stats.tokensPerSecond) rows.push([t('ask.statTps', 'Tokens / second'), stats.tokensPerSecond.toFixed(1)]);
+  if (rows.length === 0) return null;
   return (
-    <div className="chat-stats">
-      {stats.model ? <span className="chat-stat" title={t('ask.statModel', 'Answering model')}>{stats.model}</span> : null}
-      {stats.timeToFirstTokenMs ? (
-        <span className="chat-stat" title={t('ask.statTtftTip', 'Time to first token')}>TTFT {stats.timeToFirstTokenMs} ms</span>
-      ) : null}
-      {stats.generationMs ? (
-        <span className="chat-stat" title={t('ask.statGenTip', 'Total generation time')}>{(stats.generationMs / 1000).toFixed(1)} s</span>
-      ) : null}
-      {total ? (
-        <span className="chat-stat" title={t('ask.statTokensTip', 'Prompt + completion tokens')}>{total} tokens</span>
-      ) : null}
-      {stats.tokensPerSecond ? (
-        <span className="chat-stat" title={t('ask.statTpsTip', 'Completion tokens per second')}>{stats.tokensPerSecond.toFixed(1)} tok/s</span>
-      ) : null}
+    <div className="chat-stats-info">
+      <button type="button" className="chat-stats-trigger" aria-label={t('ask.statsAria', 'Response statistics')}>
+        <span className="chat-stats-i" aria-hidden="true">i</span>
+        <span className="chat-stats-label">{t('ask.statsLabel', 'Details')}</span>
+      </button>
+      <div className="chat-stats-popover" role="tooltip">
+        <table>
+          <tbody>
+            {rows.map(([k, v]) => (
+              <tr key={k}><th>{k}</th><td>{v}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -193,11 +238,13 @@ function AskView() {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; });
           } else if (evt.type === 'tool_call') {
-            patchLast((m) => { m.tools = [...(m.tools || []), { id: evt.id, name: evt.name, running: true, ok: false }]; });
+            patchLast((m) => { m.tools = [...(m.tools || []), { id: evt.id, name: evt.name, running: true, ok: false, arguments: evt.arguments || '' }]; });
           } else if (evt.type === 'tool_result') {
             patchLast((m) => {
               m.tools = (m.tools || []).map((tool) =>
-                tool.id === evt.id && tool.running ? { ...tool, running: false, ok: Boolean(evt.ok) } : tool);
+                tool.id === evt.id && tool.running
+                  ? { ...tool, running: false, ok: Boolean(evt.ok), result: evt.result ?? (evt.error ? JSON.stringify({ error: evt.error }) : ''), durationMs: typeof evt.durationMs === 'number' ? evt.durationMs : null }
+                  : tool);
             });
           } else if (evt.type === 'complete') {
             patchLast((m) => {
@@ -289,7 +336,7 @@ function AskView() {
                         ) : null
                       )}
                       {message.streaming && message.content ? <span className="chat-cursor">▍</span> : null}
-                      <StatsBar stats={message.stats} />
+                      <StatsInfo stats={message.stats} />
                     </>
                   ) : (
                     <p className="chat-user-text">{message.content}</p>

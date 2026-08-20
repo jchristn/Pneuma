@@ -131,6 +131,24 @@ class ApiClient {
     });
   }
 
+  /**
+   * Multi-turn agentic chat over the corpus, streamed over server-sent events. The model may call
+   * Pneuma's read tools while answering. Invokes `onEvent` for each `delta` / `tool_call` /
+   * `tool_result` / `complete` / `error` event.
+   * @param {{role:string, content:string}[]} messages
+   * @param {number} maxResults
+   * @param {{onEvent:(event:object)=>void, signal?:AbortSignal}} handlers
+   */
+  async chatStream(messages, maxResults = 8, { onEvent, signal } = {}) {
+    await streamSse(this.baseUrl + '/v1.0/chat/stream', {
+      method: 'POST',
+      headers: this._headers({ Accept: 'text/event-stream' }),
+      body: { messages, maxResults },
+      signal,
+      onEvent,
+    });
+  }
+
   // ---- Knowledge graph -------------------------------------------------
 
   /** Node contents. */

@@ -644,18 +644,30 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Tool-call trace */
 .chat-tool-trace { margin-bottom: 0.6rem; font-size: 0.82rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-alt); }
-.chat-tool-trace summary { cursor: pointer; padding: 0.4rem 0.7rem; color: var(--color-text-secondary); user-select: none; }
+.chat-tool-trace > summary { cursor: pointer; padding: 0.4rem 0.7rem; color: var(--color-text-secondary); user-select: none; }
 .chat-tool-trace ul { list-style: none; margin: 0; padding: 0 0.7rem 0.5rem; }
-.chat-tool-trace li { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0; }
+.chat-tool-trace li { padding: 0.15rem 0; }
 .chat-tool-trace code { font-family: var(--font-mono, monospace); font-size: 0.82em; }
+.chat-tool-item > summary { cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0; user-select: none; list-style: revert; }
 .chat-tool-trace .tool-state { font-size: 0.72rem; color: var(--color-text-secondary); }
+.chat-tool-trace .tool-runtime { font-size: 0.72rem; color: var(--color-text-secondary); margin-left: auto; font-variant-numeric: tabular-nums; }
 .chat-tool-trace .tool-ok .tool-state { color: #059669; }
 .chat-tool-trace .tool-fail .tool-state { color: var(--color-danger, #dc2626); }
 [data-theme='dark'] .chat-tool-trace .tool-ok .tool-state { color: #34d399; }
+.chat-tool-detail { padding: 0.35rem 0 0.5rem 0.9rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.chat-tool-block { display: flex; flex-direction: column; gap: 0.2rem; }
+.chat-tool-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); }
+.chat-tool-pre { margin: 0; padding: 0.5rem 0.6rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono, monospace); font-size: 0.74rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 20rem; overflow: auto; }
 
-/* Per-answer telemetry */
-.chat-stats { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; margin-top: 0.6rem; font-size: 0.72rem; color: var(--color-text-secondary); }
-.chat-stat { display: inline-flex; align-items: center; padding: 0.1rem 0.45rem; border: 1px solid var(--color-border); border-radius: 999px; }
+/* Per-answer telemetry: (i) affordance revealing a stats popover on hover/focus */
+.chat-stats-info { position: relative; display: inline-flex; margin-top: 0.6rem; }
+.chat-stats-trigger { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.5rem 0.1rem 0.35rem; border: 1px solid var(--color-border); border-radius: 999px; background: transparent; color: var(--color-text-secondary); font-size: 0.72rem; cursor: default; }
+.chat-stats-i { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 999px; border: 1px solid currentColor; font-size: 0.62rem; font-style: italic; font-weight: 600; line-height: 1; }
+.chat-stats-popover { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 20; min-width: 15rem; padding: 0.5rem 0.65rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); box-shadow: 0 8px 24px rgba(0,0,0,0.18); opacity: 0; visibility: hidden; transform: translateY(4px); transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s; }
+.chat-stats-info:hover .chat-stats-popover, .chat-stats-trigger:focus-visible + .chat-stats-popover, .chat-stats-info:focus-within .chat-stats-popover { opacity: 1; visibility: visible; transform: translateY(0); }
+.chat-stats-popover table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.chat-stats-popover th { text-align: left; font-weight: 500; color: var(--color-text-secondary); padding: 0.15rem 0.75rem 0.15rem 0; white-space: nowrap; }
+.chat-stats-popover td { text-align: right; color: var(--color-text); font-variant-numeric: tabular-nums; padding: 0.15rem 0; }
 
 /* Composer */
 .chat-composer { flex: 0 0 auto; max-width: 52rem; width: 100%; margin: 0 auto; }

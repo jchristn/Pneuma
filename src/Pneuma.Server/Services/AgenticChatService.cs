@@ -199,12 +199,26 @@ namespace Pneuma.Server.Services
                         token.ThrowIfCancellationRequested();
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
 
+                        long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
                         ToolInvocationResult result = await ExecuteToolAsync(rc, call, token).ConfigureAwait(false);
+                        long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });
                         messages.Add(ChatMessage.ToolResult(call.Id ?? String.Empty, call.Name ?? String.Empty, resultJson));
 
                         toolTrace.Add(new { name = call.Name, ok = result.Success });
-                        await emit(new { type = "tool_result", id = call.Id, name = call.Name, ok = result.Success, error = result.Success ? null : result.Error }, false, token).ConfigureAwait(false);
+                        // The result payload is echoed to the caller (truncated) so the UI can show the tool's
+                        // response alongside its query and runtime when a tool row is expanded.
+                        await emit(new
+                        {
+                            type = "tool_result",
+                            id = call.Id,
+                            name = call.Name,
+                            ok = result.Success,
+                            error = result.Success ? null : result.Error,
+                            result = Truncate(resultJson, 8192),
+                            durationMs = toolDurationMs
+                        }, false, token).ConfigureAwait(false);
                     }
                 }
             }
@@ -265,6 +279,13 @@ namespace Pneuma.Server.Services
             }
 
             return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, token).ConfigureAwait(false);
+        }
+
+        private static string Truncate(string value, int max)
+        {
+            if (String.IsNullOrEmpty(value)) return value ?? String.Empty;
+            if (value.Length <= max) return value;
+            return value.Substring(0, max) + "… (truncated)";
         }
 
         private string? DecryptKey(ModelRunner runner)
