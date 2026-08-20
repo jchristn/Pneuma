@@ -34,6 +34,12 @@ namespace Pneuma.Core.Requests
         /// </summary>
         public int MaxConcurrentRequests { get; set; } = 2;
 
+        /// <summary>
+        /// Maximum context window (in tokens) of a completion model. Drives automatic chat conversation
+        /// compression once the message history approaches the window. 0 disables compression.
+        /// </summary>
+        public int ContextSize { get; set; } = 0;
+
         #endregion
     }
 }

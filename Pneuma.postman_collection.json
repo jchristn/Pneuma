@@ -91,7 +91,7 @@
           "request": {
             "method": "POST",
             "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"Embedding\",\n  \"name\": \"nomic\",\n  \"model\": \"nomic-embed-text\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 2\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"Completion\",\n  \"name\": \"local-chat\",\n  \"model\": \"llama3.2\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"contextSize\": 8192\n}" },
             "url": "{{baseUrl}}/v1.0/model-runners"
           }
         },

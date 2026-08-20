@@ -330,6 +330,7 @@ const en = {
       endpoint: 'Endpoint URL',
       apiFormat: 'API Format',
       maxConcurrency: 'Max Concurrency',
+      contextSize: 'Context Size',
       health: 'Health',
       healthPending: 'Pending',
       healthDetailHint: 'Health status and recent history (click for details)'

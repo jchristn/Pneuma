@@ -297,7 +297,8 @@ namespace Pneuma.Core.Integrations.Implementations
                         ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
                         Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
                         Active = active,
-                        MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests")
+                        MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
+                        ContextSize = GetTagInt(item, "contextSize")
                     });
                 }
             }
@@ -317,7 +318,8 @@ namespace Pneuma.Core.Integrations.Implementations
                 ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
                 Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
                 Active = active,
-                MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests")
+                MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
+                ContextSize = GetTagInt(item, "contextSize")
             };
         }
 
@@ -340,6 +342,11 @@ namespace Pneuma.Core.Integrations.Implementations
 
         private static object BuildEndpointBody(PartioEndpoint endpoint, string? tenantId)
         {
+            // Partio has no discrete context-window field, so the model's context size round-trips via the
+            // endpoint's extensible Tags. Only emit the tag when a positive value is set.
+            Dictionary<string, string> tags = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (endpoint.ContextSize > 0) tags["contextSize"] = endpoint.ContextSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
             return new
             {
                 TenantId = String.IsNullOrWhiteSpace(tenantId) ? null : tenantId,
@@ -349,7 +356,8 @@ namespace Pneuma.Core.Integrations.Implementations
                 ApiFormat = endpoint.ApiFormat,
                 ApiKey = endpoint.ApiKey,
                 Active = endpoint.Active,
-                MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests)
+                MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests),
+                Tags = tags
             };
         }
 
@@ -532,6 +540,16 @@ namespace Pneuma.Core.Integrations.Implementations
                 return parsed;
             }
             return fallback;
+        }
+
+        /// <summary>Read an integer value stored under a key in the endpoint's Tags object; 0 when absent/invalid.</summary>
+        private static int GetTagInt(JsonElement element, string tagKey)
+        {
+            if (!TryGetProperty(element, out JsonElement tags, "Tags", "tags") || tags.ValueKind != JsonValueKind.Object) return 0;
+            if (!tags.TryGetProperty(tagKey, out JsonElement value)) return 0;
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number)) return number;
+            if (value.ValueKind == JsonValueKind.String && Int32.TryParse(value.GetString(), out int parsed)) return parsed;
+            return 0;
         }
 
         #endregion

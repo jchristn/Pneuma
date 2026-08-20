@@ -995,6 +995,13 @@ select {
 .chat-tool-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .chat-tool-pre { margin: 0; padding: 0.5rem 0.6rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; font-family: var(--font-mono, monospace); font-size: 0.74rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 20rem; overflow: auto; }
 
+/* Conversation compaction cues */
+.chat-compacting { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-secondary); padding: 0.3rem 0; }
+.chat-compacting::before { content: ''; width: 12px; height: 12px; border: 2px solid var(--border-color); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.chat-compacted-note { margin: 0 auto 0.4rem; max-width: 52rem; border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-tertiary); font-size: 0.82rem; }
+.chat-compacted-note > summary { cursor: pointer; padding: 0.4rem 0.7rem; color: var(--text-secondary); user-select: none; }
+.chat-compacted-note .chat-markdown { padding: 0 0.7rem 0.6rem; font-size: 0.85rem; color: var(--text-secondary); }
+
 /* Answer citations: links back to the ingested sources */
 .chat-citations { margin-top: 0.7rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem; }
 .chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }

@@ -141,6 +141,21 @@ function ToolTrace({ tools }) {
   );
 }
 
+/**
+ * Replace the whole prior message history with a single compacted-summary turn, keeping only the latest
+ * user question and its answer. Mirrors the server-side compaction so the next turn is sent within budget.
+ */
+function collapseHistory(prev, summary) {
+  if (!Array.isArray(prev) || prev.length < 2) return prev;
+  const lastAssistant = prev[prev.length - 1];
+  const lastUser = prev[prev.length - 2];
+  return [
+    { role: 'assistant', content: summary, compactedNote: true },
+    lastUser,
+    lastAssistant,
+  ];
+}
+
 /** Clickable citations to the ingested source links the answer drew from. */
 function Citations({ citations }) {
   const { t } = useTranslation();
@@ -277,7 +292,9 @@ function AskView() {
         subjectId,
         onEvent: (evt) => {
           if (evt.type === 'delta') {
-            patchLast((m) => { m.content += evt.text || ''; });
+            patchLast((m) => { m.content += evt.text || ''; m.compacting = false; });
+          } else if (evt.type === 'compacting') {
+            patchLast((m) => { m.compacting = true; });
           } else if (evt.type === 'tool_call') {
             patchLast((m) => { m.tools = [...(m.tools || []), { id: evt.id, name: evt.name, running: true, ok: false, arguments: evt.arguments || '' }]; });
           } else if (evt.type === 'tool_result') {
@@ -291,6 +308,7 @@ function AskView() {
             patchLast((m) => {
               if (!m.content && evt.answer) m.content = evt.answer;
               m.streaming = false;
+              m.compacting = false;
               m.citations = Array.isArray(evt.citations) ? evt.citations : [];
               m.stats = {
                 model: evt.model || null,
@@ -302,6 +320,9 @@ function AskView() {
                 tokensPerSecond: evt.tokensPerSecond || 0,
               };
             });
+            if (evt.compacted && evt.compactedSummary) {
+              setMessages((prev) => collapseHistory(prev, evt.compactedSummary));
+            }
           } else if (evt.type === 'error') {
             setError(evt.message || t('ask.error', 'The assistant failed to respond.'));
             patchLast((m) => { m.streaming = false; });
@@ -380,9 +401,21 @@ function AskView() {
             {messages.map((message, index) => (
               <div key={index} className={`chat-row chat-row-${message.role}`}>
                 <div className="chat-bubble">
-                  {message.role === 'assistant' ? (
+                  {message.role !== 'assistant' ? (
+                    <p className="chat-user-text">{message.content}</p>
+                  ) : message.compactedNote ? (
+                    <details className="chat-compacted-note">
+                      <summary>{t('ask.compacted', 'Conversation compacted to fit the model’s context')}</summary>
+                      <div className="chat-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
+                      </div>
+                    </details>
+                  ) : (
                     <>
                       <ToolTrace tools={message.tools} />
+                      {message.compacting ? (
+                        <div className="chat-compacting">{t('ask.compacting', 'Compacting the conversation to fit the model’s context…')}</div>
+                      ) : null}
                       {message.content ? (
                         <div className="chat-markdown">
                           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
@@ -390,7 +423,7 @@ function AskView() {
                           </ReactMarkdown>
                         </div>
                       ) : (
-                        message.streaming ? (
+                        message.streaming && !message.compacting ? (
                           <div className="chat-typing"><span /><span /><span /></div>
                         ) : null
                       )}
@@ -398,8 +431,6 @@ function AskView() {
                       <Citations citations={message.citations} />
                       <StatsInfo stats={message.stats} />
                     </>
-                  ) : (
-                    <p className="chat-user-text">{message.content}</p>
                   )}
                 </div>
               </div>

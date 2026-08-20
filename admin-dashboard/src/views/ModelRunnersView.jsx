@@ -86,6 +86,7 @@ function ModelRunnersView() {
     { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: 'Live reachability of the endpoint, polled periodically. Click a health cell for recent history.' },
     { key: 'active', label: 'Active', tip: 'Whether this endpoint is currently in use.', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
     { key: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), tip: 'Max simultaneous requests Partio sends to this endpoint.', render: (r) => (r.maxConcurrentRequests ?? 2) },
+    { key: 'contextSize', label: t('modelRunners.contextSize'), tip: 'Completion context window (tokens); drives automatic chat compaction. 0 = off.', render: (r) => (r.contextSize ? r.contextSize : '—') },
     { key: 'id', label: 'ID', tip: 'The Partio endpoint id. Click to copy — used when submitting links and in the API.', render: (r) => <CopyableId value={r.id} truncateLen={12} /> }
   ];
 
@@ -97,6 +98,7 @@ function ModelRunnersView() {
     { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })), tip: 'The wire protocol this endpoint speaks. Ollama for the local runner; OpenAI/Gemini for those hosted APIs.' },
     { name: 'apiKey', label: 'API Key (write-only)', type: 'password', tip: 'Secret key for hosted providers. Stored encrypted and never returned. Leave blank for a keyless local Ollama.' },
     { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Cap on simultaneous requests Partio opens to this endpoint. Keep low (2) for a single local model; raise for scaled hosted APIs.' },
+    { name: 'contextSize', label: t('modelRunners.contextSize'), type: 'number', default: 0, min: 0, placeholder: '8192', tip: 'Completion models only: the model’s context window in tokens (e.g. 8192). When the chat history approaches this, the conversation is automatically compacted into a summary. 0 disables compaction.' },
     { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, this endpoint is kept but not used for ingestion or answering.' }
   ];
 

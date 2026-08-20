@@ -241,7 +241,8 @@ namespace Pneuma.Server.Routes
                 Endpoint = endpoint.Endpoint,
                 ApiFormat = endpoint.ApiFormat,
                 Active = endpoint.Active,
-                MaxConcurrentRequests = endpoint.MaxConcurrentRequests
+                MaxConcurrentRequests = endpoint.MaxConcurrentRequests,
+                ContextSize = endpoint.ContextSize
             };
         }
 
@@ -255,7 +256,8 @@ namespace Pneuma.Server.Routes
                 ApiFormat = request.ApiFormat,
                 ApiKey = request.ApiKey,
                 Active = request.Active,
-                MaxConcurrentRequests = System.Math.Max(1, request.MaxConcurrentRequests)
+                MaxConcurrentRequests = System.Math.Max(1, request.MaxConcurrentRequests),
+                ContextSize = System.Math.Max(0, request.ContextSize)
             };
         }
 

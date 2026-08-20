@@ -2,6 +2,7 @@ namespace Pneuma.Server.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -29,6 +30,16 @@ namespace Pneuma.Server.Services
         #region Private-Members
 
         private readonly int _MaxIterations;
+
+        // Fraction of the model's context window at which the running conversation is compacted. Leaves head-
+        // room for tool definitions, retrieved content, and the answer itself.
+        private const double _CompactionThreshold = 0.7;
+
+        private const string _FallbackCompressionPrompt =
+            "Compact the conversation so far into a single, self-contained summary. Preserve every important detail " +
+            "(the user's goals, constraints, decisions, facts, named entities, and unresolved questions), deduplicate " +
+            "repeated information, and aggressively minimize length. Do not invent anything or answer the latest " +
+            "question. Output only the summary.";
 
         private const string _FallbackSystemPrompt =
             "You are Pneuma's knowledge assistant. Answer questions about the curated knowledge graph using the " +
@@ -113,6 +124,30 @@ namespace Pneuma.Server.Services
                 string content = turn.Content ?? String.Empty;
                 if (String.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase)) messages.Add(ChatMessage.Assistant(content));
                 else messages.Add(ChatMessage.User(content));
+            }
+
+            // Automatic conversation compaction: when the running history approaches the answering model's
+            // context window, summarize everything before the latest user turn and replace it, so the
+            // conversation can continue within budget. The summary is streamed back so the caller can replace
+            // its own message history with it.
+            string? compactedSummary = null;
+            if (runner.ContextSize > 0 && turns.Count > 2)
+            {
+                int budget = (int)(runner.ContextSize * _CompactionThreshold);
+                if (EstimateTokens(messages) > budget)
+                {
+                    await emit(new { type = "compacting" }, false, token).ConfigureAwait(false);
+                    compactedSummary = await CompactAsync(tenantId, client, turns, token).ConfigureAwait(false);
+                    if (!String.IsNullOrWhiteSpace(compactedSummary))
+                    {
+                        messages = new List<ChatMessage>
+                        {
+                            ChatMessage.System(systemPrompt),
+                            ChatMessage.Assistant("Summary of the conversation so far:\n" + compactedSummary),
+                            ChatMessage.User(turns[turns.Count - 1].Content ?? String.Empty)
+                        };
+                    }
+                }
             }
 
             long promptTokens = 0;
@@ -261,7 +296,9 @@ namespace Pneuma.Server.Services
                 generationMs,
                 tokensPerSecond,
                 toolCalls = toolTrace,
-                citations
+                citations,
+                compacted = !String.IsNullOrWhiteSpace(compactedSummary),
+                compactedSummary
             }, true, token).ConfigureAwait(false);
         }
 
@@ -319,6 +356,58 @@ namespace Pneuma.Server.Services
             }
 
             return citations;
+        }
+
+        /// <summary>Rough token estimate for the running conversation (≈4 characters per token).</summary>
+        private static int EstimateTokens(List<ChatMessage> messages)
+        {
+            long chars = 0;
+            foreach (ChatMessage message in messages)
+            {
+                if (!String.IsNullOrEmpty(message.Content)) chars += message.Content.Length;
+            }
+            return (int)Math.Min(int.MaxValue, chars / 4);
+        }
+
+        /// <summary>
+        /// Summarize the conversation up to (but excluding) the latest user turn using the tenant's configured
+        /// compression prompt, so the prior history can be replaced by a compact summary. Best-effort: returns
+        /// null when the model produces nothing usable.
+        /// </summary>
+        private async Task<string?> CompactAsync(string tenantId, CompletionClientBase client, List<ChatTurn> turns, CancellationToken token)
+        {
+            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.compress", token).ConfigureAwait(false);
+            string compressionPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackCompressionPrompt : prompt!.Content;
+
+            StringBuilder transcript = new StringBuilder();
+            for (int i = 0; i < turns.Count - 1; i++)
+            {
+                ChatTurn turn = turns[i];
+                string role = String.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User";
+                transcript.Append(role).Append(": ").AppendLine(turn.Content ?? String.Empty);
+            }
+            if (transcript.Length == 0) return null;
+
+            try
+            {
+                ChatCompletionOptions options = new ChatCompletionOptions
+                {
+                    Temperature = 0.2,
+                    MaxTokens = 1024,
+                    SystemPrompt = compressionPrompt
+                };
+                ChatResponse response = await client.ChatAsync(transcript.ToString(), options, token).ConfigureAwait(false);
+                if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text)) return response.Text.Trim();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn("[AgenticChatService] conversation compaction failed: " + e.Message);
+            }
+            return null;
         }
 
         private static string Truncate(string value, int max)

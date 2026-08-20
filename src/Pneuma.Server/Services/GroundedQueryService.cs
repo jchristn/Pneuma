@@ -445,7 +445,8 @@ namespace Pneuma.Server.Services
                 BaseUrl = endpoint.Endpoint ?? String.Empty,
                 DefaultModel = endpoint.Model ?? String.Empty,
                 Usage = ModelRunnerUsageEnum.Both,
-                Active = true
+                Active = true,
+                ContextSize = endpoint.ContextSize
             };
 
             // The Partio endpoint's key is plaintext; store it encrypted so the shared answer path (which

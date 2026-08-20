@@ -56,6 +56,13 @@ namespace Pneuma.Core.Models
         /// <summary>Whether the runner is enabled.</summary>
         public bool Active { get; set; } = true;
 
+        /// <summary>
+        /// Maximum context window (in tokens) of the model, when known. Drives automatic chat conversation
+        /// compression once the running message history approaches the window. 0 means unknown/disabled.
+        /// Not persisted for stored runners; populated on the transient runner resolved from a Partio endpoint.
+        /// </summary>
+        public int ContextSize { get; set; } = 0;
+
         /// <summary>Whether the runner is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 

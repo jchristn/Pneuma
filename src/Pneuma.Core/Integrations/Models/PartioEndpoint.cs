@@ -33,5 +33,12 @@ namespace Pneuma.Core.Integrations.Models
         /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 2.
         /// </summary>
         public int MaxConcurrentRequests { get; set; } = 2;
+
+        /// <summary>
+        /// Maximum context window (in tokens) of this completion model. Partio has no discrete field for it,
+        /// so it round-trips via the endpoint's extensible <c>contextSize</c> tag. Drives automatic chat
+        /// conversation compression once the message history approaches the window. 0 disables compression.
+        /// </summary>
+        public int ContextSize { get; set; } = 0;
     }
 }

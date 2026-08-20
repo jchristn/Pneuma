@@ -203,7 +203,30 @@ namespace Pneuma.Core.Database
                 "answer, say so plainly rather than guessing.", token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "assistant.system", "Assistant System Prompt", DefaultAssistantSystemPrompt, token).ConfigureAwait(false);
+
+            await SeedPromptAsync(db, "assistant.compress", "Conversation Compression", DefaultConversationCompressionPrompt, token).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Default prompt for compacting a long chat conversation into a compact summary (Prompts key
+        /// "assistant.compress"). Used automatically when the running message history approaches the answering
+        /// model's context window; the produced summary replaces the entire prior history so the conversation
+        /// can continue within budget. An administrator may edit it on the Prompts page.
+        /// </summary>
+        private const string DefaultConversationCompressionPrompt =
+            "You are compacting a conversation so it fits within a limited context window. Rewrite the conversation " +
+            "so far into a single, self-contained summary that a later turn of the assistant can rely on as if it had " +
+            "seen the whole exchange.\n\n" +
+            "Requirements:\n" +
+            "- Preserve every important detail: the user's goals and constraints, decisions made, facts and figures, " +
+            "named entities, and any specific instructions or preferences the user gave.\n" +
+            "- Preserve unresolved questions and the current state of the task so work can continue seamlessly.\n" +
+            "- Deduplicate: state each fact once; remove repetition, small talk, and anything already superseded.\n" +
+            "- Aggressively reduce length. Favor terse, information-dense notes over prose. Drop pleasantries and " +
+            "restated context. The goal is the smallest faithful representation of what matters.\n" +
+            "- Do not invent anything that was not in the conversation, and do not answer the latest question here — " +
+            "only summarize.\n\n" +
+            "Output only the summary text, with no preamble.";
 
         /// <summary>
         /// Default system prompt for the agentic chat assistant (Prompts key "assistant.system"). It tells the
