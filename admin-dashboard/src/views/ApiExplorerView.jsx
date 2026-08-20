@@ -33,8 +33,9 @@ function ParamRows({ params, values, onChange }) {
   if (!params || params.length === 0) return <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>—</p>;
   return params.map((p) => (
     <div className="explorer-param-row" key={p.name}>
-      <label title={p.description || ''}>{p.name}{p.required ? ' *' : ''}</label>
-      <input value={values[p.name] ?? ''} onChange={(e) => onChange({ ...values, [p.name]: e.target.value })} placeholder={p.schema?.type || 'string'} />
+      <label className={p.description ? 'has-tip' : undefined} title={p.description || `The ${p.name} parameter (${p.schema?.type || 'string'})${p.required ? ', required' : ', optional'}.`}>{p.name}{p.required ? ' *' : ''}</label>
+      <input value={values[p.name] ?? ''} onChange={(e) => onChange({ ...values, [p.name]: e.target.value })} placeholder={p.schema?.type || 'string'}
+        title={p.description || `The ${p.name} parameter (${p.schema?.type || 'string'})${p.required ? ', required' : ', optional'}.`} />
     </div>
   ));
 }
@@ -80,7 +81,8 @@ function ApiExplorerView() {
   return (
     <div>
       <PageHeader title={t('explorer.title')} subtitle={t('explorer.subtitle')} actions={(
-        <button type="button" className="button-secondary" onClick={() => setShowHistory((v) => !v)}>{t('explorer.history')} ({ex.history.length})</button>
+        <button type="button" className="button-secondary" onClick={() => setShowHistory((v) => !v)}
+          title="Show or hide previously executed calls from this browser. Reload any of them to replay.">{t('explorer.history')} ({ex.history.length})</button>
       )} />
 
       {ex.specError && <ErrorBanner message={`${t('explorer.noSpec')} (${ex.specError})`} />}
@@ -92,8 +94,8 @@ function ApiExplorerView() {
             <div className="explorer-history-item" key={h.id}>
               <span><span className={methodClass(h.method)}>{h.method}</span> <code>{h.path}</code> <StatusPill label={h.status} tone={toneForHttpStatus(h.status)} /></span>
               <span style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" className="button-secondary" onClick={() => ex.loadFromHistory(h)}>{t('explorer.load')}</button>
-                <button type="button" className="icon-button" onClick={() => ex.deleteHistory(h.id)} aria-label={t('common.delete')}>✕</button>
+                <button type="button" className="button-secondary" onClick={() => ex.loadFromHistory(h)} title="Load this past call’s operation and parameters back into the form.">{t('explorer.load')}</button>
+                <button type="button" className="icon-button" onClick={() => ex.deleteHistory(h.id)} aria-label={t('common.delete')} title="Remove this entry from your local call history.">✕</button>
               </span>
             </div>
           ))}
@@ -102,7 +104,7 @@ function ApiExplorerView() {
 
       <div className="explorer-layout">
         <div className="explorer-op-select">
-          <label htmlFor="explorer-operation">{t('explorer.operations')}</label>
+          <label htmlFor="explorer-operation" className="has-tip" title="Pick an API operation from the server’s OpenAPI spec. The form below adapts to its parameters and body.">{t('explorer.operations')}</label>
           {ex.specLoading ? (
             <div className="table-loading"><div className="loading-spinner" /></div>
           ) : (
@@ -110,6 +112,7 @@ function ApiExplorerView() {
               id="explorer-operation"
               value={ex.operationId || ''}
               onChange={(e) => ex.selectOperation(e.target.value)}
+              title="Pick an API operation from the server’s OpenAPI spec. The form below adapts to its parameters and body."
             >
               <option value="" disabled>{t('explorer.selectOp')}</option>
               {ex.groups.map((g) => (
@@ -170,7 +173,8 @@ function ApiExplorerView() {
                 </div>
               </div>
 
-              <button type="button" className="button-primary" onClick={validateAndRun} disabled={ex.running}>
+              <button type="button" className="button-primary" onClick={validateAndRun} disabled={ex.running}
+                title="Send this request to the live API using your current session, then show the response below.">
                 {ex.running ? t('explorer.running') : t('explorer.execute')}
               </button>
 

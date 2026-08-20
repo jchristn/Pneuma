@@ -150,29 +150,29 @@ function RequestHistoryView() {
 
       <div className="filter-bar">
         <div className="field">
-          <label htmlFor="f-method">{t('requests.method')}</label>
-          <select id="f-method" value={filters.method} onChange={(e) => setFilter('method', e.target.value)}>
+          <label htmlFor="f-method" className="has-tip" title="Show only requests using this HTTP method. Leave blank for all methods.">{t('requests.method')}</label>
+          <select id="f-method" value={filters.method} onChange={(e) => setFilter('method', e.target.value)} title="Show only requests using this HTTP method. Leave blank for all methods.">
             {METHODS.map((m) => <option key={m} value={m}>{m || t('common.none')}</option>)}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="f-status">{t('requests.statusCode')}</label>
-          <input id="f-status" value={filters.statusCode} onChange={(e) => setFilter('statusCode', e.target.value)} placeholder="500" />
+          <label htmlFor="f-status" className="has-tip" title="Match an exact response status code (e.g. 500 to find server errors, 401 for auth failures).">{t('requests.statusCode')}</label>
+          <input id="f-status" value={filters.statusCode} onChange={(e) => setFilter('statusCode', e.target.value)} placeholder="500" title="Match an exact response status code (e.g. 500 to find server errors, 401 for auth failures)." />
         </div>
         <div className="field" style={{ minWidth: '200px' }}>
-          <label htmlFor="f-path">{t('requests.pathContains')}</label>
-          <input id="f-path" value={filters.pathContains} onChange={(e) => setFilter('pathContains', e.target.value)} placeholder="/v1.0/..." />
+          <label htmlFor="f-path" className="has-tip" title="Substring match on the request path — e.g. /v1.0/subjects to see all subject calls.">{t('requests.pathContains')}</label>
+          <input id="f-path" value={filters.pathContains} onChange={(e) => setFilter('pathContains', e.target.value)} placeholder="/v1.0/..." title="Substring match on the request path — e.g. /v1.0/subjects to see all subject calls." />
         </div>
         <div className="field">
-          <label htmlFor="f-from">{t('requests.from')}</label>
-          <input id="f-from" type="datetime-local" value={filters.fromUtc} onChange={(e) => setFilter('fromUtc', e.target.value)} />
+          <label htmlFor="f-from" className="has-tip" title="Only show requests captured at or after this local time.">{t('requests.from')}</label>
+          <input id="f-from" type="datetime-local" value={filters.fromUtc} onChange={(e) => setFilter('fromUtc', e.target.value)} title="Only show requests captured at or after this local time." />
         </div>
         <div className="field">
-          <label htmlFor="f-to">{t('requests.to')}</label>
-          <input id="f-to" type="datetime-local" value={filters.toUtc} onChange={(e) => setFilter('toUtc', e.target.value)} />
+          <label htmlFor="f-to" className="has-tip" title="Only show requests captured at or before this local time.">{t('requests.to')}</label>
+          <input id="f-to" type="datetime-local" value={filters.toUtc} onChange={(e) => setFilter('toUtc', e.target.value)} title="Only show requests captured at or before this local time." />
         </div>
-        <button type="button" className="button-primary" onClick={applyFilters}>{t('common.apply')}</button>
-        <button type="button" className="button-secondary" onClick={clearFilters}>{t('common.clear')}</button>
+        <button type="button" className="button-primary" onClick={applyFilters} title="Apply these filters and reload the request list.">{t('common.apply')}</button>
+        <button type="button" className="button-secondary" onClick={clearFilters} title="Reset all filters and show the full request history.">{t('common.clear')}</button>
       </div>
 
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
