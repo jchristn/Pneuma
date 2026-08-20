@@ -1092,13 +1092,17 @@ a.relationship-target:hover {
 .answer-meta { margin: 0.5rem 0 0; font-size: 0.8rem; opacity: 0.65; }
 
 /* ------------------------------------------------------------------ Ask / agentic chat */
-.chat-view { display: flex; flex-direction: column; height: 100%; min-height: 60vh; gap: 0.75rem; }
+.chat-view { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 0.75rem; }
+/* Post-submit chat fills the workspace; only the inner message list scrolls. */
+.app-shell:has(.chat-view) { height: 100vh; }
+.app-main:has(.chat-view) { overflow: hidden; display: flex; flex-direction: column; min-height: 0; max-width: none; padding: 24px 24px 18px; }
+.app-main:has(.chat-view) .chat-view { flex: 1 1 auto; }
 .chat-view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex: 0 0 auto; }
 .chat-view-head .page-title, .chat-view-head .page-subtitle { margin-bottom: 0.15rem; }
 
 .chat-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
-.chat-messages { display: flex; flex-direction: column; gap: 1.1rem; max-width: 52rem; margin: 0 auto; padding: 0.5rem 0 1rem; }
+.chat-messages { display: flex; flex-direction: column; gap: 1.1rem; max-width: none; margin: 0; padding: 0.5rem 0 1rem; }
 .chat-row { display: flex; }
 .chat-row-user { justify-content: flex-end; }
 .chat-row-assistant { justify-content: flex-start; }
@@ -1170,7 +1174,7 @@ a.relationship-target:hover {
 .chat-stats-popover td { text-align: right; color: var(--color-text); font-variant-numeric: tabular-nums; padding: 0.15rem 0; }
 
 /* Composer */
-.chat-composer { flex: 0 0 auto; max-width: 52rem; width: 100%; margin: 0 auto; }
+.chat-composer { flex: 0 0 auto; max-width: none; width: 100%; margin: 0; }
 .chat-input-wrap { display: flex; align-items: flex-end; gap: 0.5rem; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); padding: 0.5rem 0.5rem 0.5rem 0.85rem; }
 .chat-input-wrap:focus-within { border-color: var(--color-primary); }
 .chat-input { flex: 1; border: none; background: transparent; color: var(--color-text); resize: none; font: inherit; line-height: 1.5; max-height: 200px; outline: none; padding: 0.25rem 0; }
