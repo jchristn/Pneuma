@@ -14,9 +14,9 @@ function CredentialsView() {
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];
   const formFields = [
-    { name: 'name', label: 'Name', required: true },
-    { name: 'userId', label: 'User ID (optional)' },
-    { name: 'expiresUtc', label: 'Expires UTC (optional)', placeholder: 'YYYY-MM-DDTHH:mm:ssZ' }
+    { name: 'name', label: 'Name', required: true, tip: 'A label to recognize this API key by (e.g. "ci-pipeline"). The access/secret pair is generated on creation.' },
+    { name: 'userId', label: 'User ID (optional)', tip: 'Bind the credential to a specific user so its actions inherit that user’s permissions. Leave blank for a tenant-scoped key.' },
+    { name: 'expiresUtc', label: 'Expires UTC (optional)', placeholder: 'YYYY-MM-DDTHH:mm:ssZ', tip: 'When the key stops working (ISO-8601 UTC). Leave blank for a non-expiring key.' }
   ];
   // Credential create returns a one-time secretKey; show the full response so the
   // operator can copy it before it is gone.

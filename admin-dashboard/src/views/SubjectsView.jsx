@@ -24,10 +24,10 @@ function SubjectsView() {
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];
   const formFields = [
-    { name: 'displayName', label: 'Display Name', required: true },
-    { name: 'type', label: 'Type', type: 'text', placeholder: 'Person', default: 'Person' },
-    { name: 'description', label: 'Description', type: 'textarea', rows: 3 },
-    { name: 'graphRootNodeId', label: 'Graph Root Node ID', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify }
+    { name: 'displayName', label: 'Display Name', required: true, tip: 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content you ingest is scoped to it.' },
+    { name: 'type', label: 'Type', type: 'text', placeholder: 'Person', default: 'Person', tip: 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.' },
+    { name: 'description', label: 'Description', type: 'textarea', rows: 3, tip: 'Optional notes shown in the subjects list to help operators tell similar subjects apart.' },
+    { name: 'graphRootNodeId', label: 'Graph Root Node ID', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify, tip: 'The knowledge-graph root node id for this subject. Auto-derived from the display name; override only if you need a specific slug.' }
   ];
   return (
     <ResourceView

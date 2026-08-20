@@ -83,21 +83,21 @@ function ModelRunnersView() {
     { key: 'model', label: t('modelRunners.model'), render: (r) => r.model || '—' },
     { key: 'endpoint', label: t('modelRunners.endpoint'), cellClass: 'wrap', sortable: false, render: (r) => r.endpoint || '—' },
     { key: 'apiFormat', label: t('modelRunners.apiFormat'), render: (r) => r.apiFormat || '—' },
-    { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth },
-    { key: 'active', label: 'Active', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
-    { key: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), render: (r) => (r.maxConcurrentRequests ?? 2) },
-    { key: 'id', label: 'ID', render: (r) => <CopyableId value={r.id} truncateLen={12} /> }
+    { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: 'Live reachability of the endpoint, polled periodically. Click a health cell for recent history.' },
+    { key: 'active', label: 'Active', tip: 'Whether this endpoint is currently in use.', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
+    { key: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), tip: 'Max simultaneous requests Partio sends to this endpoint.', render: (r) => (r.maxConcurrentRequests ?? 2) },
+    { key: 'id', label: 'ID', tip: 'The Partio endpoint id. Click to copy — used when submitting links and in the API.', render: (r) => <CopyableId value={r.id} truncateLen={12} /> }
   ];
 
   const formFields = [
-    { name: 'type', label: t('modelRunners.type'), type: 'select', required: true, default: 'Embedding', options: TYPES.map((x) => ({ value: x, label: x })) },
-    { name: 'name', label: 'Name' },
-    { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text' },
-    { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'http://ollama:11434' },
-    { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })) },
-    { name: 'apiKey', label: 'API Key (write-only)', type: 'password' },
-    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2' },
-    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false }
+    { name: 'type', label: t('modelRunners.type'), type: 'select', required: true, default: 'Embedding', options: TYPES.map((x) => ({ value: x, label: x })), tip: 'Embedding endpoints turn text into vectors for search; Completion endpoints generate answers. Pick which role this model serves.' },
+    { name: 'name', label: 'Name', tip: 'A human-readable label for this endpoint (e.g. "local-embed"). Does not affect behavior.' },
+    { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text', tip: "The provider's model identifier exactly as it expects it — e.g. 'nomic-embed-text' for embeddings or 'llama3.2' for chat." },
+    { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'http://ollama:11434', tip: 'Base URL of the provider serving this model. For the bundled Ollama use http://ollama:11434.' },
+    { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })), tip: 'The wire protocol this endpoint speaks. Ollama for the local runner; OpenAI/Gemini for those hosted APIs.' },
+    { name: 'apiKey', label: 'API Key (write-only)', type: 'password', tip: 'Secret key for hosted providers. Stored encrypted and never returned. Leave blank for a keyless local Ollama.' },
+    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Cap on simultaneous requests Partio opens to this endpoint. Keep low (2) for a single local model; raise for scaled hosted APIs.' },
+    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, this endpoint is kept but not used for ingestion or answering.' }
   ];
 
   const detailFields = formFields.filter((f) => f.name !== 'apiKey');

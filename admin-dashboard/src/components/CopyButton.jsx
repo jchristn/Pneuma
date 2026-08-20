@@ -30,7 +30,7 @@ function copyToClipboard(text) {
   });
 }
 
-function CopyButton({ value, label, className = '' }) {
+function CopyButton({ value, label, className = '', title = null }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -50,7 +50,7 @@ function CopyButton({ value, label, className = '' }) {
       type="button"
       className={`copy-button ${copied ? 'copied' : ''} ${className}`}
       onClick={handleCopy}
-      title={copied ? t('common.copied') : (label || t('common.copy'))}
+      title={copied ? t('common.copied') : (title || label || t('common.copy'))}
       aria-label={copied ? t('common.copied') : (label || t('common.copy'))}
     >
       {copied ? '✓' : '⧉'}{label ? <span>{copied ? t('common.copied') : label}</span> : null}

@@ -112,12 +112,12 @@ function LinksView() {
   const noCollections = collectionOptions.length === 0;
 
   const formFields = [
-    { name: 'subjectId', label: t('links.subject'), type: 'select', required: true, placeholder: t('links.selectSubject'), default: selectedSubjectId || '', options: subjectOptions },
-    { name: 'url', label: 'URL', required: true, placeholder: 'https://...' },
-    { name: 'title', label: t('links.title') },
-    { name: 'embeddingEndpointId', label: t('links.embeddingModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: embeddingOptions, default: embeddingOptions.length === 1 ? embeddingOptions[0].value : undefined },
-    { name: 'completionEndpointId', label: t('links.completionModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: completionOptions, default: completionOptions.length === 1 ? completionOptions[0].value : undefined },
-    { name: 'collectionId', label: t('links.collection'), type: 'select', required: true, placeholder: t('links.selectCollection'), options: collectionOptions, default: collectionOptions.length === 1 ? collectionOptions[0].value : undefined }
+    { name: 'subjectId', label: t('links.subject'), type: 'select', required: true, placeholder: t('links.selectSubject'), default: selectedSubjectId || '', options: subjectOptions, tip: 'Which subject this source belongs to. Its extracted content and answers are scoped to that subject.' },
+    { name: 'url', label: 'URL', required: true, placeholder: 'https://...', tip: 'The web page or document URL to ingest. Pneuma crawls it, extracts entities and text, embeds it, and indexes it.' },
+    { name: 'title', label: t('links.title'), tip: 'Optional friendly name for this source. Defaults to the page title when left blank.' },
+    { name: 'embeddingEndpointId', label: t('links.embeddingModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: embeddingOptions, default: embeddingOptions.length === 1 ? embeddingOptions[0].value : undefined, tip: 'The embedding endpoint used to vectorize this source. Must produce vectors matching the target collection’s dimensionality.' },
+    { name: 'completionEndpointId', label: t('links.completionModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: completionOptions, default: completionOptions.length === 1 ? completionOptions[0].value : undefined, tip: 'The completion endpoint used during ingestion to extract the knowledge-graph (entities and relationships) from this source.' },
+    { name: 'collectionId', label: t('links.collection'), type: 'select', required: true, placeholder: t('links.selectCollection'), options: collectionOptions, default: collectionOptions.length === 1 ? collectionOptions[0].value : undefined, tip: 'The RecallDB collection this source’s chunks are indexed into. Choose one whose dimensionality matches the embedding model.' }
   ];
 
   // Links are created via /v1.0/subjects/{subjectId}/links which enqueues ingestion.

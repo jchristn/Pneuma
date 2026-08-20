@@ -19,9 +19,9 @@ function CollectionsView() {
   ];
 
   const formFields = [
-    { name: 'name', label: t('collections.name'), required: true, placeholder: t('collections.namePlaceholder') },
-    { name: 'description', label: t('collections.description') },
-    { name: 'dimensionality', label: t('collections.dimensionality'), type: 'number', required: true, default: 768, help: t('collections.dimensionalityHelp') }
+    { name: 'name', label: t('collections.name'), required: true, placeholder: t('collections.namePlaceholder'), tip: 'A name for this vector collection. Group related sources into the same collection so they’re searched together.' },
+    { name: 'description', label: t('collections.description'), tip: 'Optional notes about what this collection holds, shown in the list.' },
+    { name: 'dimensionality', label: t('collections.dimensionality'), type: 'number', required: true, default: 768, help: t('collections.dimensionalityHelp'), tip: 'The embedding vector length, fixed at creation. It MUST match your embedding model’s output (e.g. 768 for nomic-embed-text). Wrong values make indexing fail.' }
   ];
 
   // Collections are created via PUT /v1.0/collections; coerce the dimensionality to a number.

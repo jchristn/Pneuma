@@ -42,13 +42,13 @@ function UsersView() {
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];
   const formFields = [
-    { name: 'firstName', label: 'First Name', required: true },
-    { name: 'lastName', label: 'Last Name', required: true },
-    { name: 'email', label: 'Email', type: 'email', required: true },
-    { name: 'password', label: 'Password (leave blank to keep)', type: 'password' },
-    { name: 'tenantId', label: 'Tenant ID (optional)' },
-    { name: 'isAdmin', label: 'System Admin', type: 'checkbox', omitIfEmpty: false },
-    { name: 'isTenantAdmin', label: 'Tenant Admin', type: 'checkbox', omitIfEmpty: false }
+    { name: 'firstName', label: 'First Name', required: true, tip: 'The user’s given name, shown in the UI and audit logs.' },
+    { name: 'lastName', label: 'Last Name', required: true, tip: 'The user’s family name.' },
+    { name: 'email', label: 'Email', type: 'email', required: true, tip: 'Used as the login identity and must be unique within the tenant.' },
+    { name: 'password', label: 'Password (leave blank to keep)', type: 'password', tip: 'Set an initial password, or leave blank when editing to keep the current one unchanged.' },
+    { name: 'tenantId', label: 'Tenant ID (optional)', tip: 'Which tenant this user belongs to. Leave blank to use the current tenant.' },
+    { name: 'isAdmin', label: 'System Admin', type: 'checkbox', omitIfEmpty: false, tip: 'Grants full system-wide access, bypassing role checks across all tenants. Grant sparingly.' },
+    { name: 'isTenantAdmin', label: 'Tenant Admin', type: 'checkbox', omitIfEmpty: false, tip: 'Grants full access within this user’s tenant, bypassing role checks for that tenant only.' }
   ];
   const detailFields = formFields
     .filter((f) => f.name !== 'password')

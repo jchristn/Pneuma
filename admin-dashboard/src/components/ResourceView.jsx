@@ -17,30 +17,33 @@ function getId(item, idField) {
 }
 
 function FieldInput({ field, value, onChange }) {
+  const tip = field.tip || undefined;
+  const labelClass = tip ? 'has-tip' : undefined;
   const common = {
     id: `field-${field.name}`,
     value: value ?? '',
     onChange: (e) => onChange(field.name, field.type === 'checkbox' ? e.target.checked : e.target.value),
     disabled: field.readOnly,
     required: !!field.required,
-    placeholder: field.placeholder || ''
+    placeholder: field.placeholder || '',
+    title: tip
   };
   if (field.type === 'checkbox') {
     return (
-      <div className="checkbox-field">
-        <input id={common.id} type="checkbox" checked={!!value} onChange={common.onChange} disabled={field.readOnly} />
-        <label htmlFor={common.id} style={{ margin: 0 }}>{field.label}</label>
+      <div className="checkbox-field" title={tip}>
+        <input id={common.id} type="checkbox" checked={!!value} onChange={common.onChange} disabled={field.readOnly} title={tip} />
+        <label htmlFor={common.id} className={labelClass} style={{ margin: 0 }} title={tip}>{field.label}</label>
       </div>
     );
   }
   if (field.type === 'select') {
     return (
       <div className="field">
-        <label htmlFor={common.id}>{field.label}</label>
+        <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
         <select {...common}>
           {field.placeholder && <option value="">{field.placeholder}</option>}
           {(field.options || []).map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value} title={o.tip}>{o.label}</option>
           ))}
         </select>
       </div>
@@ -56,14 +59,14 @@ function FieldInput({ field, value, onChange }) {
     };
     return (
       <div className="field">
-        <label>{field.label}</label>
+        <label className={labelClass} title={tip}>{field.label}</label>
         <div className="checkbox-group">
           {(field.options || []).map((o) => {
             const cid = `field-${field.name}-${o.value}`;
             return (
-              <div className="checkbox-field" key={o.value}>
+              <div className="checkbox-field" key={o.value} title={o.tip}>
                 <input id={cid} type="checkbox" checked={arr.includes(o.value)} onChange={(e) => toggle(o.value, e.target.checked)} disabled={field.readOnly} />
-                <label htmlFor={cid} style={{ margin: 0 }}>{o.label}</label>
+                <label htmlFor={cid} style={{ margin: 0 }} title={o.tip}>{o.label}</label>
               </div>
             );
           })}
@@ -74,14 +77,14 @@ function FieldInput({ field, value, onChange }) {
   if (field.type === 'textarea') {
     return (
       <div className="field">
-        <label htmlFor={common.id}>{field.label}</label>
+        <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
         <textarea {...common} rows={field.rows || 6} />
       </div>
     );
   }
   return (
     <div className="field">
-      <label htmlFor={common.id}>{field.label}</label>
+      <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
       <input {...common} type={field.type || 'text'} />
     </div>
   );
@@ -164,7 +167,7 @@ function DetailView({ fields, item }) {
     <dl className="kv-grid">
       {fields.map((f) => (
         <div key={f.name} style={{ display: 'contents' }}>
-          <dt>{f.label}</dt>
+          <dt className={f.tip ? 'has-tip' : undefined} title={f.tip}>{f.label}</dt>
           <dd>{f.render ? f.render(item) : (item[f.name] === undefined || item[f.name] === null || item[f.name] === '' ? '—' : String(item[f.name]))}</dd>
         </div>
       ))}
@@ -269,17 +272,18 @@ function ResourceView({
     width: '56px',
     render: (item) => (
       <ActionMenu items={[
-        { key: 'view', label: t('common.view'), onClick: () => openView(item) },
+        { key: 'view', label: t('common.view'), tip: t('common.viewTip', { name: singular, defaultValue: `Open a read-only detail view of this ${singular}.` }), onClick: () => openView(item) },
         ...extraActions.map((a) => ({
           key: a.key || a.label,
           label: a.label,
+          tip: a.tip,
           danger: a.danger,
           hidden: a.hidden,
           onClick: () => a.onClick(item)
         })),
-        { key: 'edit', label: t('common.edit'), hidden: !capabilities.edit || formFields.length === 0, onClick: () => setModal({ type: 'edit', item }) },
-        { key: 'json', label: t('common.viewJson'), hidden: !capabilities.viewJson, onClick: () => setModal({ type: 'json', item }) },
-        { key: 'delete', label: t('common.delete'), danger: true, hidden: !capabilities.delete, onClick: () => setModal({ type: 'delete', item }) }
+        { key: 'edit', label: t('common.edit'), tip: t('common.editTip', { name: singular, defaultValue: `Edit this ${singular}'s fields.` }), hidden: !capabilities.edit || formFields.length === 0, onClick: () => setModal({ type: 'edit', item }) },
+        { key: 'json', label: t('common.viewJson'), tip: t('common.viewJsonTip', { defaultValue: 'Inspect the raw JSON returned by the API for this record.' }), hidden: !capabilities.viewJson, onClick: () => setModal({ type: 'json', item }) },
+        { key: 'delete', label: t('common.delete'), tip: t('common.deleteTip', { name: singular, defaultValue: `Permanently delete this ${singular}. You'll be asked to confirm.` }), danger: true, hidden: !capabilities.delete, onClick: () => setModal({ type: 'delete', item }) }
       ]} />
     )
   };
@@ -296,7 +300,8 @@ function ResourceView({
           <>
             {headerActions}
             {capabilities.create && formFields.length > 0 && (
-              <button type="button" className="button-primary" onClick={() => setModal({ type: 'create' })}>
+              <button type="button" className="button-primary" onClick={() => setModal({ type: 'create' })}
+                title={t('resource.addTip', { name: singular, defaultValue: `Create a new ${singular}. Opens a form; nothing is saved until you submit.` })}>
                 + {t('common.add')}
               </button>
             )}

@@ -19,27 +19,27 @@ function Topbar({ onToggleSidebar }) {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <button type="button" className="icon-button hamburger" onClick={onToggleSidebar} aria-label="Menu">☰</button>
+        <button type="button" className="icon-button hamburger" onClick={onToggleSidebar} aria-label="Menu" title="Show or hide the navigation sidebar.">☰</button>
         <img className="topbar-logo" src={logo} alt="Pneuma" />
-        <span className="chip" title={serverUrl}>
+        <span className="chip" title={`API server this dashboard is talking to: ${serverUrl}`}>
           <span>{t('topbar.endpoint')}</span>
           <span className="chip-value">{serverUrl}</span>
         </span>
-        <CopyButton value={serverUrl} label={null} />
+        <CopyButton value={serverUrl} label={null} title="Copy the API server URL to the clipboard." />
       </div>
       <div className="topbar-right">
-        <span className={`role-badge ${roleClass}`}>{roleLabel}</span>
+        <span className={`role-badge ${roleClass}`} title="Your access level in this session — it determines which actions you can perform.">{roleLabel}</span>
         {authContext?.displayName && (
-          <span className="chip"><span className="chip-value">{authContext.displayName}</span></span>
+          <span className="chip" title="The account you are signed in as."><span className="chip-value">{authContext.displayName}</span></span>
         )}
         <LanguageSelector />
-        <button type="button" className="icon-button" onClick={toggleTheme} aria-label={t('topbar.theme')} title={t('topbar.theme')}>
+        <button type="button" className="icon-button" onClick={toggleTheme} aria-label={t('topbar.theme')} title="Switch between light and dark appearance.">
           {theme === 'light' ? '🌙' : '☀️'}
         </button>
-        <a className="icon-button" href={GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label={t('topbar.github')} title={t('topbar.github')}>
+        <a className="icon-button" href={GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label={t('topbar.github')} title="Open the Pneuma source repository on GitHub (new tab).">
           <Icon name="github" />
         </a>
-        <button type="button" className="icon-button" onClick={logout} aria-label={t('topbar.logout')} title={t('topbar.logout')}>
+        <button type="button" className="icon-button" onClick={logout} aria-label={t('topbar.logout')} title="Sign out and return to the login screen.">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <path d="M16 17l5-5-5-5M21 12H9" />

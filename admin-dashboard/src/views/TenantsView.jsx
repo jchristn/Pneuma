@@ -13,8 +13,8 @@ function TenantsView() {
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];
   const formFields = [
-    { name: 'name', label: 'Name', required: true },
-    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false }
+    { name: 'name', label: 'Name', required: true, tip: 'Display name for the tenant. Creating a tenant also provisions its RecallDB and LiteGraph tenants plus a default collection.' },
+    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, the tenant is retained but its users cannot sign in and its data is not served.' }
   ];
   return (
     <ResourceView

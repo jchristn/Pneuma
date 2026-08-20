@@ -12,8 +12,8 @@ function RolesView() {
     { key: 'id', label: 'ID', render: (r) => <CopyableId value={r.id ?? r.guid} truncateLen={14} /> }
   ];
   const formFields = [
-    { name: 'name', label: 'Name', required: true },
-    { name: 'description', label: 'Description', type: 'textarea', rows: 3 }
+    { name: 'name', label: 'Name', required: true, tip: 'A short name for this role (e.g. "editor"). You’ll map permissions to it and assign it to users.' },
+    { name: 'description', label: 'Description', type: 'textarea', rows: 3, tip: 'Explain what this role is for and roughly what it can do, so operators grant it appropriately.' }
   ];
   return (
     <ResourceView

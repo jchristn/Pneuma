@@ -143,6 +143,7 @@ function DataTable({
                     className={col.sortable !== false && !isServer ? 'sortable' : ''}
                     style={col.width ? { width: col.width } : undefined}
                     onClick={() => handleSort(col)}
+                    title={col.tip || (col.sortable !== false && !isServer ? 'Click to sort by this column.' : undefined)}
                   >
                     <span className="th-content">
                       {col.label}

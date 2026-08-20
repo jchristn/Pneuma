@@ -17,6 +17,7 @@ function Sidebar({ activeSection, onNavigate, open }) {
                 className={`nav-item ${activeSection === item.section ? 'active' : ''}`}
                 onClick={() => onNavigate(item.section)}
                 aria-current={activeSection === item.section ? 'page' : undefined}
+                title={item.tip}
               >
                 <span className="nav-icon"><Icon name={item.icon} /></span>
                 <span>{t(item.labelKey)}</span>

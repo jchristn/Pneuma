@@ -49,6 +49,7 @@ function ActionMenu({ items = [] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Row actions"
+        title="Actions for this row — view details, edit, inspect raw JSON, or delete."
       >
         ⋯
       </button>
@@ -65,6 +66,7 @@ function ActionMenu({ items = [] }) {
               type="button"
               className={`action-menu-item ${item.danger ? 'danger' : ''}`}
               role="menuitem"
+              title={item.tip}
               onClick={(e) => { e.stopPropagation(); setOpen(false); item.onClick(); }}
             >
               {item.label}
