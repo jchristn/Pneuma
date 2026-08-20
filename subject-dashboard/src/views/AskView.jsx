@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAuth } from '../context/AuthContext';
 import { asArray } from '../utils/api';
+import { WAIT_MESSAGES } from '../components/chatWaitMessages';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
 function useThemeMode() {
@@ -228,10 +229,30 @@ function AskView() {
   const [error, setError] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [subjectId, setSubjectId] = useState('');
+  const [waitMessage, setWaitMessage] = useState('');
 
   const abortRef = useRef(null);
   const textareaRef = useRef(null);
   const endRef = useRef(null);
+  const recentQuips = useRef([]);
+
+  // Pick a wait-state quip that hasn't been shown recently, so the rotation feels varied.
+  const pickQuip = useCallback(() => {
+    const available = WAIT_MESSAGES.filter((m) => !recentQuips.current.includes(m));
+    const pool = available.length > 0 ? available : WAIT_MESSAGES;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    recentQuips.current.push(picked);
+    if (recentQuips.current.length > 20) recentQuips.current.shift();
+    return picked;
+  }, []);
+
+  // While a request is in flight, show a rotating quip until the first token arrives.
+  useEffect(() => {
+    if (!streaming) { setWaitMessage(''); return undefined; }
+    setWaitMessage(pickQuip());
+    const id = setInterval(() => setWaitMessage(pickQuip()), 5000);
+    return () => clearInterval(id);
+  }, [streaming, pickQuip]);
 
   // Load the tenant's subjects for the scope selector; auto-select when there is exactly one.
   useEffect(() => {
@@ -426,7 +447,10 @@ function AskView() {
                         </div>
                       ) : (
                         message.streaming && !message.compacting ? (
-                          <div className="chat-typing"><span /><span /><span /></div>
+                          <div className="chat-wait">
+                            <div className="chat-typing"><span /><span /><span /></div>
+                            {waitMessage ? <span className="chat-wait-text">{waitMessage}</span> : null}
+                          </div>
                         ) : null
                       )}
                       {message.streaming && message.content ? <span className="chat-cursor">▍</span> : null}

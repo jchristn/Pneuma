@@ -1140,6 +1140,8 @@ a.relationship-target:hover {
 /* Streaming cues */
 .chat-cursor { display: inline-block; margin-left: 1px; color: var(--color-primary); animation: chat-blink 1s step-start infinite; }
 @keyframes chat-blink { 50% { opacity: 0; } }
+.chat-wait { display: inline-flex; align-items: center; gap: 0.6rem; }
+.chat-wait-text { font-size: 0.85rem; color: var(--color-text-secondary); font-style: italic; }
 .chat-typing { display: inline-flex; gap: 4px; padding: 0.35rem 0; }
 .chat-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-secondary); opacity: 0.5; animation: chat-bounce 1.2s infinite ease-in-out; }
 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
