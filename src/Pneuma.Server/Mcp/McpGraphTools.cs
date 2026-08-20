@@ -59,9 +59,10 @@ namespace Pneuma.Server.Mcp
         /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="subjectId">Optional subject to scope the search to; null searches the whole tenant.</param>
+        /// <param name="citedLinkIds">Optional sink that collects the content-link ids of the hits (for citations).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked results payload.</returns>
-        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, CancellationToken token)
+        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token)
         {
             string query = McpJsonRpc.GetStringArgument(arguments, "query");
             int max = 20;
@@ -93,6 +94,7 @@ namespace Pneuma.Server.Mcp
             {
                 if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                 if (!seen.Add(nodeId)) continue;
+                if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId)) citedLinkIds?.Add(linkId);
                 GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
                 // RecallDB is the content authority; surface its chunk text as the snippet (falling back to any
                 // graph-node content) so the assistant can answer directly from search results.
@@ -177,7 +179,7 @@ namespace Pneuma.Server.Mcp
 
             int max = ClampMax(arguments);
             string tenantId = rc.TenantId ?? String.Empty;
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, null, token).ConfigureAwait(false);
 
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
@@ -219,7 +221,7 @@ namespace Pneuma.Server.Mcp
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, null, token).ConfigureAwait(false);
                 List<object> sourceSummaries = new List<object>();
                 foreach (GraphNode source in sources)
                 {

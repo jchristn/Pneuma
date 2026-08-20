@@ -94,11 +94,12 @@ namespace Pneuma.Server.Services
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum sources to retrieve.</param>
         /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
+        /// <param name="citedLinkIds">Optional sink that collects the content-link ids the answer drew from (for citations).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The grounded answer.</returns>
-        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, CancellationToken token = default)
+        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token = default)
         {
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, citedLinkIds, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -136,9 +137,10 @@ namespace Pneuma.Server.Services
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum primary sources.</param>
         /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
+        /// <param name="citedLinkIds">Optional sink that collects the content-link ids the retrieved chunks came from (for citations).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The supporting nodes.</returns>
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, CancellationToken token = default)
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token = default)
         {
             List<GraphNode> primary = new List<GraphNode>();
             Dictionary<string, int> positionByNode = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -173,7 +175,11 @@ namespace Pneuma.Server.Services
                         // link when the graph read returned nothing) so answers are built from the stored chunk.
                         node = HydrateFromHit(node, nodeId, hit.Snippet);
                         if (node == null) continue;
-                        if (String.IsNullOrEmpty(node.CanonicalName) && hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId)) node.CanonicalName = linkId;
+                        if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId))
+                        {
+                            if (String.IsNullOrEmpty(node.CanonicalName)) node.CanonicalName = linkId;
+                            citedLinkIds?.Add(linkId);
+                        }
                         primary.Add(node);
                         positionByNode[nodeId] = hit.Position;
                         scoreByNode[nodeId] = hit.Score;
@@ -197,6 +203,7 @@ namespace Pneuma.Server.Services
                         GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
                         node = HydrateFromHit(node, hit.NodeId, hit.Content);
                         if (node == null) continue;
+                        if (!String.IsNullOrEmpty(hit.LinkId)) citedLinkIds?.Add(hit.LinkId!);
                         primary.Add(node);
                         positionByNode[hit.NodeId] = hit.Position;
                         scoreByNode[hit.NodeId] = hit.Score;

@@ -122,6 +122,8 @@ namespace Pneuma.Server.Services
             long generationMs = 0;
             string model = runner.DefaultModel ?? String.Empty;
             List<object> toolTrace = new List<object>();
+            // The content-link ids the assistant's search/answer tools drew from, resolved to citations at the end.
+            HashSet<string> citedLinkIds = new HashSet<string>(StringComparer.Ordinal);
             string finalAnswer = String.Empty;
             bool producedText = false;
 
@@ -201,7 +203,7 @@ namespace Pneuma.Server.Services
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, token).ConfigureAwait(false);
+                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkIds, token).ConfigureAwait(false);
                         long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });
@@ -243,6 +245,8 @@ namespace Pneuma.Server.Services
                 await emit(new { type = "delta", text = finalAnswer }, false, token).ConfigureAwait(false);
             }
 
+            List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkIds, token).ConfigureAwait(false);
+
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;
             await emit(new
             {
@@ -255,7 +259,8 @@ namespace Pneuma.Server.Services
                 timeToFirstTokenMs = timeToFirstTokenMs < 0 ? 0 : timeToFirstTokenMs,
                 generationMs,
                 tokensPerSecond,
-                toolCalls = toolTrace
+                toolCalls = toolTrace,
+                citations
             }, true, token).ConfigureAwait(false);
         }
 
@@ -263,7 +268,7 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, CancellationToken token)
+        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, ISet<string> citedLinkIds, CancellationToken token)
         {
             JsonElement arguments;
             try
@@ -279,7 +284,35 @@ namespace Pneuma.Server.Services
                 return ToolInvocationResult.Fail("Tool arguments were not valid JSON.");
             }
 
-            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, token).ConfigureAwait(false);
+            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, citedLinkIds, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolve the content-link ids the assistant drew from into citation objects (id, url, title) by
+        /// reading each link. Best-effort and bounded so a broken link read never fails the response.
+        /// </summary>
+        private async Task<List<object>> ResolveCitationsAsync(string tenantId, ISet<string> linkIds, CancellationToken token)
+        {
+            List<object> citations = new List<object>();
+            if (linkIds == null || linkIds.Count == 0 || String.IsNullOrEmpty(tenantId)) return citations;
+
+            foreach (string linkId in linkIds)
+            {
+                if (citations.Count >= 12) break;
+                if (String.IsNullOrEmpty(linkId)) continue;
+                try
+                {
+                    SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, linkId, token).ConfigureAwait(false);
+                    if (link == null || String.IsNullOrWhiteSpace(link.Url)) continue;
+                    citations.Add(new { linkId = link.Id, url = link.Url, title = String.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title });
+                }
+                catch (Exception e)
+                {
+                    _Logging.Debug("[AgenticChatService] citation resolve failed for " + linkId + ": " + e.Message);
+                }
+            }
+
+            return citations;
         }
 
         private static string Truncate(string value, int max)

@@ -25,6 +25,9 @@ namespace Pneuma.Core.Integrations.Models
         /// <summary>Zero-based position of the chunk within its source document (for ordering/reconstruction).</summary>
         public int Position { get; set; } = 0;
 
+        /// <summary>The originating content link's id (for citation back to the ingested source), when present.</summary>
+        public string? LinkId { get; set; } = null;
+
         #endregion
     }
 }

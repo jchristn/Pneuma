@@ -104,7 +104,7 @@ namespace Pneuma.Server.Routes
 
             using (lease)
             {
-                GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, request.SubjectId, ctx.Token).ConfigureAwait(false);
+                GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, request.SubjectId, null, ctx.Token).ConfigureAwait(false);
                 QueryResponse response = new QueryResponse
                 {
                     Answer = answer.Answer,
@@ -152,7 +152,7 @@ namespace Pneuma.Server.Routes
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, request.Question, max, request.SubjectId, ctx.Token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, request.Question, max, request.SubjectId, null, ctx.Token).ConfigureAwait(false);
                 await sse.SendAsync(new { type = "metadata", grounded = sources.Count > 0, sourceCount = sources.Count }, false, ctx.Token).ConfigureAwait(false);
 
                 if (sources.Count == 0)

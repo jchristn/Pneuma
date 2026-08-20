@@ -670,6 +670,14 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .chat-tool-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); }
 .chat-tool-pre { margin: 0; padding: 0.5rem 0.6rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono, monospace); font-size: 0.74rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 20rem; overflow: auto; }
 
+/* Answer citations: links back to the ingested sources */
+.chat-citations { margin-top: 0.7rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
+.chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
+.chat-citations-list { margin: 0.25rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.chat-citations-list li { font-size: 0.82rem; }
+.chat-citation { color: var(--color-primary); text-decoration: none; word-break: break-word; }
+.chat-citation:hover { text-decoration: underline; }
+
 /* Per-answer telemetry: (i) affordance revealing a stats popover on hover/focus */
 .chat-stats-info { position: relative; display: inline-flex; margin-top: 0.6rem; }
 .chat-stats-trigger { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.5rem 0.1rem 0.35rem; border: 1px solid var(--color-border); border-radius: 999px; background: transparent; color: var(--color-text-secondary); font-size: 0.72rem; cursor: default; }
