@@ -46,10 +46,10 @@
 }
 
 [data-theme='dark'] {
-  --bg-primary: #171923;
-  --bg-secondary: #0f1119;
-  --bg-tertiary: #1f2230;
-  --bg-hover: #262a3a;
+  --bg-primary: #12141c;
+  --bg-secondary: #0b0d13;
+  --bg-tertiary: #191b27;
+  --bg-hover: #20232f;
 
   --text-primary: #e8eaf2;
   --text-secondary: #a6aec4;
