@@ -22,6 +22,9 @@ namespace Pneuma.Core.Integrations.Models
         /// <summary>The matched chunk's stored text content, when the store returned it; otherwise null.</summary>
         public string? Content { get; set; } = null;
 
+        /// <summary>Zero-based position of the chunk within its source document (for ordering/reconstruction).</summary>
+        public int Position { get; set; } = 0;
+
         #endregion
     }
 }

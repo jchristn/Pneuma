@@ -16,6 +16,9 @@ namespace Pneuma.Core.Integrations.Models
         /// <summary>Relevance score (higher is better).</summary>
         public double Score { get; set; } = 0;
 
+        /// <summary>Zero-based position of the chunk within its source document (for ordering/reconstruction).</summary>
+        public int Position { get; set; } = 0;
+
         /// <summary>Tags stored with the chunk (includes <c>litegraphNodeId</c>, <c>linkId</c>, <c>subjectId</c>, <c>jobId</c>).</summary>
         public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
 

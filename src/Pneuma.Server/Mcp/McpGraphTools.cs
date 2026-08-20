@@ -94,9 +94,9 @@ namespace Pneuma.Server.Mcp
                 if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                 if (!seen.Add(nodeId)) continue;
                 GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
-                // The chunk's full text comes from the retrieval store; surface it as the snippet (preferring the
-                // graph node's content when present) so the assistant can answer directly from search results.
-                string? snippet = !String.IsNullOrWhiteSpace(node?.Content) ? node!.Content : hit.Snippet;
+                // RecallDB is the content authority; surface its chunk text as the snippet (falling back to any
+                // graph-node content) so the assistant can answer directly from search results.
+                string? snippet = !String.IsNullOrWhiteSpace(hit.Snippet) ? hit.Snippet : node?.Content;
                 string name = !String.IsNullOrWhiteSpace(node?.Name) ? node!.Name! : (nodeId);
                 string nodeType = node?.NodeType ?? String.Empty;
                 results.Add(new { id = nodeId, name, nodeType, score = hit.Score, snippet = Truncate(snippet, 1200) });

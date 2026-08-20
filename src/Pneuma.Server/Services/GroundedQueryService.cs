@@ -140,13 +140,15 @@ namespace Pneuma.Server.Services
         /// <returns>The supporting nodes.</returns>
         public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, CancellationToken token = default)
         {
-            List<GraphNode> sources = new List<GraphNode>();
+            List<GraphNode> primary = new List<GraphNode>();
+            Dictionary<string, int> positionByNode = new Dictionary<string, int>(StringComparer.Ordinal);
+            Dictionary<string, double> scoreByNode = new Dictionary<string, double>(StringComparer.Ordinal);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
 
             // Both retrieval paths (full-text and vector) operate over the same RecallDB collection; resolve it
             // once within the tenant. With no collection provisioned there is nothing to retrieve.
             string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
-            if (String.IsNullOrEmpty(collectionId)) return sources;
+            if (String.IsNullOrEmpty(collectionId)) return primary;
 
             // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
             // exact-match subjectId tag every ingested chunk carries.
@@ -167,11 +169,14 @@ namespace Pneuma.Server.Services
                         if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                         if (!seen.Add(nodeId)) continue;
                         GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
-                        // The chunk's authoritative text lives in the retrieval store; use it whenever the graph
-                        // node carries no content (and synthesize a node if the graph read returns nothing) so the
-                        // answer model always sees the full chunk rather than a truncated display name.
+                        // RecallDB is the content authority; hydrate the source's text (and its source-document
+                        // link when the graph read returned nothing) so answers are built from the stored chunk.
                         node = HydrateFromHit(node, nodeId, hit.Snippet);
-                        if (node != null) sources.Add(node);
+                        if (node == null) continue;
+                        if (String.IsNullOrEmpty(node.CanonicalName) && hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId)) node.CanonicalName = linkId;
+                        primary.Add(node);
+                        positionByNode[nodeId] = hit.Position;
+                        scoreByNode[nodeId] = hit.Score;
                     }
                 }
                 catch (Exception exception)
@@ -191,7 +196,10 @@ namespace Pneuma.Server.Services
                         if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;
                         GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
                         node = HydrateFromHit(node, hit.NodeId, hit.Content);
-                        if (node != null) sources.Add(node);
+                        if (node == null) continue;
+                        primary.Add(node);
+                        positionByNode[hit.NodeId] = hit.Position;
+                        scoreByNode[hit.NodeId] = hit.Score;
                     }
                 }
             }
@@ -200,6 +208,14 @@ namespace Pneuma.Server.Services
                 _Logging.Warn("[GroundedQueryService] vector retrieval failed: " + exception.Message);
             }
 
+            // RecallDB owns ordering and reconstruction: group the retrieved chunks by their source document and
+            // present each group's chunks in stored position order, with the most relevant source first. This
+            // reads material back the way it was written rather than in raw hit order.
+            List<GraphNode> sources = OrderForReconstruction(primary, positionByNode, scoreByNode);
+
+            // The graph owns structure, relationships, and source/citation references: expand each retrieved
+            // chunk to the entities it is connected to and to its Source node, adding that context (not more raw
+            // text) to the grounding set. Enabled via NeighborExpansion settings.
             if (_Retrieval.NeighborExpansionEnabled && sources.Count > 0)
             {
                 int ceiling = max + _Retrieval.NeighborExpansionMaxNodes;
@@ -214,6 +230,10 @@ namespace Pneuma.Server.Services
                         foreach (GraphNode neighbor in neighbors)
                         {
                             if (String.IsNullOrEmpty(neighbor.Id) || !seen.Add(neighbor.Id)) continue;
+                            // Only structural neighbors add value here: entities (relationships) and the Source
+                            // (citation). Sibling chunk nodes carry no content of their own — their text is in
+                            // RecallDB and would only be surfaced by a direct retrieval hit.
+                            if (String.Equals(neighbor.NodeType, Ontology.NodeChunk, StringComparison.Ordinal)) continue;
                             sources.Add(neighbor);
                             if (sources.Count >= ceiling) break;
                         }
@@ -323,11 +343,50 @@ namespace Pneuma.Server.Services
         #region Private-Methods
 
         /// <summary>
-        /// Ensure a retrieved source carries usable content. The retrieval store holds the authoritative chunk
-        /// text; the graph node's own content is not always available on read, so fall back to the hit's text
-        /// (and synthesize a minimal node when the graph read returned nothing) rather than answering from a
-        /// truncated display name.
+        /// Ensure a retrieved source carries its content from the retrieval store. RecallDB is the authority
+        /// for chunk text, so its content is preferred over any denormalized copy on the graph node (the graph
+        /// carries structure, relationships, and provenance; RecallDB carries content). A minimal node is
+        /// synthesized when the graph read returned nothing so the material is never lost.
         /// </summary>
+        /// <summary>
+        /// Order retrieved chunks for coherent reconstruction: group by source document (the chunk node's
+        /// <c>sourceId</c> tag), order groups by their most relevant hit, and within each group present chunks
+        /// in stored position order. Nodes with no source grouping fall back to their own id (each its own group).
+        /// </summary>
+        private static List<GraphNode> OrderForReconstruction(List<GraphNode> nodes, Dictionary<string, int> positionByNode, Dictionary<string, double> scoreByNode)
+        {
+            Dictionary<string, double> groupBestScore = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (GraphNode node in nodes)
+            {
+                string group = GroupKey(node);
+                double score = scoreByNode.TryGetValue(node.Id, out double s) ? s : 0.0;
+                if (!groupBestScore.TryGetValue(group, out double best) || score > best) groupBestScore[group] = score;
+            }
+
+            List<GraphNode> ordered = new List<GraphNode>(nodes);
+            ordered.Sort((GraphNode a, GraphNode b) =>
+            {
+                string ga = GroupKey(a);
+                string gb = GroupKey(b);
+                if (!String.Equals(ga, gb, StringComparison.Ordinal))
+                {
+                    int byScore = groupBestScore[gb].CompareTo(groupBestScore[ga]);
+                    if (byScore != 0) return byScore;
+                    return String.CompareOrdinal(ga, gb);
+                }
+                int pa = positionByNode.TryGetValue(a.Id, out int va) ? va : 0;
+                int pb = positionByNode.TryGetValue(b.Id, out int vb) ? vb : 0;
+                return pa.CompareTo(pb);
+            });
+            return ordered;
+        }
+
+        private static string GroupKey(GraphNode node)
+        {
+            if (node.Tags != null && node.Tags.TryGetValue("sourceId", out string? sourceId) && !String.IsNullOrEmpty(sourceId)) return sourceId;
+            return node.Id;
+        }
+
         private static GraphNode? HydrateFromHit(GraphNode? node, string nodeId, string? hitContent)
         {
             if (node == null)
@@ -336,7 +395,7 @@ namespace Pneuma.Server.Services
                 return new GraphNode { Id = nodeId, Content = hitContent };
             }
 
-            if (String.IsNullOrWhiteSpace(node.Content) && !String.IsNullOrWhiteSpace(hitContent))
+            if (!String.IsNullOrWhiteSpace(hitContent))
             {
                 node.Content = hitContent;
             }

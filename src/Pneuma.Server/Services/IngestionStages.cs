@@ -374,11 +374,13 @@ namespace Pneuma.Server.Services
         {
             try
             {
+                // The chunk node is a structural anchor only: it links a source to its RecallDB chunk (via the
+                // shared litegraphNodeId) and carries provenance tags. The chunk text itself is the retrieval
+                // store's responsibility, so it is not duplicated onto the node — only a short display label.
                 GraphNode chunkNode = new GraphNode
                 {
                     NodeType = Ontology.NodeChunk,
                     Name = text.Length > 80 ? text.Substring(0, 80) : text,
-                    Content = text,
                     Labels = new List<string> { Ontology.NodeChunk }
                 };
                 chunkNode.Tags[Ontology.TagTenantId] = job.TenantId;

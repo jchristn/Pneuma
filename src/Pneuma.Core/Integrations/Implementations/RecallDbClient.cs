@@ -189,7 +189,7 @@ namespace Pneuma.Core.Integrations.Implementations
             {
                 string? nodeId = GetTag(docElement, "litegraphNodeId");
                 if (String.IsNullOrEmpty(nodeId)) continue;
-                hits.Add(new VectorSearchHit { NodeId = nodeId!, Score = GetDouble(docElement, "Score"), Content = GetString(docElement, "Content", "content") });
+                hits.Add(new VectorSearchHit { NodeId = nodeId!, Score = GetDouble(docElement, "Score"), Content = GetString(docElement, "Content", "content"), Position = GetInt(docElement, "Position", "position") });
             }
             return hits;
         }
@@ -219,6 +219,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 {
                     DocumentId = GetString(docElement, "DocumentKey", "documentKey") ?? String.Empty,
                     Score = GetDouble(docElement, "Score", "TextScore"),
+                    Position = GetInt(docElement, "Position", "position"),
                     Snippet = GetString(docElement, "Content", "content"),
                     Tags = ParseTags(docElement)
                 };
@@ -433,6 +434,12 @@ namespace Pneuma.Core.Integrations.Implementations
         private static double GetDouble(JsonElement element, params string[] names)
         {
             if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out double result)) return result;
+            return 0;
+        }
+
+        private static int GetInt(JsonElement element, params string[] names)
+        {
+            if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int result)) return result;
             return 0;
         }
 
