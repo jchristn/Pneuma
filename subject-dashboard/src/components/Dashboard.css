@@ -103,36 +103,37 @@
 }
 .sidebar-nav {
   flex: 1;
-  padding: 14px 10px;
+  padding: 8px;
 }
 .nav-section {
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 .nav-section-title {
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding: 0 10px 6px;
+  padding: 0 8px;
+  margin-bottom: 0.15rem;
 }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 10px;
-  margin-bottom: 2px;
+  padding: 4px 8px;
+  margin-bottom: 0;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
-  font-size: 0.86rem;
+  font-size: 0.8125rem;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   text-decoration: none;
-  min-height: 36px;
+  min-height: 28px;
   transition: background 0.12s, color 0.12s;
 }
 .nav-item:hover {
