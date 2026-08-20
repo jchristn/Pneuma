@@ -64,6 +64,12 @@ namespace Pneuma.Core
         /// <summary>RecallDB collection identifier prefix.</summary>
         public const string CollectionPrefix = "col_";
 
+        /// <summary>Persisted chat-turn identifier prefix.</summary>
+        public const string ChatTurnPrefix = "trn_";
+
+        /// <summary>Chat feedback identifier prefix.</summary>
+        public const string ChatFeedbackPrefix = "fbk_";
+
         #endregion
 
         #region General

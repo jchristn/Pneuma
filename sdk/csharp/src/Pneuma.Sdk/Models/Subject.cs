@@ -25,6 +25,28 @@ namespace Pneuma.Sdk.Models
         /// <summary>Identifier of the root graph node representing this subject.</summary>
         public string? GraphRootNodeId { get; set; } = null;
 
+        /// <summary>URL-safe slug (unique within the tenant) used to address this subject. Auto-generated from
+        /// the display name when omitted.</summary>
+        public string? UrlSlug { get; set; } = null;
+
+        /// <summary>Whether model reasoning ("thinking") is rendered for chats about this subject.</summary>
+        public bool ThinkingEnabled { get; set; } = false;
+
+        /// <summary>Subject-specific system prompt, appended after the global system prompt for its chats.</summary>
+        public string? SystemPrompt { get; set; } = null;
+
+        /// <summary>Subject-specific ontology classification prompt, appended after the global one during ingestion.</summary>
+        public string? OntologyClassifyPrompt { get; set; } = null;
+
+        /// <summary>Subject-specific ontology definition, appended after the global one during ingestion.</summary>
+        public string? OntologyDefinitionPrompt { get; set; } = null;
+
+        /// <summary>Number of days chat-turn history is retained for this subject (minimum 1). Default 90.</summary>
+        public int HistoryRetentionDays { get; set; } = 90;
+
+        /// <summary>Lifecycle state of this subject's tracked cascade deletion: None, Pending, Deleting, or Failed.</summary>
+        public string DeletionStatus { get; set; } = "None";
+
         /// <summary>Whether the subject archive is enabled.</summary>
         public bool Active { get; set; } = true;
 

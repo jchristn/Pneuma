@@ -15,7 +15,9 @@ export const NAV_GROUPS = [
       { section: 'search', labelKey: 'nav.search', icon: 'search', tip: 'Full-text search a subject’s ingested documents and jump to the matching chunks.' },
       { section: 'ask', labelKey: 'nav.ask', icon: 'chat', tip: 'Chat with the corpus. The assistant retrieves grounded facts and cites its sources.' },
       { section: 'jobs', labelKey: 'nav.jobs', icon: 'queue', tip: 'The live ingestion queue: jobs currently pending or processing, with controls to stop or retry.' },
-      { section: 'ingestion-jobs', labelKey: 'nav.ingestionJobs', icon: 'list', tip: 'Full history of ingestion jobs across all subjects, including completed and failed runs.' }
+      { section: 'ingestion-jobs', labelKey: 'nav.ingestionJobs', icon: 'list', tip: 'Full history of ingestion jobs across all subjects, including completed and failed runs.' },
+      { section: 'history', labelKey: 'nav.history', icon: 'chat', tip: 'Every chat turn across subjects, with the full question, answer, timing, and metadata.' },
+      { section: 'feedback', labelKey: 'nav.feedback', icon: 'chart', tip: 'Thumbs up/down and comments users left on chat answers, with the rated prompt and response.' }
     ]
   },
   {
@@ -69,6 +71,8 @@ export const SECTION_META = {
   permissions: { titleKey: 'nav.permissions' },
   assignments: { titleKey: 'nav.assignments' },
   audit: { titleKey: 'nav.audit' },
+  history: { titleKey: 'history.title', subtitleKey: 'history.subtitle' },
+  feedback: { titleKey: 'feedback.title', subtitleKey: 'feedback.subtitle' },
   'model-runners': { titleKey: 'modelRunners.title', subtitleKey: 'modelRunners.subtitle' },
   prompts: { titleKey: 'prompts.title', subtitleKey: 'prompts.subtitle' },
   requests: { titleKey: 'requests.title', subtitleKey: 'requests.subtitle' },

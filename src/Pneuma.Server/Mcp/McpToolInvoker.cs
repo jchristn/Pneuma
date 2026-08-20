@@ -103,6 +103,14 @@ namespace Pneuma.Server.Mcp
                     toolResult = await _Entities.GetSubjectAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
+                case "pneuma_create_subject":
+                    toolResult = await _Entities.CreateSubjectAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_update_subject":
+                    toolResult = await _Entities.UpdateSubjectAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
                 case "pneuma_enumerate_jobs":
                     toolResult = await _Entities.EnumerateJobsAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
                     break;

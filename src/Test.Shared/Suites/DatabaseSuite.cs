@@ -366,6 +366,97 @@ namespace Test.Shared.Suites
                                 throw new Exception("Provenance snapshot was mutated by the later prompt edit: " + recorded.Message);
                             if (!recorded.Message!.Contains("v" + recordedVersion) || recorded.Message!.Contains("v" + (recordedVersion + 1)))
                                 throw new Exception("Provenance snapshot no longer reflects the version the job used");
+                        }),
+
+                    new TestCaseDescriptor("Database", "Subject_ExtendedFields_RoundTrip", "Subject slug, prompts, thinking, retention (clamped), and deletion status round-trip; slug is resolvable",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "SubFields" }, ct);
+                            Subject created = await db.Subjects.CreateAsync(new Subject
+                            {
+                                TenantId = t.Id,
+                                DisplayName = "Ada Lovelace",
+                                UrlSlug = "ada-lovelace",
+                                ThinkingEnabled = true,
+                                SystemPrompt = "Be precise.",
+                                OntologyClassifyPrompt = "Classify people.",
+                                OntologyDefinitionPrompt = "People and works.",
+                                HistoryRetentionDays = 0 // must clamp to >= 1
+                            }, ct);
+                            if (created.HistoryRetentionDays != 1) throw new Exception("HistoryRetentionDays must clamp to a minimum of 1, got " + created.HistoryRetentionDays);
+
+                            Subject read = await db.Subjects.ReadAsync(t.Id, created.Id, ct) ?? throw new Exception("Subject vanished after create");
+                            if (read.UrlSlug != "ada-lovelace") throw new Exception("UrlSlug did not round-trip");
+                            if (!read.ThinkingEnabled) throw new Exception("ThinkingEnabled did not round-trip");
+                            if (read.SystemPrompt != "Be precise.") throw new Exception("SystemPrompt did not round-trip");
+                            if (read.OntologyClassifyPrompt != "Classify people.") throw new Exception("OntologyClassifyPrompt did not round-trip");
+                            if (read.OntologyDefinitionPrompt != "People and works.") throw new Exception("OntologyDefinitionPrompt did not round-trip");
+                            if (read.DeletionStatus != SubjectDeletionStatusEnum.None) throw new Exception("New subject must have DeletionStatus None");
+
+                            Subject bySlug = await db.Subjects.ReadBySlugAsync(t.Id, "ada-lovelace", ct) ?? throw new Exception("ReadBySlug failed to resolve the slug");
+                            if (bySlug.Id != created.Id) throw new Exception("ReadBySlug resolved the wrong subject");
+                            Subject? missing = await db.Subjects.ReadBySlugAsync(t.Id, "nope", ct);
+                            if (missing != null) throw new Exception("ReadBySlug must return null for an unknown slug");
+                        }),
+
+                    new TestCaseDescriptor("Database", "ChatTurn_Crud_And_RetentionPrune", "Chat turns persist, enumerate newest-first by subject, and prune by cutoff",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Turns" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+
+                            ChatTurnRecord turn = await db.ChatTurns.CreateAsync(new ChatTurnRecord
+                            {
+                                TenantId = t.Id, SubjectId = s.Id, Question = "Who?", Answer = "Ada.",
+                                Model = "gemma3:4b", PromptTokens = 10, CompletionTokens = 5, TotalTokens = 15,
+                                GenerationMs = 1200, ThinkingMs = 300, ContextSize = 8192
+                            }, ct);
+
+                            ChatTurnRecord read = await db.ChatTurns.ReadAsync(t.Id, turn.Id, ct) ?? throw new Exception("Turn vanished after create");
+                            if (read.Answer != "Ada." || read.TotalTokens != 15) throw new Exception("Turn fields did not round-trip");
+
+                            List<ChatTurnRecord> forSubject = await db.ChatTurns.EnumerateAsync(t.Id, s.Id, ct);
+                            if (forSubject.Count != 1) throw new Exception("Expected 1 turn for the subject, got " + forSubject.Count);
+
+                            // Prune with a past cutoff keeps the fresh turn; a future cutoff removes it.
+                            await db.ChatTurns.DeleteOlderThanAsync(t.Id, s.Id, DateTime.UtcNow.AddDays(-1), ct);
+                            if ((await db.ChatTurns.EnumerateAsync(t.Id, s.Id, ct)).Count != 1) throw new Exception("A past cutoff must not prune a fresh turn");
+                            await db.ChatTurns.DeleteOlderThanAsync(t.Id, s.Id, DateTime.UtcNow.AddDays(1), ct);
+                            if ((await db.ChatTurns.EnumerateAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("A future cutoff must prune the turn");
+                        }),
+
+                    new TestCaseDescriptor("Database", "ChatFeedback_Crud_And_DeleteBySubject", "Feedback persists, enumerates by subject, and is removed on subject cascade",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Fb" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+                            ChatTurnRecord turn = await db.ChatTurns.CreateAsync(new ChatTurnRecord { TenantId = t.Id, SubjectId = s.Id, Question = "q", Answer = "a" }, ct);
+
+                            await db.ChatFeedback.CreateAsync(new ChatFeedback { TenantId = t.Id, TurnId = turn.Id, SubjectId = s.Id, Rating = FeedbackRatingEnum.Down, Comment = "wrong" }, ct);
+                            List<ChatFeedback> list = await db.ChatFeedback.EnumerateAsync(t.Id, s.Id, ct);
+                            if (list.Count != 1) throw new Exception("Expected 1 feedback, got " + list.Count);
+                            if (list[0].Rating != FeedbackRatingEnum.Down || list[0].Comment != "wrong") throw new Exception("Feedback fields did not round-trip");
+
+                            await db.ChatFeedback.DeleteBySubjectAsync(t.Id, s.Id, ct);
+                            if ((await db.ChatFeedback.EnumerateAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("DeleteBySubject must remove the subject's feedback");
+                        }),
+
+                    new TestCaseDescriptor("Database", "Subject_PendingDeletion_Enumeration", "EnumeratePendingDeletion returns only Pending/Deleting subjects, across tenants",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Del" }, ct);
+                            Subject live = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Live", UrlSlug = "live" }, ct);
+                            Subject pending = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Pending", UrlSlug = "pending" }, ct);
+                            pending.DeletionStatus = SubjectDeletionStatusEnum.Pending;
+                            await db.Subjects.UpdateAsync(pending, ct);
+
+                            List<Subject> due = await db.Subjects.EnumeratePendingDeletionAsync(ct);
+                            if (!due.Exists(x => x.Id == pending.Id)) throw new Exception("A Pending subject must be enumerated for deletion");
+                            if (due.Exists(x => x.Id == live.Id)) throw new Exception("A live (None) subject must not be enumerated for deletion");
                         })
                 });
         }

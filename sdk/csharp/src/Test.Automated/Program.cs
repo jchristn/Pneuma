@@ -48,6 +48,10 @@ namespace Test.Automated
                 Skip("List roles");
                 Skip("List subjects");
                 Skip("Create subject");
+                Skip("Get subject by slug");
+                Skip("Update subject");
+                Skip("List history");
+                Skip("List feedback");
                 Skip("Submit link");
                 Skip("List jobs");
                 Summarize();
@@ -87,19 +91,58 @@ namespace Test.Automated
             }).ConfigureAwait(false);
 
             string? createdSubjectId = null;
+            string stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            string createdSubjectSlug = "sdk-smoke-" + stamp;
 
             await Step("Create subject", async () =>
             {
                 Subject subject = new Subject
                 {
-                    DisplayName = "SDK Smoke Test " + DateTime.UtcNow.ToString("yyyyMMddHHmmss"),
+                    DisplayName = "SDK Smoke Test " + stamp,
                     Type = "Person",
-                    Description = "Created by the Pneuma C# SDK automated test."
+                    Description = "Created by the Pneuma C# SDK automated test.",
+                    UrlSlug = createdSubjectSlug,
+                    ThinkingEnabled = true,
+                    SystemPrompt = "Answer concisely.",
+                    HistoryRetentionDays = 30
                 };
                 Subject created = await client.CreateSubjectAsync(subject).ConfigureAwait(false);
                 if (string.IsNullOrEmpty(created.Id)) throw new Exception("Created subject has no id.");
+                if (created.UrlSlug != createdSubjectSlug) throw new Exception("Created subject slug did not round-trip: " + created.UrlSlug);
+                if (!created.ThinkingEnabled) throw new Exception("Created subject thinkingEnabled did not round-trip.");
                 createdSubjectId = created.Id;
-                Console.WriteLine("       id=" + created.Id);
+                Console.WriteLine("       id=" + created.Id + " slug=" + created.UrlSlug);
+            }).ConfigureAwait(false);
+
+            await Step("Get subject by slug", async () =>
+            {
+                Subject bySlug = await client.GetSubjectBySlugAsync(createdSubjectSlug).ConfigureAwait(false);
+                if (bySlug.Id != createdSubjectId) throw new Exception("GetSubjectBySlug resolved the wrong subject.");
+                Console.WriteLine("       resolved=" + bySlug.Id);
+            }).ConfigureAwait(false);
+
+            await Step("Update subject", async () =>
+            {
+                if (string.IsNullOrEmpty(createdSubjectId)) throw new Exception("No subject id from prior step.");
+                Subject update = await client.GetSubjectAsync(createdSubjectId!).ConfigureAwait(false);
+                update.SystemPrompt = "Answer concisely and cite sources.";
+                update.ThinkingEnabled = false;
+                Subject saved = await client.UpdateSubjectAsync(createdSubjectId!, update).ConfigureAwait(false);
+                if (saved.SystemPrompt != "Answer concisely and cite sources.") throw new Exception("Updated systemPrompt did not persist.");
+                if (saved.ThinkingEnabled) throw new Exception("Updated thinkingEnabled did not persist.");
+                Console.WriteLine("       updated systemPrompt + thinkingEnabled");
+            }).ConfigureAwait(false);
+
+            await Step("List history", async () =>
+            {
+                EnumerationResult<ChatTurnRecord> history = await client.ListHistoryAsync().ConfigureAwait(false);
+                Console.WriteLine("       count=" + history.Objects.Count + " total=" + history.TotalRecords);
+            }).ConfigureAwait(false);
+
+            await Step("List feedback", async () =>
+            {
+                EnumerationResult<ChatFeedbackDetail> feedback = await client.ListFeedbackAsync().ConfigureAwait(false);
+                Console.WriteLine("       count=" + feedback.Objects.Count + " total=" + feedback.TotalRecords);
             }).ConfigureAwait(false);
 
             await Step("Submit link", async () =>

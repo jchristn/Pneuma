@@ -95,6 +95,160 @@ namespace Pneuma.Server.Mcp
             return subject;
         }
 
+        /// <summary>Create a subject for the caller's tenant. Mirrors POST /v1.0/subjects (slug auto-gen; an
+        /// explicit slug clash is an error).</summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The created subject, or null when an error response was already sent.</returns>
+        public async Task<object?> CreateSubjectAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            if (String.IsNullOrEmpty(tenantId))
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: tenant could not be resolved.").ConfigureAwait(false);
+                return null;
+            }
+            string displayName = McpJsonRpc.GetStringArgument(arguments, "displayName");
+            if (String.IsNullOrWhiteSpace(displayName))
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: 'displayName' is required.").ConfigureAwait(false);
+                return null;
+            }
+
+            Subject subject = new Subject { TenantId = tenantId, DisplayName = displayName };
+            string? typeArg = GetOptionalString(arguments, "type");
+            if (!String.IsNullOrWhiteSpace(typeArg)) subject.Type = typeArg!;
+            subject.Description = GetOptionalString(arguments, "description");
+            subject.SystemPrompt = GetOptionalString(arguments, "systemPrompt");
+            subject.OntologyClassifyPrompt = GetOptionalString(arguments, "ontologyClassifyPrompt");
+            subject.OntologyDefinitionPrompt = GetOptionalString(arguments, "ontologyDefinitionPrompt");
+            subject.ThinkingEnabled = GetOptionalBool(arguments, "thinkingEnabled") ?? false;
+            int? retention = GetOptionalInt(arguments, "historyRetentionDays");
+            if (retention.HasValue) subject.HistoryRetentionDays = retention.Value;
+            subject.GraphRootNodeId = SlugHelper.Slugify(displayName);
+
+            string? resolved = await ResolveSlugAsync(ctx, id, tenantId, GetOptionalString(arguments, "urlSlug"), displayName, null, token).ConfigureAwait(false);
+            if (resolved == null) return null;
+            subject.UrlSlug = resolved;
+
+            return await _Db.Subjects.CreateAsync(subject, token).ConfigureAwait(false);
+        }
+
+        /// <summary>Update an existing subject for the caller's tenant. Only fields present in the arguments are
+        /// changed; mirrors PUT /v1.0/subjects/{id} (a changed slug must stay unique).</summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated subject, or null when an error response was already sent.</returns>
+        public async Task<object?> UpdateSubjectAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            string subjectId = McpJsonRpc.GetStringArgument(arguments, "id");
+            if (String.IsNullOrEmpty(subjectId))
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: 'id' is required.").ConfigureAwait(false);
+                return null;
+            }
+            Subject? existing = String.IsNullOrEmpty(tenantId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            if (existing == null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Subject not found.").ConfigureAwait(false);
+                return null;
+            }
+
+            string? displayName = GetOptionalString(arguments, "displayName");
+            if (!String.IsNullOrWhiteSpace(displayName)) existing.DisplayName = displayName!;
+            string? typeArg = GetOptionalString(arguments, "type");
+            if (typeArg != null) existing.Type = typeArg;
+            if (HasProperty(arguments, "description")) existing.Description = GetOptionalString(arguments, "description");
+            if (HasProperty(arguments, "systemPrompt")) existing.SystemPrompt = GetOptionalString(arguments, "systemPrompt");
+            if (HasProperty(arguments, "ontologyClassifyPrompt")) existing.OntologyClassifyPrompt = GetOptionalString(arguments, "ontologyClassifyPrompt");
+            if (HasProperty(arguments, "ontologyDefinitionPrompt")) existing.OntologyDefinitionPrompt = GetOptionalString(arguments, "ontologyDefinitionPrompt");
+            bool? thinking = GetOptionalBool(arguments, "thinkingEnabled");
+            if (thinking.HasValue) existing.ThinkingEnabled = thinking.Value;
+            int? retention = GetOptionalInt(arguments, "historyRetentionDays");
+            if (retention.HasValue) existing.HistoryRetentionDays = retention.Value;
+            bool? active = GetOptionalBool(arguments, "active");
+            if (active.HasValue) existing.Active = active.Value;
+
+            string? explicitSlug = GetOptionalString(arguments, "urlSlug");
+            if (!String.IsNullOrWhiteSpace(explicitSlug))
+            {
+                string desired = SlugHelper.Slugify(explicitSlug);
+                if (!String.Equals(desired, existing.UrlSlug, StringComparison.Ordinal))
+                {
+                    Subject? clash = await _Db.Subjects.ReadBySlugAsync(tenantId, desired, token).ConfigureAwait(false);
+                    if (clash != null && clash.Id != existing.Id)
+                    {
+                        await McpJsonRpc.SendErrorAsync(ctx, id, -32009, "A subject with URL slug '" + desired + "' already exists.").ConfigureAwait(false);
+                        return null;
+                    }
+                    existing.UrlSlug = desired;
+                }
+            }
+
+            return await _Db.Subjects.UpdateAsync(existing, token).ConfigureAwait(false);
+        }
+
+        // Resolve a create-time slug: a generated slug is de-duplicated with a numeric suffix; an explicit,
+        // already-taken slug is a conflict (error sent, null returned).
+        private async Task<string?> ResolveSlugAsync(HttpContextBase ctx, object? id, string tenantId, string? explicitSlug, string displayName, string? ignoreSubjectId, CancellationToken token)
+        {
+            bool isExplicit = !String.IsNullOrWhiteSpace(explicitSlug);
+            string desired = SlugHelper.Slugify(isExplicit ? explicitSlug : displayName);
+            if (String.IsNullOrWhiteSpace(desired)) desired = "subject";
+
+            Subject? clash = await _Db.Subjects.ReadBySlugAsync(tenantId, desired, token).ConfigureAwait(false);
+            if (clash != null && clash.Id != ignoreSubjectId)
+            {
+                if (isExplicit)
+                {
+                    await McpJsonRpc.SendErrorAsync(ctx, id, -32009, "A subject with URL slug '" + desired + "' already exists.").ConfigureAwait(false);
+                    return null;
+                }
+                for (int suffix = 2; suffix < 10000; suffix++)
+                {
+                    string candidate = desired + "-" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    Subject? existing = await _Db.Subjects.ReadBySlugAsync(tenantId, candidate, token).ConfigureAwait(false);
+                    if (existing == null) return candidate;
+                }
+                return desired + "-" + IdGenerator.GenerateSubjectId();
+            }
+            return desired;
+        }
+
+        private static string? GetOptionalString(JsonElement args, string name)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.String) return e.GetString();
+            return null;
+        }
+
+        private static bool? GetOptionalBool(JsonElement args, string name)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement e))
+            {
+                if (e.ValueKind == JsonValueKind.True) return true;
+                if (e.ValueKind == JsonValueKind.False) return false;
+            }
+            return null;
+        }
+
+        private static int? GetOptionalInt(JsonElement args, string name)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out int v)) return v;
+            return null;
+        }
+
+        private static bool HasProperty(JsonElement args, string name)
+        {
+            return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out _);
+        }
+
         /// <summary>Enumerate ingestion-job summaries for the caller's tenant, paged.</summary>
         /// <param name="rc">Request context.</param>
         /// <param name="arguments">Tool arguments.</param>

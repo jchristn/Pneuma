@@ -13,6 +13,14 @@ namespace Pneuma.Server.Settings
     {
         #region Public-Members
 
+        /// <summary>Concurrent content-retrieval fetches (HTTP / headless browser). Default 4 — a headless
+        /// browser instance is memory-heavy, so this is kept lower than the other cheap I/O stages.</summary>
+        public int ContentRetrieval
+        {
+            get { return _ContentRetrieval; }
+            set { _ContentRetrieval = Math.Clamp(value, 1, 256); }
+        }
+
         /// <summary>Concurrent type-detection calls (DocumentAtom). Default 8.</summary>
         public int TypeDetection
         {
@@ -73,6 +81,7 @@ namespace Pneuma.Server.Settings
 
         #region Private-Members
 
+        private int _ContentRetrieval = 4;
         private int _TypeDetection = 8;
         private int _CellExtraction = 8;
         private int _Classification = 4;

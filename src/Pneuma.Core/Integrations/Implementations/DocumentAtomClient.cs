@@ -153,32 +153,50 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             if (atom == null) return;
 
-            string text;
-            if (!String.IsNullOrEmpty(atom.Text))
-            {
-                text = atom.Text;
-            }
-            else if (atom.UnorderedList != null && atom.UnorderedList.Count > 0)
-            {
-                text = String.Join("\n", atom.UnorderedList);
-            }
-            else if (atom.OrderedList != null && atom.OrderedList.Count > 0)
-            {
-                text = String.Join("\n", atom.OrderedList);
-            }
-            else
-            {
-                text = BuildTableText(atom.Table);
-            }
+            string type = atom.Type ?? "Text";
 
-            if (!String.IsNullOrWhiteSpace(text))
+            // Binary atoms (raw embedded blobs) carry no groundable text — skip them for now. Any nested
+            // content is still walked below. All other atom kinds (text, code, hyperlink, meta, lists,
+            // tables, and images that carry OCR/caption text) are turned into cells.
+            if (!String.Equals(type, "Binary", StringComparison.OrdinalIgnoreCase))
             {
-                cells.Add(new ExtractedCell
+                if (atom.Table != null && atom.Table.Rows != null && atom.Table.Rows.Count > 0)
                 {
-                    Type = atom.Type ?? "Text",
-                    Title = atom.Title,
-                    Text = text
-                });
+                    // A table becomes one cell per data row, each a valid compact markdown table: the header
+                    // row, the separator row, then that single data row. This keeps the column context attached
+                    // to every value as it flows into classification, summarization, embedding, and retrieval.
+                    AppendTableRowCells(atom, cells);
+                }
+                else
+                {
+                    string text;
+                    if (!String.IsNullOrEmpty(atom.Text))
+                    {
+                        text = atom.Text;
+                    }
+                    else if (atom.UnorderedList != null && atom.UnorderedList.Count > 0)
+                    {
+                        text = String.Join("\n", atom.UnorderedList);
+                    }
+                    else if (atom.OrderedList != null && atom.OrderedList.Count > 0)
+                    {
+                        text = String.Join("\n", atom.OrderedList);
+                    }
+                    else
+                    {
+                        text = String.Empty;
+                    }
+
+                    if (!String.IsNullOrWhiteSpace(text))
+                    {
+                        cells.Add(new ExtractedCell
+                        {
+                            Type = type,
+                            Title = atom.Title,
+                            Text = text
+                        });
+                    }
+                }
             }
 
             // Recurse into nested atoms (a header's child content, a container's block children, etc.).
@@ -191,27 +209,83 @@ namespace Pneuma.Core.Integrations.Implementations
             }
         }
 
-        private static string BuildTableText(AtomTableDto? table)
+        private static void AppendTableRowCells(AtomDto atom, List<ExtractedCell> cells)
         {
-            if (table == null || table.Rows == null || table.Rows.Count == 0) return String.Empty;
+            AtomTableDto table = atom.Table!;
+            List<string> headers = ResolveHeaders(table);
+            if (headers.Count == 0) return;
 
-            StringBuilder sb = new StringBuilder();
-            foreach (Dictionary<string, JsonElement> row in table.Rows)
+            string headerLine = "| " + String.Join(" | ", headers) + " |";
+
+            List<string> separators = new List<string>();
+            foreach (string unused in headers) separators.Add("---");
+            string separatorLine = "| " + String.Join(" | ", separators) + " |";
+
+            string type = atom.Type ?? "Table";
+
+            foreach (Dictionary<string, JsonElement> row in table.Rows!)
             {
                 if (row == null || row.Count == 0) continue;
-                List<string> cellValues = new List<string>();
-                foreach (KeyValuePair<string, JsonElement> cell in row)
+
+                List<string> values = new List<string>();
+                foreach (string header in headers)
                 {
-                    // Table cells are genuinely schemaless (arbitrary, dynamic columns), so the value is
-                    // read as a JSON element and rendered to text rather than bound to a fixed contract.
-                    string value = cell.Value.ValueKind == JsonValueKind.String
-                        ? (cell.Value.GetString() ?? String.Empty)
-                        : cell.Value.GetRawText();
-                    if (!String.IsNullOrWhiteSpace(value)) cellValues.Add(value);
+                    values.Add(ResolveCell(row, header));
                 }
-                if (cellValues.Count > 0) sb.AppendLine(String.Join(" | ", cellValues));
+
+                string rowLine = "| " + String.Join(" | ", values) + " |";
+                cells.Add(new ExtractedCell
+                {
+                    Type = type,
+                    Title = atom.Title,
+                    Text = headerLine + "\n" + separatorLine + "\n" + rowLine
+                });
             }
-            return sb.ToString().Trim();
+        }
+
+        /// <summary>Resolve the ordered column headers: prefer the table's declared columns, falling back to
+        /// the union of row keys in first-seen order when no columns are declared.</summary>
+        private static List<string> ResolveHeaders(AtomTableDto table)
+        {
+            List<string> headers = new List<string>();
+            if (table.Columns != null && table.Columns.Count > 0)
+            {
+                foreach (AtomColumnDto column in table.Columns)
+                {
+                    if (!String.IsNullOrEmpty(column.Name)) headers.Add(column.Name);
+                }
+                if (headers.Count > 0) return headers;
+            }
+
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Dictionary<string, JsonElement> row in table.Rows!)
+            {
+                if (row == null) continue;
+                foreach (string key in row.Keys)
+                {
+                    if (seen.Add(key)) headers.Add(key);
+                }
+            }
+            return headers;
+        }
+
+        /// <summary>Look up a cell value by header (case-insensitively, since declared column names may differ
+        /// in casing from the row keys) and render it to text. Missing cells become empty strings so the row
+        /// stays column-aligned.</summary>
+        private static string ResolveCell(Dictionary<string, JsonElement> row, string header)
+        {
+            foreach (KeyValuePair<string, JsonElement> entry in row)
+            {
+                if (String.Equals(entry.Key, header, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Table cells are genuinely schemaless (dynamic columns), so the value is read as a JSON
+                    // element and rendered to text rather than bound to a fixed contract.
+                    return entry.Value.ValueKind == JsonValueKind.String
+                        ? (entry.Value.GetString() ?? String.Empty)
+                        : entry.Value.GetRawText();
+                }
+            }
+            return String.Empty;
         }
 
         #endregion
@@ -231,8 +305,17 @@ namespace Pneuma.Core.Integrations.Implementations
 
         private class AtomTableDto
         {
+            // Declared columns (SerializableDataTable), in order. May be absent; headers then fall back to row keys.
+            public List<AtomColumnDto>? Columns { get; set; }
+
             // Rows are dictionaries of dynamic column name -> cell value; cell values are schemaless.
             public List<Dictionary<string, JsonElement>>? Rows { get; set; }
+        }
+
+        private class AtomColumnDto
+        {
+            public string? Name { get; set; }
+            public string? Type { get; set; }
         }
 
         #endregion

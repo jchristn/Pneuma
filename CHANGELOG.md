@@ -16,6 +16,43 @@ between releases, and the project will adopt semantic versioning at its stable 1
   a dedicated RecallDB tenant (`pneuma`), ensured at startup.
 
 ### Added
+- **Subject-scoped chat controls (thinking, prompts, slug, retention).** Subjects (schema v6) gained
+  `urlSlug`, `thinkingEnabled`, `systemPrompt`, `ontologyClassifyPrompt`, `ontologyDefinitionPrompt`,
+  `historyRetentionDays` (clamped ≥ 1), and a `deletionStatus`, all editable via REST (`PUT
+  /v1.0/subjects/{id}`) and the admin/creator dashboards. Model **thinking** (`<think>…</think>`) is now
+  stripped from chat answers server-side and streamed separately; per subject it is either hidden or shown
+  in a collapsed section with a *Thinking time* statistic. A subject's **system prompt** is appended after
+  the global one for its chats, and its **ontology prompts** are appended after the global
+  `ontology.classify` / `ontology.definition` during ingestion (global base + subject appended). Each
+  subject has a unique **URL slug** (`GET /v1.0/subjects/by-slug/{slug}`; explicit clashes → 409); the user
+  dashboard now shows a card per subject and opens `/{slug}` as that subject's chat.
+- **Chat history + feedback.** Every completed chat turn is persisted (question, answer, thinking, model,
+  tokens, timing, citations) with per-subject retention pruning (schema v7). Users can rate any answer
+  (👍/👎 + optional comment) inline. New endpoints: `GET /v1.0/history`, `GET /v1.0/history/{id}`,
+  `GET /v1.0/feedback`, `POST /v1.0/feedback`. Admin and creator dashboards gained **History** and
+  **Feedback** views with full-detail modals.
+- **Background subject deletion.** Deleting a subject now returns `202` immediately and runs the heavy
+  cascade (links, jobs, events, artifacts, graph, index, history, feedback) in a background worker; the
+  subject is marked *Deleting* (greyed in the UI) until removed, and interrupted deletions resume on
+  startup. The dashboards show a dismissible "deleting in the background — you may close this window" notice.
+- **Ingestion Queue / Jobs subject filter.** Both admin pages gained a subject dropdown (`?subjectId=` on
+  `GET /v1.0/jobs`).
+- **Richer table-atom ingestion.** DocumentAtom tables are now flattened to one valid markdown cell per
+  data row (header + separator + row) so column context travels with every value; all atom types are
+  ingested except binary.
+- **MCP + SDK coverage for subjects/history/feedback.** New MCP tools `pneuma_create_subject` /
+  `pneuma_update_subject` (mirroring the REST create/update, including slug uniqueness). The C# SDK
+  (`sdk/csharp`) gained the new subject fields, `GetSubjectBySlugAsync`, and history/feedback models +
+  `ListHistoryAsync` / `GetHistoryTurnAsync` / `ListFeedbackAsync` / `SubmitFeedbackAsync`. Positive and
+  negative tests were added for the DB layer, the MCP tools, and the SDK smoke harness.
+
+### Fixed
+- **Fresh-install migration for the queue-duration column.** The `ingestionjobevents.queuedurationms`
+  column (and the new subject columns) were being created in both the baseline schema and a migration,
+  which failed on a fresh SQLite/MySQL database with a duplicate-column error. Baseline `CREATE` statements
+  are now the original v1 shape and the versioned migrations are the sole source of later columns.
+
+### Added (earlier)
 - **Per-tenant LiteGraph isolation.** Each Pneuma tenant now gets its own isolated LiteGraph tenant and
   graph, created and hydrated when the tenant is provisioned; the LiteGraph tenant/graph GUIDs are recorded
   on the Pneuma tenant record (`LiteGraphTenantGuid`/`LiteGraphGraphGuid`, schema v4). All graph operations

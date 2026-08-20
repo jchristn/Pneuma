@@ -97,6 +97,7 @@ namespace Pneuma.Server.Services
         {
             return new Dictionary<IngestionStageEnum, SemaphoreSlim>
             {
+                { IngestionStageEnum.ContentRetrieval, new SemaphoreSlim(c.ContentRetrieval, c.ContentRetrieval) },
                 { IngestionStageEnum.TypeDetection, new SemaphoreSlim(c.TypeDetection, c.TypeDetection) },
                 { IngestionStageEnum.CellExtraction, new SemaphoreSlim(c.CellExtraction, c.CellExtraction) },
                 { IngestionStageEnum.Classification, new SemaphoreSlim(c.Classification, c.Classification) },
@@ -180,7 +181,10 @@ namespace Pneuma.Server.Services
 
         private async Task<CategorizationResult?> CategorizeAsync(IngestionJob job, RadiantSpan? jobSpan, CancellationToken token)
         {
-            byte[] data = await DownloadAsync(job, token).ConfigureAwait(false);
+            byte[] data = await RunStageAsync(job, IngestionStageEnum.ContentRetrieval,
+                stageToken => DownloadAsync(job, stageToken),
+                result => "Content retrieval complete — fetched " + result.Length + " byte(s) from " + job.SourceUrl + ".",
+                token).ConfigureAwait(false);
             await _Journal.TryStoreAsync("source", () => _Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
 
             TypeDetectResult detected = await RunStageAsync(job, IngestionStageEnum.TypeDetection,
@@ -299,12 +303,17 @@ namespace Pneuma.Server.Services
             // When no slot is immediately free, surface a friendly "waiting" event so the follow-logs make the
             // contention visible rather than looking stalled.
             SemaphoreSlim? gate = _StageGates.TryGetValue(stage, out SemaphoreSlim? resolved) ? resolved : null;
+            IngestionJobEvent? queuedEvent = null;
+            double queueMs = 0;
             if (gate != null && !gate.Wait(0))
             {
-                await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Queued,
+                Stopwatch queueSw = Stopwatch.StartNew();
+                queuedEvent = await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Queued,
                     "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
                     0, token).ConfigureAwait(false);
                 await gate.WaitAsync(token).ConfigureAwait(false);
+                queueSw.Stop();
+                queueMs = queueSw.Elapsed.TotalMilliseconds;
             }
             try
             {
@@ -323,7 +332,17 @@ namespace Pneuma.Server.Services
                             sw.Stop();
                             PneumaMetrics.RecordIngestionStage(stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
                             span?.SetOk(null);
-                            await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+
+                            // If the stage was contended, update its queued entry in place (carrying the wait
+                            // time) rather than appending a second row for the same stage.
+                            if (queuedEvent != null)
+                            {
+                                await _Journal.ResolveEventAsync(queuedEvent, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, queueMs, token).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+                            }
                             return result;
                         }
                     }
@@ -333,6 +352,16 @@ namespace Pneuma.Server.Services
                         PneumaMetrics.RecordIngestionStage(stage.ToString(), "failed", sw.Elapsed.TotalSeconds);
                         span?.RecordException(e, true);
                         span?.SetError(e.Message);
+
+                        // Resolve a contended stage's queued entry to Failed in place so it isn't left dangling
+                        // as a "queued" row beside the failure. Skip on server shutdown (outer-token cancel),
+                        // where the queued entry is intentionally left as-is. The transient marker tells the
+                        // failure handler the terminal event is already recorded, avoiding a duplicate row.
+                        if (queuedEvent != null && !token.IsCancellationRequested)
+                        {
+                            await _Journal.ResolveEventAsync(queuedEvent, IngestionStatusEnum.Failed, e.Message, sw.Elapsed.TotalMilliseconds, queueMs, token).ConfigureAwait(false);
+                            job.StageFailureRecorded = true;
+                        }
                         throw;
                     }
                 }

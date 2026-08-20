@@ -57,6 +57,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("List subjects", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subjects", CreateAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Create a subject", "Subjects"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/by-slug/{slug}", ReadBySlugAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Resolve a subject by its URL slug", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a subject", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/subjects/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
@@ -107,6 +109,24 @@ namespace Pneuma.Server.Routes
             }
             subject.TenantId = rc.TenantId;
             if (String.IsNullOrWhiteSpace(subject.GraphRootNodeId)) subject.GraphRootNodeId = SlugHelper.Slugify(subject.DisplayName);
+
+            // Resolve the URL slug: an explicit, already-taken slug is a conflict; an auto-generated one is
+            // de-duplicated by appending a numeric suffix so subject creation never fails on a name clash.
+            bool explicitSlug = !String.IsNullOrWhiteSpace(subject.UrlSlug);
+            string desiredSlug = SlugHelper.Slugify(explicitSlug ? subject.UrlSlug : subject.DisplayName);
+            if (String.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "subject";
+            Subject? slugClash = await _Db.Subjects.ReadBySlugAsync(rc.TenantId, desiredSlug, ctx.Token).ConfigureAwait(false);
+            if (slugClash != null)
+            {
+                if (explicitSlug)
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", "A subject with URL slug '" + desiredSlug + "' already exists.").ConfigureAwait(false);
+                    return;
+                }
+                desiredSlug = await NextAvailableSlugAsync(rc.TenantId, desiredSlug, null, ctx.Token).ConfigureAwait(false);
+            }
+            subject.UrlSlug = desiredSlug;
+
             Subject created = await _Db.Subjects.CreateAsync(subject, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 201, created).ConfigureAwait(false);
         }
@@ -127,6 +147,38 @@ namespace Pneuma.Server.Routes
                 return;
             }
             await RouteHelper.SendJsonAsync(ctx, 200, subject).ConfigureAwait(false);
+        }
+
+        private async Task ReadBySlugAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            string slug = SlugHelper.Slugify(RouteHelper.Param(ctx, "slug"));
+            Subject? subject = await _Db.Subjects.ReadBySlugAsync(rc.TenantId, slug, ctx.Token).ConfigureAwait(false);
+            if (subject == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Subject not found.").ConfigureAwait(false);
+                return;
+            }
+            await RouteHelper.SendJsonAsync(ctx, 200, subject).ConfigureAwait(false);
+        }
+
+        // Append a numeric suffix (-2, -3, ...) to a base slug until one is free within the tenant, ignoring an
+        // optional current subject (so an update can keep its own slug). Bounded to avoid an unbounded loop.
+        private async Task<string> NextAvailableSlugAsync(string tenantId, string baseSlug, string? ignoreSubjectId, CancellationToken token)
+        {
+            for (int suffix = 2; suffix < 10000; suffix++)
+            {
+                string candidate = baseSlug + "-" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                Subject? existing = await _Db.Subjects.ReadBySlugAsync(tenantId, candidate, token).ConfigureAwait(false);
+                if (existing == null || existing.Id == ignoreSubjectId) return candidate;
+            }
+            return baseSlug + "-" + IdGenerator.GenerateSubjectId();
         }
 
         private async Task UpdateAsync(HttpContextBase ctx)
@@ -155,6 +207,28 @@ namespace Pneuma.Server.Routes
             existing.Type = update.Type;
             existing.Description = update.Description;
             existing.Active = update.Active;
+            existing.ThinkingEnabled = update.ThinkingEnabled;
+            existing.SystemPrompt = update.SystemPrompt;
+            existing.OntologyClassifyPrompt = update.OntologyClassifyPrompt;
+            existing.OntologyDefinitionPrompt = update.OntologyDefinitionPrompt;
+            existing.HistoryRetentionDays = update.HistoryRetentionDays;
+
+            // A changed slug must stay unique within the tenant; an explicit clash with another subject is a conflict.
+            if (!String.IsNullOrWhiteSpace(update.UrlSlug))
+            {
+                string desiredSlug = SlugHelper.Slugify(update.UrlSlug);
+                if (!String.Equals(desiredSlug, existing.UrlSlug, StringComparison.Ordinal))
+                {
+                    Subject? slugClash = await _Db.Subjects.ReadBySlugAsync(rc.TenantId, desiredSlug, ctx.Token).ConfigureAwait(false);
+                    if (slugClash != null && slugClash.Id != existing.Id)
+                    {
+                        await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", "A subject with URL slug '" + desiredSlug + "' already exists.").ConfigureAwait(false);
+                        return;
+                    }
+                    existing.UrlSlug = desiredSlug;
+                }
+            }
+
             Subject saved = await _Db.Subjects.UpdateAsync(existing, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, saved).ConfigureAwait(false);
         }
@@ -176,16 +250,17 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Cascade: delete every link (and its jobs, logs, artifacts, graph nodes, and index documents)
-            // and the subject's knowledge-graph subgraph before removing the subject row.
-            bool deleted = await _Cascade.DeleteSubjectCascadeAsync(rc.TenantId, subjectId, ctx.Token).ConfigureAwait(false);
-            if (!deleted)
+            // Deletion is a heavy cascade (links, jobs, events, artifacts, graph, index, history, feedback), so it
+            // runs in the background: mark the subject for deletion and return immediately. The SubjectDeletionWorker
+            // claims it, runs the cascade, and removes it. If it is already being deleted, this is a no-op.
+            if (subject.DeletionStatus == SubjectDeletionStatusEnum.Pending || subject.DeletionStatus == SubjectDeletionStatusEnum.Deleting)
             {
-                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Subject not found.").ConfigureAwait(false);
+                await RouteHelper.SendJsonAsync(ctx, 202, new { status = subject.DeletionStatus.ToString(), message = "Subject deletion is already in progress." }).ConfigureAwait(false);
                 return;
             }
-            ctx.Response.StatusCode = 204;
-            await ctx.Response.Send().ConfigureAwait(false);
+            subject.DeletionStatus = SubjectDeletionStatusEnum.Pending;
+            await _Db.Subjects.UpdateAsync(subject, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", message = "We are deleting this subject and everything associated with it in the background. You may close this window." }).ConfigureAwait(false);
         }
 
         #endregion

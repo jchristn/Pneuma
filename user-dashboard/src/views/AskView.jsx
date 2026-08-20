@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages.js';
@@ -156,6 +159,51 @@ function collapseHistory(prev, summary) {
 }
 
 /** Clickable citations to the ingested source links the answer drew from, with a relevance percentage. */
+/** Thumbs up/down + optional comment for one answer, submitted against its persisted turn. */
+function FeedbackBar({ turnId }) {
+  const { t } = useTranslation();
+  const { apiClient } = useAuth();
+  const [rating, setRating] = useState(null);
+  const [comment, setComment] = useState('');
+  const [showComment, setShowComment] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!turnId) return null;
+
+  const submit = async (r, c) => {
+    setBusy(true);
+    try { await apiClient.submitFeedback(turnId, r, c || null); setSent(true); }
+    catch { /* ignore */ }
+    finally { setBusy(false); }
+  };
+  const pick = (r) => { setRating(r); if (r === 'Down') setShowComment(true); else submit(r, ''); };
+
+  if (sent) return <div className="chat-feedback chat-feedback-done">{t('ask.feedbackThanks', 'Thanks for your feedback.')}</div>;
+  return (
+    <div className="chat-feedback">
+      <button type="button" className={`fb-btn ${rating === 'Up' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Up')} title={t('ask.thumbsUp', 'Helpful')} aria-label={t('ask.thumbsUp', 'Helpful')}>👍</button>
+      <button type="button" className={`fb-btn ${rating === 'Down' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Down')} title={t('ask.thumbsDown', 'Not helpful')} aria-label={t('ask.thumbsDown', 'Not helpful')}>👎</button>
+      {showComment ? (
+        <span className="fb-comment">
+          <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('ask.feedbackComment', 'Add a comment (optional)')} />
+          <button type="button" className="btn btn-sm btn-secondary fb-send" disabled={busy} onClick={() => submit(rating || 'Down', comment)}>{t('common.send', 'Send')}</button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function Thinking({ thinking, enabled }) {
+  const { t } = useTranslation();
+  if (!enabled || !thinking) return null;
+  return (
+    <details className="chat-thinking">
+      <summary className="chat-thinking-label">{t('ask.thinking', 'Thinking')}</summary>
+      <div className="chat-thinking-content">{thinking}</div>
+    </details>
+  );
+}
+
 function Citations({ citations }) {
   const { t } = useTranslation();
   if (!citations || citations.length === 0) return null;
@@ -194,6 +242,7 @@ function StatsInfo({ stats }) {
   if (stats.completionTokens) rows.push([t('ask.statCompletion', 'Completion tokens'), String(stats.completionTokens)]);
   if (total) rows.push([t('ask.statTotal', 'Total tokens'), String(total)]);
   if (stats.tokensPerSecond) rows.push([t('ask.statTps', 'Tokens / second'), stats.tokensPerSecond.toFixed(1)]);
+  if (stats.thinkingEnabled && stats.thinkingMs) rows.push([t('ask.statThinking', 'Thinking time'), `${(stats.thinkingMs / 1000).toFixed(1)} s`]);
   if (stats.contextSize) rows.push([t('ask.statContext', 'Context window'), `${stats.contextSize.toLocaleString()} tokens`]);
   if (stats.contextSize && total) {
     const usedPct = Math.min(100, Math.round((total / stats.contextSize) * 100));
@@ -227,7 +276,10 @@ function StatsInfo({ stats }) {
 export default function AskView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
+  const { slug } = useParams();
 
+  const [subject, setSubject] = useState(null);
+  const [subjectMissing, setSubjectMissing] = useState(false);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState('');
   const [input, setInput] = useState('');
@@ -239,6 +291,18 @@ export default function AskView() {
   const textareaRef = useRef(null);
   const endRef = useRef(null);
   const recentQuips = useRef([]);
+
+  // Resolve the subject addressed by the URL slug so the chat is scoped to it (and picks up its system
+  // prompt and thinking setting server-side).
+  useEffect(() => {
+    let cancelled = false;
+    if (!slug) { setSubject(null); setSubjectMissing(false); return undefined; }
+    setSubjectMissing(false);
+    apiClient.getSubjectBySlug(slug)
+      .then((s) => { if (!cancelled) setSubject(s); })
+      .catch(() => { if (!cancelled) { setSubject(null); setSubjectMissing(true); } });
+    return () => { cancelled = true; };
+  }, [apiClient, slug]);
 
   // Pick a wait-state quip that hasn't been shown recently, so the rotation feels varied.
   const pickQuip = useCallback(() => {
@@ -304,6 +368,7 @@ export default function AskView() {
     try {
       await apiClient.chatStream(history, 8, {
         signal: controller.signal,
+        subjectId: subject?.id || null,
         onEvent: (evt) => {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; m.compacting = false; });
@@ -324,6 +389,9 @@ export default function AskView() {
               m.streaming = false;
               m.compacting = false;
               m.citations = Array.isArray(evt.citations) ? evt.citations : [];
+              m.turnId = evt.turnId || null;
+              m.thinking = evt.thinking || '';
+              m.thinkingEnabled = !!evt.thinkingEnabled;
               m.stats = {
                 model: evt.model || null,
                 promptTokens: evt.promptTokens || 0,
@@ -333,6 +401,8 @@ export default function AskView() {
                 generationMs: evt.generationMs || 0,
                 tokensPerSecond: evt.tokensPerSecond || 0,
                 contextSize: evt.contextSize || 0,
+                thinkingMs: evt.thinkingMs || 0,
+                thinkingEnabled: !!evt.thinkingEnabled,
               };
             });
             if (evt.compacted && evt.compactedSummary) {
@@ -374,12 +444,25 @@ export default function AskView() {
     setQuestion('');
   }, [streaming]);
 
+  // A slug that resolves to no subject: guide the user back to the subject picker.
+  if (slug && subjectMissing) {
+    return (
+      <div className="view ask-view">
+        <section className="search-hero">
+          <h1 className="hero-title">{t('ask.subjectNotFound', 'Subject not found')}</h1>
+          <p className="hero-subtitle">{t('ask.subjectNotFoundHint', 'That subject does not exist or is not available to you.')}</p>
+          <Link className="button button-secondary" to="/">{t('ask.backToSubjects', 'Back to subjects')}</Link>
+        </section>
+      </div>
+    );
+  }
+
   // Pre-submit: the original search hero.
   if (messages.length === 0) {
     return (
       <div className="view ask-view">
         <section className="search-hero">
-          <h1 className="hero-title">{t('ask.heroTitle')}</h1>
+          <h1 className="hero-title">{subject ? subject.displayName : t('ask.heroTitle')}</h1>
           <p className="hero-subtitle">{t('ask.heroSubtitle')}</p>
           <SearchBox
             value={question}
@@ -402,12 +485,15 @@ export default function AskView() {
     <div className="view chat-view">
       <div className="chat-view-head">
         <div>
-          <h1 className="page-title">{t('nav.ask', 'Ask')}</h1>
+          <h1 className="page-title">{subject ? subject.displayName : t('nav.ask', 'Ask')}</h1>
           <p className="page-subtitle">{t('ask.heroSubtitle')}</p>
         </div>
-        <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
-          {t('ask.newChat', 'New chat')}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link className="button button-secondary" to="/">{t('ask.backToSubjects', 'Subjects')}</Link>
+          <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
+            {t('ask.newChat', 'New chat')}
+          </button>
+        </div>
       </div>
 
       <div className="chat-scroll">
@@ -421,18 +507,19 @@ export default function AskView() {
                   <details className="chat-compacted-note">
                     <summary>{t('ask.compacted', 'Conversation compacted to fit the model’s context')}</summary>
                     <div className="chat-markdown">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
                     </div>
                   </details>
                 ) : (
                   <>
                     <ToolTrace tools={message.tools} />
+                    <Thinking thinking={message.thinking} enabled={message.thinkingEnabled} />
                     {message.compacting ? (
                       <div className="chat-compacting">{t('ask.compacting', 'Compacting the conversation to fit the model’s context…')}</div>
                     ) : null}
                     {message.content ? (
                       <div className="chat-markdown">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={MARKDOWN_COMPONENTS}>
                           {message.content}
                         </ReactMarkdown>
                       </div>
@@ -447,6 +534,7 @@ export default function AskView() {
                     {message.streaming && message.content ? <span className="chat-cursor">▍</span> : null}
                     <Citations citations={message.citations} />
                     <StatsInfo stats={message.stats} />
+                      {!message.streaming ? <FeedbackBar turnId={message.turnId} /> : null}
                   </>
                 )}
               </div>

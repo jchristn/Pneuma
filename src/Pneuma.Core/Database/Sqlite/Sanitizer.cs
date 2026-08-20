@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Database.Sqlite
 {
     using System;
+    using System.Globalization;
 
     /// <summary>
     /// Escapes values for inclusion in handwritten SQLite statements.
@@ -41,6 +42,22 @@ namespace Pneuma.Core.Database.Sqlite
         internal static string Bit(bool value)
         {
             return value ? "1" : "0";
+        }
+
+        /// <summary>Format an integer as an invariant numeric literal.</summary>
+        /// <param name="value">Value to format.</param>
+        /// <returns>The integer as an unquoted literal.</returns>
+        internal static string Num(int value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Format a double as an invariant numeric literal.</summary>
+        /// <param name="value">Value to format.</param>
+        /// <returns>The double as an unquoted literal.</returns>
+        internal static string Num(double value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
         }
     }
 }

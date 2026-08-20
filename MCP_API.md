@@ -63,6 +63,8 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_capabilities` | Describe the platform and restate the paging protocol. | Any authenticated principal |
 | `pneuma_enumerate_subjects` | Page subject summaries (`EnumerationQuery` in, `EnumerationResult` out). | Subject / Read |
 | `pneuma_get_subject` | Fetch one full subject by id. | Subject / Read |
+| `pneuma_create_subject` | Create a subject (`displayName` required; `type`, `description`, `urlSlug`, `thinkingEnabled`, `systemPrompt`, `ontologyClassifyPrompt`, `ontologyDefinitionPrompt`, `historyRetentionDays` optional). A unique slug is auto-generated when omitted; an explicit slug clash is rejected. | Subject / Create |
+| `pneuma_update_subject` | Update a subject (`id` required; only supplied fields change; a changed `urlSlug` must stay unique). | Subject / Update |
 | `pneuma_enumerate_jobs` | Page ingestion-job summaries (id, status, stage, source url). | IngestionJob / Read |
 | `pneuma_get_job` | Fetch one full ingestion job by id. | IngestionJob / Read |
 | `pneuma_enumerate_links` | Page content-link summaries (id, url, title, status). | Subject / Read |

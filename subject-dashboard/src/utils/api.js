@@ -275,6 +275,24 @@ class ApiClient {
       body: body !== null && body !== undefined && body !== '' ? body : undefined
     });
   }
+
+  // ---- Chat history + feedback ----------------------------------------
+
+  listHistory(subjectId = null) {
+    return this._request('GET', '/v1.0/history', { query: { maxResults: 1000, ...(subjectId ? { subjectId } : {}) } });
+  }
+
+  getHistoryTurn(id) {
+    return this._request('GET', `/v1.0/history/${encodeURIComponent(id)}`);
+  }
+
+  listFeedback(subjectId = null) {
+    return this._request('GET', '/v1.0/feedback', { query: { maxResults: 1000, ...(subjectId ? { subjectId } : {}) } });
+  }
+
+  submitFeedback(turnId, rating, comment = null) {
+    return this._request('POST', '/v1.0/feedback', { body: { turnId, rating, comment } });
+  }
 }
 
 export default ApiClient;

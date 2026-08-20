@@ -30,9 +30,10 @@ namespace Pneuma.Core.Integrations.Models
 
         /// <summary>
         /// Maximum number of concurrent requests Partio will send to this endpoint. Paired with Partio's
-        /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 2.
+        /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 1 — a single
+        /// unshared inference per request finishes fastest on a local model and avoids upstream timeouts.
         /// </summary>
-        public int MaxConcurrentRequests { get; set; } = 2;
+        public int MaxConcurrentRequests { get; set; } = 1;
 
         /// <summary>
         /// Maximum context window (in tokens) of this completion model. Partio has no discrete field for it,

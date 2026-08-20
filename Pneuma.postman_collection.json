@@ -5,24 +5,77 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://127.0.0.1:8080" },
-    { "key": "token", "value": "" },
-    { "key": "adminEmail", "value": "admin@pneuma" },
-    { "key": "adminPassword", "value": "password" },
-    { "key": "subjectId", "value": "" },
-    { "key": "collectionId", "value": "" },
-    { "key": "nodeId", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@pneuma"
+    },
+    {
+      "key": "adminPassword",
+      "value": "password"
+    },
+    {
+      "key": "subjectId",
+      "value": ""
+    },
+    {
+      "key": "collectionId",
+      "value": ""
+    },
+    {
+      "key": "nodeId",
+      "value": ""
+    },
+    {
+      "key": "subjectSlug",
+      "value": "chuck-d"
+    },
+    {
+      "key": "turnId",
+      "value": ""
+    }
   ],
   "auth": {
     "type": "bearer",
-    "bearer": [ { "key": "token", "value": "{{token}}", "type": "string" } ]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "item": [
     {
       "name": "System",
       "item": [
-        { "name": "Health", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/api/health", "auth": { "type": "noauth" } } },
-        { "name": "OpenAPI", "request": { "method": "GET", "url": "{{baseUrl}}/openapi.json", "auth": { "type": "noauth" } } }
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/api/health",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "OpenAPI",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/openapi.json",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
       ]
     },
     {
@@ -45,70 +98,190 @@
           ],
           "request": {
             "method": "POST",
-            "auth": { "type": "noauth" },
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}" },
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
             "url": "{{baseUrl}}/v1.0/token"
           }
         },
-        { "name": "Validate Token", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/token" } },
-        { "name": "Logout", "request": { "method": "DELETE", "url": "{{baseUrl}}/v1.0/token" } }
+        {
+          "name": "Validate Token",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/token"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/token"
+          }
+        }
       ]
     },
     {
       "name": "Administration",
       "item": [
-        { "name": "List Tenants (paginated)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/tenants?maxResults=100&skip=0&order=desc" } },
-        { "name": "List Users", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/users?maxResults=100&skip=0&order=desc&search=" } },
+        {
+          "name": "List Tenants (paginated)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/tenants?maxResults=100&skip=0&order=desc"
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/users?maxResults=100&skip=0&order=desc&search="
+          }
+        },
         {
           "name": "Create User",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Chuck\",\n  \"lastName\": \"D\",\n  \"email\": \"subject@pneuma\",\n  \"password\": \"changeme\",\n  \"isTenantAdmin\": true\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Chuck\",\n  \"lastName\": \"D\",\n  \"email\": \"subject@pneuma\",\n  \"password\": \"changeme\",\n  \"isTenantAdmin\": true\n}"
+            },
             "url": "{{baseUrl}}/v1.0/users"
           }
         },
-        { "name": "List Credentials", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/credentials" } },
+        {
+          "name": "List Credentials",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/credentials"
+          }
+        },
         {
           "name": "Create Credential",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"CI key\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"CI key\"\n}"
+            },
             "url": "{{baseUrl}}/v1.0/credentials"
           }
         },
-        { "name": "List Roles", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/roles" } },
-        { "name": "List Permissions", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/permissions" } },
-        { "name": "List Audit", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/audit?maxResults=100&order=desc" } },
-        { "name": "List Model Runners (Partio endpoints)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/model-runners" } },
-        { "name": "Model Endpoint Health (all, dedup by base URL)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/model-runners/health" } },
-        { "name": "Model Endpoint Health (by id)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/model-runners/:id/health" } },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/roles"
+          }
+        },
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/permissions"
+          }
+        },
+        {
+          "name": "List Audit",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/audit?maxResults=100&order=desc"
+          }
+        },
+        {
+          "name": "List Model Runners (Partio endpoints)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/model-runners"
+          }
+        },
+        {
+          "name": "Model Endpoint Health (all, dedup by base URL)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/model-runners/health"
+          }
+        },
+        {
+          "name": "Model Endpoint Health (by id)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/model-runners/:id/health"
+          }
+        },
         {
           "name": "Create Model Endpoint",
           "description": "Proxies to Partio. type = Embedding|Completion; endpoint = upstream model URL.",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"Completion\",\n  \"name\": \"local-chat\",\n  \"model\": \"llama3.2\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"contextSize\": 8192\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"Completion\",\n  \"name\": \"local-chat\",\n  \"model\": \"llama3.2\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"contextSize\": 8192\n}"
+            },
             "url": "{{baseUrl}}/v1.0/model-runners"
           }
         },
-        { "name": "List Prompts", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/prompts" } }
+        {
+          "name": "List Prompts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/prompts"
+          }
+        }
       ]
     },
     {
       "name": "Settings",
       "item": [
-        { "name": "Get Settings", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/settings" } },
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/settings"
+          }
+        },
         {
           "name": "Update Settings",
           "description": "GET /v1.0/settings first, edit the returned 'settings' object, and PUT it back here. Leave secret fields as '********' to keep the stored value.",
           "request": {
             "method": "PUT",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"rest\": { \"hostname\": \"127.0.0.1\", \"port\": 8080, \"ssl\": false },\n  \"cors\": { \"allowOrigins\": \"*\" },\n  \"auth\": { \"tokenSigningKey\": \"********\" },\n  \"database\": { \"type\": \"Sqlite\", \"filename\": \"pneuma.db\" }\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rest\": { \"hostname\": \"127.0.0.1\", \"port\": 8080, \"ssl\": false },\n  \"cors\": { \"allowOrigins\": \"*\" },\n  \"auth\": { \"tokenSigningKey\": \"********\" },\n  \"database\": { \"type\": \"Sqlite\", \"filename\": \"pneuma.db\" }\n}"
+            },
             "url": "{{baseUrl}}/v1.0/settings"
           }
         }
@@ -119,17 +292,53 @@
       "item": [
         {
           "name": "Create Collection",
-          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "var d = pm.response.json(); if (d && (d.id || d.Id)) pm.collectionVariables.set('collectionId', d.id || d.Id);" ] } } ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var d = pm.response.json(); if (d && (d.id || d.Id)) pm.collectionVariables.set('collectionId', d.id || d.Id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"general-knowledge\",\n  \"description\": \"Default ingestion collection\",\n  \"dimensionality\": 768\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"general-knowledge\",\n  \"description\": \"Default ingestion collection\",\n  \"dimensionality\": 768\n}"
+            },
             "url": "{{baseUrl}}/v1.0/collections"
           }
         },
-        { "name": "List Collections", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/collections" } },
-        { "name": "Read Collection", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}" } },
-        { "name": "Delete Collection", "request": { "method": "DELETE", "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}" } }
+        {
+          "name": "List Collections",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/collections"
+          }
+        },
+        {
+          "name": "Read Collection",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}"
+          }
+        },
+        {
+          "name": "Delete Collection",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/collections/{{collectionId}}"
+          }
+        }
       ]
     },
     {
@@ -137,24 +346,68 @@
       "item": [
         {
           "name": "Create Subject",
-          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "var d = pm.response.json(); if (d && d.id) pm.collectionVariables.set('subjectId', d.id);" ] } } ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var d = pm.response.json(); if (d && d.id) pm.collectionVariables.set('subjectId', d.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\"\n}"
+            },
             "url": "{{baseUrl}}/v1.0/subjects"
           }
         },
-        { "name": "List Subjects", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/subjects?maxResults=100&order=desc&search=" } },
-        { "name": "List Subject Links", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links?maxResults=100&order=desc" } },
-        { "name": "List Ingestion Endpoints (models)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/ingestion/endpoints" } },
+        {
+          "name": "List Subjects",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects?maxResults=100&order=desc&search="
+          }
+        },
+        {
+          "name": "List Subject Links",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links?maxResults=100&order=desc"
+          }
+        },
+        {
+          "name": "List Ingestion Endpoints (models)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ingestion/endpoints"
+          }
+        },
         {
           "name": "Submit Link",
-          "description": "embeddingEndpointId and completionEndpointId are required (ids from GET /v1.0/ingestion/endpoints); collectionId is required (a RecallDB collection from GET /v1.0/collections — run 'Create Collection' first to capture it).",
+          "description": "embeddingEndpointId and completionEndpointId are required (ids from GET /v1.0/ingestion/endpoints); collectionId is required (a RecallDB collection from GET /v1.0/collections \u2014 run 'Create Collection' first to capture it).",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}"
+            },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links"
           }
         },
@@ -162,38 +415,231 @@
           "name": "Submit Links (bulk)",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}"
+            },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links/bulk"
           }
         },
-        { "name": "List Links", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links?maxResults=100&order=desc" } },
-        { "name": "Link Ingestion Log", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/log" } },
-        { "name": "Link Source Document", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/source" } },
-        { "name": "Link Atoms", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/atoms" } },
-        { "name": "Link Chunks", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/chunks" } },
-        { "name": "Link Vectors", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/vectors" } },
-        { "name": "Link Subgraph", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/links/:id/subgraph" } },
-        { "name": "List Jobs", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/jobs?status=&maxResults=100&order=desc" } },
-        { "name": "Job Detail", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/jobs/:id" } },
-        { "name": "Job Log (follow)", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/jobs/:id/log" } },
-        { "name": "Restart Job", "request": { "method": "POST", "url": "{{baseUrl}}/v1.0/jobs/:id/restart" } },
-        { "name": "Stop Job", "request": { "method": "POST", "url": "{{baseUrl}}/v1.0/jobs/:id/stop" } }
+        {
+          "name": "List Links",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links?maxResults=100&order=desc"
+          }
+        },
+        {
+          "name": "Link Ingestion Log",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/log"
+          }
+        },
+        {
+          "name": "Link Source Document",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/source"
+          }
+        },
+        {
+          "name": "Link Atoms",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/atoms"
+          }
+        },
+        {
+          "name": "Link Chunks",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/chunks"
+          }
+        },
+        {
+          "name": "Link Vectors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/vectors"
+          }
+        },
+        {
+          "name": "Link Subgraph",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/:id/subgraph"
+          }
+        },
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs?status=&maxResults=100&order=desc"
+          }
+        },
+        {
+          "name": "Job Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs/:id"
+          }
+        },
+        {
+          "name": "Job Log (follow)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs/:id/log"
+          }
+        },
+        {
+          "name": "Restart Job",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/jobs/:id/restart"
+          }
+        },
+        {
+          "name": "Stop Job",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/jobs/:id/stop"
+          }
+        },
+        {
+          "name": "Get Subject by Slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/subjects/by-slug/{{subjectSlug}}"
+          }
+        },
+        {
+          "name": "Update Subject",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Subject (async, 202)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}"
+          }
+        }
       ]
     },
     {
       "name": "Search & Ask",
       "item": [
-        { "name": "Search", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/search?q=activism&max=20" } },
-        { "name": "Read Node", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/graph/nodes/{{nodeId}}" } },
-        { "name": "Node Neighbors", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/graph/nodes/{{nodeId}}/neighbors" } },
+        {
+          "name": "Search",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/search?q=activism&max=20"
+          }
+        },
+        {
+          "name": "Read Node",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/graph/nodes/{{nodeId}}"
+          }
+        },
+        {
+          "name": "Node Neighbors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/graph/nodes/{{nodeId}}/neighbors"
+          }
+        },
         {
           "name": "Ask (grounded query)",
           "request": {
             "method": "POST",
-            "header": [ { "key": "Content-Type", "value": "application/json" } ],
-            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What themes recur in Chuck D's work?\",\n  \"maxResults\": 8\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What themes recur in Chuck D's work?\",\n  \"maxResults\": 8\n}"
+            },
             "url": "{{baseUrl}}/v1.0/query"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat History & Feedback",
+      "item": [
+        {
+          "name": "List History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/history?maxResults=100"
+          }
+        },
+        {
+          "name": "List History (by subject)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/history?subjectId={{subjectId}}&maxResults=100"
+          }
+        },
+        {
+          "name": "Get History Turn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/history/{{turnId}}"
+          }
+        },
+        {
+          "name": "List Feedback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1.0/feedback?maxResults=100"
+          }
+        },
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1.0/feedback",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"turnId\": \"{{turnId}}\",\n  \"rating\": \"Up\",\n  \"comment\": \"Helpful.\"\n}"
+            }
           }
         }
       ]
@@ -201,8 +647,20 @@
     {
       "name": "Request History",
       "item": [
-        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/api/request-history?pageSize=25" } },
-        { "name": "Summary", "request": { "method": "GET", "url": "{{baseUrl}}/v1.0/api/request-history/summary?bucketMinutes=15" } }
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/api/request-history?pageSize=25"
+          }
+        },
+        {
+          "name": "Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/api/request-history/summary?bucketMinutes=15"
+          }
+        }
       ]
     }
   ]

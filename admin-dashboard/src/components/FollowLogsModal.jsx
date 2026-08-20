@@ -10,6 +10,7 @@ import './IngestionLog.css';
 // Friendly labels for the ordered ingestion stages emitted by the backend.
 const STAGE_LABELS = {
   pending: 'Started',
+  contentretrieval: 'Content retrieval',
   typedetection: 'Type detection',
   cellextraction: 'Semantic cell extraction',
   classification: 'Ontology / knowledge-graph mapping',
@@ -113,16 +114,21 @@ function FollowLogsModal({ job, onClose }) {
         <>
           <CopyButton value={JSON.stringify(events, null, 2)} label={t('jobs.copyLogs')} />
           <CopyButton value={String(jobId)} label="ID" />
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => poll()}
+            disabled={loading}
+            title={t('common.refresh')}
+            aria-label={t('common.refresh')}
+          >
+            ⟳
+          </button>
         </>
       )}
       onClose={onClose}
       footer={(
-        <>
-          <button type="button" className="button-secondary" onClick={() => poll()} disabled={loading}>
-            {t('common.refresh')}
-          </button>
-          <button type="button" className="button-secondary" onClick={onClose}>{t('common.close')}</button>
-        </>
+        <button type="button" className="button-secondary" onClick={onClose}>{t('common.close')}</button>
       )}
     >
       <div className="ilog-run-header" style={{ marginBottom: '0.75rem' }}>
@@ -181,6 +187,9 @@ function FollowLogsModal({ job, onClose }) {
                 <div className="ilog-meta">
                   {Number(ev.durationMs) > 0 && (
                     <span>{t('ingestionLog.duration')}: {formatDuration(ev.durationMs)}</span>
+                  )}
+                  {Number(ev.queueDurationMs) > 0 && (
+                    <span>{t('ingestionLog.queueDuration')}: {formatDuration(ev.queueDurationMs)}</span>
                   )}
                   {ev.createdUtc && <span>{formatDateTime(ev.createdUtc)}</span>}
                 </div>

@@ -145,6 +145,7 @@ const en = {
       created: 'Created',
       completed: 'Completed',
       duration: 'Duration',
+      queueDuration: 'Queue duration',
       emptyQueued: 'No steps recorded yet — ingestion is queued.',
       emptyNoRuns: 'No ingestion runs found for this link.'
     },
@@ -162,7 +163,8 @@ const en = {
       filterStatus: 'Filter by status',
       stage: 'Stage',
       message: 'Message',
-      duration: 'Duration'
+      duration: 'Duration',
+      queueDuration: 'Queue duration'
     },
     requests: {
       title: 'Request History',

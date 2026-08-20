@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import PageHeader from './PageHeader';
 import DataTable from './DataTable';
+import BulkActionBar, { useTableSelection } from './BulkActionBar';
 import ActionMenu from './ActionMenu';
 import Modal from './Modal';
 import ConfirmModal from './ConfirmModal';
@@ -200,7 +201,10 @@ function ResourceView({
   headerActions = null,
   createDisabled = false,
   createNotice = null,
-  modalSize = 'lg'
+  modalSize = 'lg',
+  selectable = false,
+  bulkActions = null,
+  postDeleteNotice = null
 }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
@@ -208,6 +212,8 @@ function ResourceView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null); // { type, item }
+  const [pendingBulk, setPendingBulk] = useState(null); // { action, items }
+  const [noticeOpen, setNoticeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -263,7 +269,54 @@ function ResourceView({
     if (deleter) await deleter(apiClient, getId(item, idField));
     else await apiClient.remove(resourceKey, getId(item, idField));
     await load();
+    // For long-running (background) deletes, surface a dismissible notice instead of silently returning.
+    if (postDeleteNotice) setNoticeOpen(true);
   };
+
+  // Optional multi-select with bulk actions. Enabled when a caller opts in via `selectable` or by supplying
+  // `bulkActions`. A default "delete selected" is offered whenever the resource is deletable.
+  const rowIdFn = useCallback((item) => getId(item, idField), [idField]);
+  const bulkEnabled = selectable || !!bulkActions;
+  const { selectedItems, clear, selection } = useTableSelection(rows, rowIdFn);
+
+  const runBulk = async (action, items) => {
+    await action.run(items);
+    setPendingBulk(null);
+    clear();
+    await load();
+  };
+
+  const bulkDeleteRun = async (items) => {
+    for (const item of items) {
+      if (deleter) await deleter(apiClient, getId(item, idField));
+      else await apiClient.remove(resourceKey, getId(item, idField));
+    }
+  };
+
+  const customBulk = bulkEnabled && bulkActions ? (bulkActions(selectedItems) || []) : [];
+  const allBulk = [
+    ...customBulk,
+    ...(bulkEnabled && capabilities.delete ? [{
+      key: 'delete', label: t('common.delete'), danger: true,
+      confirm: {
+        title: t('common.delete'),
+        message: t('resource.bulkDeleteConfirm', { count: selectedItems.length, name: singular, defaultValue: `Delete ${selectedItems.length} selected ${singular}(s)? This cannot be undone.` }),
+        confirmLabel: t('common.delete')
+      },
+      run: bulkDeleteRun
+    }] : [])
+  ];
+
+  const bulkBar = bulkEnabled && allBulk.length > 0 ? (
+    <BulkActionBar
+      count={selectedItems.length}
+      onClear={clear}
+      actions={allBulk.map((a) => ({
+        key: a.key, label: a.label, danger: a.danger, disabled: a.disabled, hidden: a.hidden, tip: a.tip,
+        onClick: () => { if (a.confirm) setPendingBulk({ action: a, items: selectedItems }); else runBulk(a, selectedItems); }
+      }))}
+    />
+  ) : null;
 
   const actionColumn = {
     key: '_actions',
@@ -310,7 +363,8 @@ function ResourceView({
       />
       {toolbar}
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
-      <DataTable columns={tableColumns} data={rows} loading={loading} onRefresh={load} onRowClick={openRow} />
+      <DataTable columns={tableColumns} data={rows} loading={loading} onRefresh={load} onRowClick={openRow}
+        selection={bulkEnabled ? selection : null} bulkBar={bulkBar} />
 
       {modal?.type === 'create' && (
         <Modal title={t('resource.addTitle', { name: singular })} size={modalSize} onClose={() => setModal(null)}>
@@ -343,6 +397,26 @@ function ResourceView({
           onConfirm={() => doDelete(modal.item)}
           onClose={() => setModal(null)}
         />
+      )}
+      {pendingBulk && (
+        <ConfirmModal
+          title={pendingBulk.action.confirm.title}
+          message={pendingBulk.action.confirm.message}
+          danger={!!pendingBulk.action.danger}
+          confirmLabel={pendingBulk.action.confirm.confirmLabel}
+          onConfirm={() => runBulk(pendingBulk.action, pendingBulk.items)}
+          onClose={() => setPendingBulk(null)}
+        />
+      )}
+      {noticeOpen && (
+        <Modal
+          title={t('common.notice', 'Notice')}
+          size="sm"
+          onClose={() => setNoticeOpen(false)}
+          footer={<button type="button" className="button-primary" onClick={() => setNoticeOpen(false)}>{t('common.close')}</button>}
+        >
+          <p className="confirm-text">{postDeleteNotice}</p>
+        </Modal>
       )}
     </div>
   );

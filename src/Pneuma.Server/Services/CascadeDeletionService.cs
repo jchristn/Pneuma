@@ -124,6 +124,10 @@ namespace Pneuma.Server.Services
             IGraphRepository subjectGraph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
             await TryExternalAsync(() => subjectGraph.DeleteBySubjectAsync(subjectId, token)).ConfigureAwait(false);
 
+            // Remove the subject's chat feedback and history (feedback first, since it references turns).
+            await TryExternalAsync(() => _Db.ChatFeedback.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+            await TryExternalAsync(() => _Db.ChatTurns.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+
             // The subject, its links, its jobs, and all job events are removed in one transaction.
             return await _Db.Subjects.DeleteWithSubordinatesAsync(tenantId, subjectId, linkIds, jobIds, token).ConfigureAwait(false);
         }

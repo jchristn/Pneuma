@@ -43,6 +43,16 @@ function Sidebar() {
           id: 'ask',
           label: t('nav.ask'),
           icon: icon(<><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>)
+        },
+        {
+          id: 'history',
+          label: t('nav.history', 'History'),
+          icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>)
+        },
+        {
+          id: 'feedback',
+          label: t('nav.feedback', 'Feedback'),
+          icon: icon(<><path d="M14 9V5a3 3 0 0 0-6 0v4" /><path d="M5 9h14l1 11H4z" /></>)
         }
       ]
     },

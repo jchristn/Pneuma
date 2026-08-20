@@ -31,6 +31,36 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "ALTER TABLE dbo.tenants ADD litegraphtenantguid NVARCHAR(MAX);",
                     "ALTER TABLE dbo.tenants ADD litegraphgraphguid NVARCHAR(MAX);"
                 }));
+                list.Add(new SchemaMigration(5, "Add ingestion job event queue duration", new List<string>
+                {
+                    "ALTER TABLE dbo.ingestionjobevents ADD queuedurationms FLOAT;"
+                }));
+                list.Add(new SchemaMigration(6, "Add subject slug, prompts, thinking, retention, deletion status", new List<string>
+                {
+                    "ALTER TABLE dbo.subjects ADD urlslug NVARCHAR(512);",
+                    "ALTER TABLE dbo.subjects ADD thinkingenabled BIT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE dbo.subjects ADD systemprompt NVARCHAR(MAX);",
+                    "ALTER TABLE dbo.subjects ADD ontologyclassifyprompt NVARCHAR(MAX);",
+                    "ALTER TABLE dbo.subjects ADD ontologydefinitionprompt NVARCHAR(MAX);",
+                    "ALTER TABLE dbo.subjects ADD historyretentiondays INT NOT NULL DEFAULT 90;",
+                    "ALTER TABLE dbo.subjects ADD deletionstatus NVARCHAR(32) NOT NULL DEFAULT 'None';",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjects_slug' AND object_id = OBJECT_ID(N'dbo.subjects')) CREATE INDEX idx_subjects_slug ON dbo.subjects (tenantid, urlslug);"
+                }));
+                list.Add(new SchemaMigration(7, "Add chat history and feedback tables", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.chatturns', N'U') IS NULL CREATE TABLE dbo.chatturns (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), userid NVARCHAR(64), " +
+                        "question NVARCHAR(MAX), answer NVARCHAR(MAX), thinking NVARCHAR(MAX), model NVARCHAR(512), " +
+                        "prompttokens INT NOT NULL DEFAULT 0, completiontokens INT NOT NULL DEFAULT 0, totaltokens INT NOT NULL DEFAULT 0, " +
+                        "timetofirsttokenms FLOAT, generationms FLOAT, thinkingms FLOAT, " +
+                        "contextsize INT NOT NULL DEFAULT 0, citationsjson NVARCHAR(MAX), createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatturns_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatturns')) CREATE INDEX idx_chatturns_tenant_subject ON dbo.chatturns (tenantid, subjectid, createdutc);",
+                    "IF OBJECT_ID(N'dbo.chatfeedback', N'U') IS NULL CREATE TABLE dbo.chatfeedback (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, turnid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), userid NVARCHAR(64), " +
+                        "rating NVARCHAR(16), comment NVARCHAR(MAX), createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatfeedback_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatfeedback')) CREATE INDEX idx_chatfeedback_tenant_subject ON dbo.chatfeedback (tenantid, subjectid, createdutc);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatfeedback_turn' AND object_id = OBJECT_ID(N'dbo.chatfeedback')) CREATE INDEX idx_chatfeedback_turn ON dbo.chatfeedback (turnid);"
+                }));
                 return list;
             }
         }

@@ -11,6 +11,7 @@ import './IngestionLog.css';
 // Friendly labels for the ordered ingestion stages emitted by the backend.
 const STAGE_LABELS = {
   pending: 'Started',
+  contentretrieval: 'Content retrieval',
   typedetection: 'Type detection',
   cellextraction: 'Semantic cell extraction',
   classification: 'Ontology / knowledge-graph mapping',
@@ -22,11 +23,11 @@ const STAGE_LABELS = {
   done: 'Complete'
 };
 
-function normalizeKey(value) {
+export function normalizeKey(value) {
   return String(value ?? '').toLowerCase().replace(/[\s_-]/g, '');
 }
 
-function stageLabel(stage) {
+export function stageLabel(stage) {
   if (!stage) return '—';
   return STAGE_LABELS[normalizeKey(stage)] || String(stage);
 }
@@ -63,6 +64,9 @@ function StepTimeline({ events }) {
             <div className="ilog-meta">
               {Number(ev.durationMs) > 0 && (
                 <span>{t('ingestionLog.duration')}: {formatDurationMs(ev.durationMs)}</span>
+              )}
+              {Number(ev.queueDurationMs) > 0 && (
+                <span>{t('ingestionLog.queueDuration')}: {formatDurationMs(ev.queueDurationMs)}</span>
               )}
               {ev.createdUtc && <span>{formatDateTime(ev.createdUtc)}</span>}
             </div>

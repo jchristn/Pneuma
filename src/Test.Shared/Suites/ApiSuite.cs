@@ -386,6 +386,66 @@ namespace Test.Shared.Suites
                             if (body.Contains("99999")) throw new Exception("maxResults must be clamped, not echoed unbounded");
                         }),
 
+                    new TestCaseDescriptor("Api", "Mcp_CreateSubject_Persists", "pneuma_create_subject creates a subject carrying its display name and slug",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string request = "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{\"displayName\":\"Chuck D\",\"urlSlug\":\"chuck-d\",\"thinkingEnabled\":true}}}";
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, request, ct);
+                            if (response.StatusCode != HttpStatusCode.OK) throw new Exception("create call not 200: " + (int)response.StatusCode);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (!body.Contains("chuck-d")) throw new Exception("created subject should carry its slug; got: " + body);
+                            if (!body.Contains("Chuck D")) throw new Exception("created subject should carry its display name");
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_CreateSubject_MissingDisplayName_Errors", "pneuma_create_subject without displayName returns an invalid-params error",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string request = "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{}}}";
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, request, ct);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (!body.Contains("-32602")) throw new Exception("a missing displayName must produce an invalid-params error; got: " + body);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_CreateSubject_SlugClash_Errors", "pneuma_create_subject with an explicit duplicate slug is rejected",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string first = "{\"jsonrpc\":\"2.0\",\"id\":23,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{\"displayName\":\"One\",\"urlSlug\":\"dup\"}}}";
+                            await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, first, ct);
+                            string second = "{\"jsonrpc\":\"2.0\",\"id\":24,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{\"displayName\":\"Two\",\"urlSlug\":\"dup\"}}}";
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, second, ct);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (!body.Contains("-32009")) throw new Exception("an explicit duplicate slug must be rejected; got: " + body);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_UpdateSubject_ChangesFields", "pneuma_update_subject updates only the supplied fields",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            // Create via REST to obtain a clean id, then update via MCP.
+                            HttpResponseMessage created = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Editable\"}", ct);
+                            string createdBody = await created.Content.ReadAsStringAsync(ct);
+                            string subjectId;
+                            using (System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(createdBody))
+                                subjectId = doc.RootElement.GetProperty("id").GetString() ?? throw new Exception("created subject had no id");
+
+                            string request = "{\"jsonrpc\":\"2.0\",\"id\":25,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_update_subject\",\"arguments\":{\"id\":\"" + subjectId + "\",\"systemPrompt\":\"Be terse.\",\"thinkingEnabled\":true}}}";
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, request, ct);
+                            if (response.StatusCode != HttpStatusCode.OK) throw new Exception("update call not 200: " + (int)response.StatusCode);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (!body.Contains("Be terse.")) throw new Exception("the updated systemPrompt should be reflected in the result; got: " + body);
+                        }),
+
                     new TestCaseDescriptor("Api", "Mcp_Query_ReturnsGroundedShape", "pneuma_query returns a grounded-answer shape",
                         executeAsync: async ct =>
                         {

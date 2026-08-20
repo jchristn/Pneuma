@@ -5,14 +5,18 @@ import { asArray } from '../utils/api';
 import { formatRelativeTime, formatDateTime, formatDurationMs } from '../utils/format';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
+import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
+import { stageLabel } from '../components/IngestionLogModal';
 import StatusPill from '../components/StatusPill';
 import CopyableId from '../components/CopyableId';
 import JsonViewer from '../components/JsonViewer';
 import './Ingestion.css';
 
 const STAGES = [
+  'ContentRetrieval',
   'TypeDetection',
   'CellExtraction',
   'Classification',
@@ -57,12 +61,13 @@ function StageTimeline({ events }) {
             </div>
             <div className="stage-content">
               <div className="stage-head">
-                <span className="stage-name">{stage}</span>
+                <span className="stage-name">{stageLabel(stage)}</span>
                 <StatusPill status={status} />
               </div>
               {ev?.message && <div className="stage-message">{ev.message}</div>}
               <div className="stage-meta">
                 {ev?.durationMs != null && <span>{t('ingestion.duration')}: {formatDurationMs(ev.durationMs)}</span>}
+                {Number(ev?.queueDurationMs) > 0 && <span>{t('ingestion.queueDuration')}: {formatDurationMs(ev.queueDurationMs)}</span>}
                 {(ev?.timestampUtc || ev?.updatedUtc || ev?.createdUtc) && (
                   <span title={formatDateTime(ev.timestampUtc || ev.updatedUtc || ev.createdUtc)}>
                     {formatRelativeTime(ev.timestampUtc || ev.updatedUtc || ev.createdUtc)}
@@ -138,6 +143,39 @@ function IngestionView() {
       setRestarting(false);
     }
   };
+
+  const { selectedItems, clear, selection } = useTableSelection(jobs);
+  const failedSelected = selectedItems.filter((j) => isFailed(j.status));
+  const [bulkRestartOpen, setBulkRestartOpen] = useState(false);
+  const [bulkRestarting, setBulkRestarting] = useState(false);
+
+  const handleBulkRestart = async () => {
+    setBulkRestarting(true);
+    try {
+      for (const job of failedSelected) {
+        await apiClient.restartJob(job.id);
+      }
+      setBulkRestartOpen(false);
+      clear();
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkRestarting(false);
+    }
+  };
+
+  const bulkBar = (
+    <BulkActionBar
+      count={selectedItems.length}
+      onClear={clear}
+      actions={[
+        { key: 'restart', label: t('common.restart'), disabled: failedSelected.length === 0,
+          tip: failedSelected.length === 0 ? t('ingestion.bulkRestartNone', 'Only failed jobs can be restarted.') : t('ingestion.bulkRestartTip', { count: failedSelected.length, defaultValue: `Restart ${failedSelected.length} failed job(s).` }),
+          onClick: () => setBulkRestartOpen(true) }
+      ]}
+    />
+  );
 
   const columns = [
     {
@@ -223,6 +261,8 @@ function IngestionView() {
         onRefresh={load}
         toolbar={toolbar}
         onRowClick={openDetail}
+        selection={selection}
+        bulkBar={bulkBar}
         emptyTitle={t('ingestion.title')}
         emptyDescription={t('ingestion.empty')}
       />
@@ -280,6 +320,16 @@ function IngestionView() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmModal
+        isOpen={bulkRestartOpen}
+        onClose={() => setBulkRestartOpen(false)}
+        onConfirm={handleBulkRestart}
+        title={t('common.restart')}
+        message={`Restart ${failedSelected.length} failed job(s) from the beginning?`}
+        confirmLabel={t('common.restart')}
+        isLoading={bulkRestarting}
+      />
     </div>
   );
 }

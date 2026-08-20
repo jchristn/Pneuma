@@ -80,6 +80,14 @@ namespace Pneuma.Core.Helpers
         /// <returns>Source identifier.</returns>
         public static string GenerateSourceId() => Generate(Constants.SourcePrefix);
 
+        /// <summary>Generate a persisted chat-turn identifier.</summary>
+        /// <returns>Chat-turn identifier.</returns>
+        public static string GenerateChatTurnId() => Generate(Constants.ChatTurnPrefix);
+
+        /// <summary>Generate a chat feedback identifier.</summary>
+        /// <returns>Chat feedback identifier.</returns>
+        public static string GenerateChatFeedbackId() => Generate(Constants.ChatFeedbackPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

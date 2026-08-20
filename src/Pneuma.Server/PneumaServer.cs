@@ -172,6 +172,7 @@ namespace Pneuma.Server
             new UserRoutes(_Database, _Authorization).Register(_Server);
             new CredentialRoutes(_Database, _Authorization, _Authentication).Register(_Server);
             new RequestHistoryRoutes(_Database).Register(_Server);
+            new ChatHistoryRoutes(_Database, _Authorization).Register(_Server);
             new SettingsRoutes(_Settings, _Authorization).Register(_Server);
             new RoleRoutes(_Database, _Authorization).Register(_Server);
             new PermissionRoutes(_Database, _Authorization).Register(_Server);

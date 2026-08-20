@@ -2,6 +2,7 @@ namespace Pneuma.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
 
@@ -58,6 +59,14 @@ namespace Pneuma.Core.Models
 
         /// <summary>Last error message, if failed.</summary>
         public string? Error { get; set; } = null;
+
+        /// <summary>
+        /// Transient (not persisted): set when the pipeline has already recorded this job's terminal failure
+        /// event in place — e.g. by resolving a contended stage's queued entry to Failed — so the failure
+        /// handler updates job/link status and metrics without inserting a duplicate event. Reset per use.
+        /// </summary>
+        [JsonIgnore]
+        public bool StageFailureRecorded { get; set; } = false;
 
         /// <summary>Detected document type from DocumentAtom.</summary>
         public string? DocumentType { get; set; } = null;

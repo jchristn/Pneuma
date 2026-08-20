@@ -23,7 +23,9 @@ function DataTable({
   page: controlledPage,
   totalItems: controlledTotal,
   onPageChange: controlledPageChange,
-  onPageSizeChange: controlledPageSizeChange
+  onPageSizeChange: controlledPageSizeChange,
+  selection = null,
+  bulkBar = null
 }) {
   const [internalPage, setInternalPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
@@ -86,6 +88,30 @@ function DataTable({
     else setInternalPage(1);
   };
 
+  // Optional multi-select. The parent owns the selected-id Set; the header checkbox toggles every row on the
+  // current page while the Set persists across pages.
+  const selEnabled = !!selection;
+  const rowId = (row) => (selection?.getRowId ? selection.getRowId(row) : (row.id ?? row.Id ?? row.guid ?? row.GUID));
+  const selectedIds = selection?.selectedIds ?? null;
+  const pageIds = selEnabled ? pageRows.map(rowId) : [];
+  const allOnPageSelected = selEnabled && pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const someOnPageSelected = selEnabled && pageIds.some((id) => selectedIds.has(id));
+  const totalColumns = columns.length + (selEnabled ? 1 : 0);
+
+  const toggleAllOnPage = () => {
+    const next = new Set(selectedIds);
+    if (allOnPageSelected) pageIds.forEach((id) => next.delete(id));
+    else pageIds.forEach((id) => next.add(id));
+    selection.onChange(next);
+  };
+
+  const toggleOne = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selection.onChange(next);
+  };
+
   return (
     <div className="table-frame">
       <Pagination
@@ -98,10 +124,25 @@ function DataTable({
         onRefresh={onRefresh}
         extraControls={toolbar}
       />
+      {selEnabled && selectedIds.size > 0 && bulkBar && (
+        <div className="table-bulkbar">{bulkBar}</div>
+      )}
       <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
+              {selEnabled && (
+                <th scope="col" className="select-col">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    ref={(el) => { if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected; }}
+                    onChange={toggleAllOnPage}
+                    aria-label="Select all rows on this page"
+                    title="Select all rows on this page"
+                  />
+                </th>
+              )}
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -121,13 +162,13 @@ function DataTable({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={columns.length} className="table-loading">
+                <td colSpan={totalColumns} className="table-loading">
                   <span className="loading-spinner" />
                 </td>
               </tr>
             ) : pageRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="table-empty">
+                <td colSpan={totalColumns} className="table-empty">
                   <div className="empty-state-title">{emptyTitle}</div>
                   {emptyDescription && (
                     <div className="empty-state-description">{emptyDescription}</div>
@@ -135,19 +176,33 @@ function DataTable({
                 </td>
               </tr>
             ) : (
-              pageRows.map((row, i) => (
+              pageRows.map((row, i) => {
+                const id = selEnabled ? rowId(row) : null;
+                const isSelected = selEnabled && selectedIds.has(id);
+                return (
                 <tr
                   key={rowKey(row, i)}
-                  className={onRowClick ? 'clickable-row' : ''}
+                  className={`${onRowClick ? 'clickable-row' : ''}${isSelected ? ' row-selected' : ''}`}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
+                  {selEnabled && (
+                    <td className="select-col" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleOne(id)}
+                        aria-label="Select this row"
+                      />
+                    </td>
+                  )}
                   {columns.map((col) => (
                     <td key={col.key} className={col.className || ''}>
                       {col.render ? col.render(row[col.key], row) : row[col.key]}
                     </td>
                   ))}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

@@ -10,6 +10,8 @@ namespace Pneuma.Core.Enums
     {
         /// <summary>Not yet started.</summary>
         Pending,
+        /// <summary>Fetch of the source content from the link (HTTP / headless browser).</summary>
+        ContentRetrieval,
         /// <summary>DocumentAtom type detection.</summary>
         TypeDetection,
         /// <summary>DocumentAtom semantic cell extraction.</summary>

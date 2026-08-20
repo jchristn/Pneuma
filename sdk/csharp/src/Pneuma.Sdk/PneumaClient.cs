@@ -515,6 +515,15 @@ namespace Pneuma.Sdk
             return SendAsync<Subject>(HttpMethod.Get, "/v1.0/subjects/" + Escape(id), null, token);
         }
 
+        /// <summary>Resolve a subject by its URL slug.</summary>
+        /// <param name="slug">URL slug.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The subject.</returns>
+        public Task<Subject> GetSubjectBySlugAsync(string slug, CancellationToken token = default)
+        {
+            return SendAsync<Subject>(HttpMethod.Get, "/v1.0/subjects/by-slug/" + Escape(slug), null, token);
+        }
+
         /// <summary>Update a subject.</summary>
         /// <param name="id">Subject identifier.</param>
         /// <param name="subject">Updated subject.</param>
@@ -533,6 +542,57 @@ namespace Pneuma.Sdk
         public Task DeleteSubjectAsync(string id, CancellationToken token = default)
         {
             return SendCoreAsync(HttpMethod.Delete, "/v1.0/subjects/" + Escape(id), null, token);
+        }
+
+        #endregion
+
+        #region Public-Methods-History-And-Feedback
+
+        /// <summary>List persisted chat turns (newest first), optionally scoped to a subject.</summary>
+        /// <param name="subjectId">Subject to scope to, or null for all subjects.</param>
+        /// <param name="query">Optional paging options.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Paginated result of chat turns.</returns>
+        public Task<EnumerationResult<ChatTurnRecord>> ListHistoryAsync(string? subjectId = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<ChatTurnRecord>>(HttpMethod.Get, "/v1.0/history" + BuildFilteredQuery(query, subjectId), null, token);
+        }
+
+        /// <summary>Get a single chat turn together with its feedback.</summary>
+        /// <param name="id">Turn identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The turn and its feedback.</returns>
+        public Task<ChatTurnDetail> GetHistoryTurnAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<ChatTurnDetail>(HttpMethod.Get, "/v1.0/history/" + Escape(id), null, token);
+        }
+
+        /// <summary>List chat feedback (newest first), each enriched with the rated turn, optionally scoped to a subject.</summary>
+        /// <param name="subjectId">Subject to scope to, or null for all subjects.</param>
+        /// <param name="query">Optional paging options.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Paginated result of feedback with its turns.</returns>
+        public Task<EnumerationResult<ChatFeedbackDetail>> ListFeedbackAsync(string? subjectId = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<ChatFeedbackDetail>>(HttpMethod.Get, "/v1.0/feedback" + BuildFilteredQuery(query, subjectId), null, token);
+        }
+
+        /// <summary>Submit thumbs up/down and/or a comment on a chat answer.</summary>
+        /// <param name="request">The feedback request (turn id, rating, optional comment).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The created feedback record.</returns>
+        public Task<ChatFeedback> SubmitFeedbackAsync(SubmitFeedbackRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<ChatFeedback>(HttpMethod.Post, "/v1.0/feedback", request, token);
+        }
+
+        private static string BuildFilteredQuery(EnumerationQuery? query, string? subjectId)
+        {
+            string q = query?.ToQueryString() ?? string.Empty;
+            if (string.IsNullOrEmpty(subjectId)) return q;
+            string separator = string.IsNullOrEmpty(q) ? "?" : "&";
+            return q + separator + "subjectId=" + Uri.EscapeDataString(subjectId);
         }
 
         #endregion

@@ -30,9 +30,9 @@ namespace Pneuma.Core.Requests
 
         /// <summary>
         /// Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1 (Partio clamps).
-        /// Default 2.
+        /// Default 1.
         /// </summary>
-        public int MaxConcurrentRequests { get; set; } = 2;
+        public int MaxConcurrentRequests { get; set; } = 1;
 
         /// <summary>
         /// Maximum context window (in tokens) of a completion model. Drives automatic chat conversation

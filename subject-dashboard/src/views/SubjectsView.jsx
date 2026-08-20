@@ -10,7 +10,16 @@ import ActionMenu from '../components/ActionMenu';
 import CopyableId from '../components/CopyableId';
 
 
-const EMPTY_FORM = { displayName: '', type: 'Subject', description: '' };
+const EMPTY_FORM = {
+  displayName: '', type: 'Subject', description: '', urlSlug: '',
+  thinkingEnabled: false, historyRetentionDays: 90,
+  systemPrompt: '', ontologyClassifyPrompt: '', ontologyDefinitionPrompt: ''
+};
+
+// Slug: lowercase, collapse non-alphanumeric runs to single dashes, trim dashes.
+function slugify(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 
 function SubjectsView() {
   const { apiClient } = useAuth();
@@ -28,6 +37,7 @@ function SubjectsView() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletingNotice, setDeletingNotice] = useState(false);
 
   const load = useCallback(async () => {
     if (!apiClient) return;
@@ -59,7 +69,13 @@ function SubjectsView() {
     setForm({
       displayName: subject.displayName || '',
       type: subject.type || 'Subject',
-      description: subject.description || ''
+      description: subject.description || '',
+      urlSlug: subject.urlSlug || '',
+      thinkingEnabled: !!subject.thinkingEnabled,
+      historyRetentionDays: subject.historyRetentionDays || 90,
+      systemPrompt: subject.systemPrompt || '',
+      ontologyClassifyPrompt: subject.ontologyClassifyPrompt || '',
+      ontologyDefinitionPrompt: subject.ontologyDefinitionPrompt || ''
     });
     setFormError('');
     setFormOpen(true);
@@ -73,11 +89,17 @@ function SubjectsView() {
     }
     setSaving(true);
     setFormError('');
+    const payload = {
+      ...form,
+      urlSlug: form.urlSlug ? slugify(form.urlSlug) : slugify(form.displayName),
+      thinkingEnabled: !!form.thinkingEnabled,
+      historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90)
+    };
     try {
       if (editing) {
-        await apiClient.updateSubject(editing.id, form);
+        await apiClient.updateSubject(editing.id, payload);
       } else {
-        await apiClient.createSubject(form);
+        await apiClient.createSubject(payload);
       }
       setFormOpen(false);
       await load();
@@ -94,6 +116,7 @@ function SubjectsView() {
     try {
       await apiClient.deleteSubject(deleteTarget.id);
       setDeleteTarget(null);
+      setDeletingNotice(true);
       await load();
     } catch (err) {
       setError(err.message);
@@ -106,7 +129,9 @@ function SubjectsView() {
     {
       key: 'displayName',
       label: t('subjects.displayName'),
-      render: (v) => <strong>{v || '(unnamed)'}</strong>
+      render: (v, row) => (row.deletionStatus && row.deletionStatus !== 'None')
+        ? <span style={{ opacity: 0.5 }}><strong>{v || '(unnamed)'}</strong> · <em>{row.deletionStatus === 'Failed' ? t('subjects.deletionFailed', 'deletion failed') : t('subjects.deleting', 'deleting…')}</em></span>
+        : <strong>{v || '(unnamed)'}</strong>
     },
     { key: 'type', label: t('subjects.type') },
     {
@@ -199,6 +224,65 @@ function SubjectsView() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
+          <div className="form-group">
+            <label htmlFor="cd-slug">{t('subjects.urlSlug', 'URL Slug')}</label>
+            <input
+              id="cd-slug"
+              type="text"
+              value={form.urlSlug}
+              placeholder={slugify(form.displayName) || 'derived-from-name'}
+              onChange={(e) => setForm({ ...form, urlSlug: e.target.value })}
+            />
+            <div className="field-hint">{t('subjects.urlSlugHint', 'URL-safe slug used to reach this subject in the user dashboard. Must be unique.')}</div>
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              id="cd-thinking"
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={form.thinkingEnabled}
+              onChange={(e) => setForm({ ...form, thinkingEnabled: e.target.checked })}
+            />
+            <label htmlFor="cd-thinking" style={{ margin: 0 }}>{t('subjects.thinkingEnabled', 'Show model thinking in chat')}</label>
+          </div>
+          <div className="form-group">
+            <label htmlFor="cd-retention">{t('subjects.historyRetentionDays', 'History Retention (days)')}</label>
+            <input
+              id="cd-retention"
+              type="number"
+              min={1}
+              value={form.historyRetentionDays}
+              onChange={(e) => setForm({ ...form, historyRetentionDays: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="cd-sysprompt">{t('subjects.systemPrompt', 'Subject System Prompt')}</label>
+            <textarea
+              id="cd-sysprompt"
+              rows={3}
+              value={form.systemPrompt}
+              placeholder={t('subjects.systemPromptHint', 'Appended after the global system prompt for chats about this subject.')}
+              onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="cd-ontclass">{t('subjects.ontologyClassifyPrompt', 'Subject Ontology Classification Prompt')}</label>
+            <textarea
+              id="cd-ontclass"
+              rows={3}
+              value={form.ontologyClassifyPrompt}
+              onChange={(e) => setForm({ ...form, ontologyClassifyPrompt: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="cd-ontdef">{t('subjects.ontologyDefinitionPrompt', 'Subject Ontology Definition')}</label>
+            <textarea
+              id="cd-ontdef"
+              rows={3}
+              value={form.ontologyDefinitionPrompt}
+              onChange={(e) => setForm({ ...form, ontologyDefinitionPrompt: e.target.value })}
+            />
+          </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)} disabled={saving}>
               {t('common.cancel')}
@@ -215,11 +299,22 @@ function SubjectsView() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title={t('common.delete')}
-        message={`Delete this subject? This cannot be undone.`}
+        message={`Delete this subject and everything associated with it? This cannot be undone.`}
         entityName={deleteTarget?.displayName}
         confirmLabel={t('common.delete')}
         isLoading={deleting}
       />
+
+      <Modal
+        isOpen={deletingNotice}
+        onClose={() => setDeletingNotice(false)}
+        title={t('subjects.deletingTitle', 'Deleting in the background')}
+      >
+        <p>{t('subjects.deletingBackground', 'We are deleting this subject and everything associated with it in the background. You may close this window.')}</p>
+        <div className="form-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setDeletingNotice(false)}>{t('common.close')}</button>
+        </div>
+      </Modal>
     </div>
   );
 }

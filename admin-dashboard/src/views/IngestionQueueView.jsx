@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
+import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
 import ActionMenu from '../components/ActionMenu';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -13,6 +14,7 @@ import CopyableId from '../components/CopyableId';
 import CopyButton from '../components/CopyButton';
 import StatusPill, { toneForStatus } from '../components/StatusPill';
 import { getId } from '../components/ResourceView';
+import { stageLabel } from '../components/IngestionTimeline';
 import { formatDateTime } from '../i18n/formatters';
 
 const STATUS_OPTIONS = ['', 'Queued', 'Running', 'Completed', 'Failed'];
@@ -46,7 +48,7 @@ function JobDetail({ detail }) {
             <li className="timeline-item" key={i}>
               <span className={`timeline-marker ${toneForStatus(ev.status || ev.state)}`} />
               <div className="timeline-content">
-                <div className="timeline-stage">{ev.stage || ev.name || ev.type || `Stage ${i + 1}`}</div>
+                <div className="timeline-stage">{ev.stage ? stageLabel(ev.stage) : (ev.name || ev.type || `Stage ${i + 1}`)}</div>
                 <div className="timeline-meta">
                   {(ev.status || ev.state) && <StatusPill label={ev.status || ev.state} tone={toneForStatus(ev.status || ev.state)} />}{' '}
                   {formatDateTime(ev.timestampUtc || ev.createdUtc || ev.time)}
@@ -69,6 +71,8 @@ function IngestionQueueView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [subjects, setSubjects] = useState([]);
   const [modal, setModal] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -77,7 +81,7 @@ function IngestionQueueView() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await apiClient.listJobs(status || undefined);
+      const resp = await apiClient.listJobs(status || undefined, subjectId ? { subjectId } : null);
       setRows(normalizeList(resp).items);
     } catch (err) {
       setError(err?.message || 'Failed to load jobs');
@@ -85,9 +89,13 @@ function IngestionQueueView() {
     } finally {
       setLoading(false);
     }
-  }, [apiClient, status]);
+  }, [apiClient, status, subjectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    apiClient.list('subjects').then((r) => setSubjects(normalizeList(r).items)).catch(() => {});
+  }, [apiClient]);
 
   const openDetail = useCallback(async (job) => {
     setModal({ type: 'detail', item: job });
@@ -103,6 +111,9 @@ function IngestionQueueView() {
     }
   }, [apiClient]);
 
+  const { selectedItems, clear, selection } = useTableSelection(rows);
+  const failedSelected = selectedItems.filter(isFailed);
+
   const restart = async (job) => {
     await apiClient.restartJob(getId(job));
     await load();
@@ -114,10 +125,43 @@ function IngestionQueueView() {
     await load();
   };
 
+  const bulkRestart = async () => {
+    for (const job of failedSelected) {
+      await apiClient.restartJob(getId(job));
+    }
+    setModal(null);
+    clear();
+    await load();
+  };
+
+  const bulkDelete = async () => {
+    for (const job of selectedItems) {
+      await apiClient.deleteJob(getId(job));
+    }
+    setModal(null);
+    clear();
+    await load();
+  };
+
+  const bulkBar = (
+    <BulkActionBar
+      count={selectedItems.length}
+      onClear={clear}
+      actions={[
+        { key: 'restart', label: t('jobs.restart'), disabled: failedSelected.length === 0,
+          tip: failedSelected.length === 0 ? t('jobs.bulkRestartNone', 'Only failed jobs can be restarted.') : t('jobs.bulkRestartTip', { count: failedSelected.length, defaultValue: `Restart ${failedSelected.length} failed job(s).` }),
+          onClick: () => setModal({ type: 'bulk-restart' }) },
+        { key: 'delete', label: t('jobs.delete'), danger: true,
+          tip: t('jobs.bulkDeleteTip', { count: selectedItems.length, defaultValue: `Delete ${selectedItems.length} job(s) and their downstream data.` }),
+          onClick: () => setModal({ type: 'bulk-delete' }) }
+      ]}
+    />
+  );
+
   const columns = [
     { key: 'id', label: 'Job ID', render: (r) => <CopyableId value={getId(r)} truncateLen={14} /> },
     { key: 'status', label: t('jobs.status'), render: (r) => <StatusPill label={r.status} tone={toneForStatus(r.status)} /> },
-    { key: 'stage', label: 'Stage', render: (r) => r.stage || r.currentStage || '—' },
+    { key: 'stage', label: 'Stage', render: (r) => stageLabel(r.stage || r.currentStage) },
     { key: 'linkId', label: 'Link', render: (r) => <CopyableId value={r.linkId} truncateLen={12} /> },
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc) },
     { key: 'updatedUtc', label: 'Updated', render: (r) => formatDateTime(r.updatedUtc || r.completedUtc) },
@@ -142,9 +186,18 @@ function IngestionQueueView() {
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || t('jobs.allStatuses')}</option>)}
           </select>
         </div>
+        <div className="field">
+          <label htmlFor="job-subject" className="has-tip" title="Filter the queue to a single subject. Choose all subjects to clear the filter.">{t('jobs.subject', 'Subject')}</label>
+          <select id="job-subject" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}
+            title="Filter the queue to a single subject. Choose all subjects to clear the filter.">
+            <option value="">{t('jobs.allSubjects', 'All subjects')}</option>
+            {subjects.map((s) => <option key={s.id} value={s.id}>{s.displayName || s.name || s.id}</option>)}
+          </select>
+        </div>
       </div>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
-      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openDetail} />
+      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openDetail}
+        selection={selection} bulkBar={bulkBar} />
 
       {modal?.type === 'detail' && (
         <Modal title={t('jobs.detail')} size="lg"
@@ -169,6 +222,16 @@ function IngestionQueueView() {
       {modal?.type === 'delete' && (
         <ConfirmModal title={t('jobs.delete')} message={t('jobs.deleteConfirm')} danger
           confirmLabel={t('common.delete')} onConfirm={() => remove(modal.item)} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'bulk-restart' && (
+        <ConfirmModal title={t('jobs.restart')}
+          message={t('jobs.bulkRestartConfirm', { count: failedSelected.length, defaultValue: `Restart ${failedSelected.length} failed job(s) from the beginning?` })}
+          confirmLabel={t('common.restart')} onConfirm={bulkRestart} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'bulk-delete' && (
+        <ConfirmModal title={t('jobs.delete')} danger
+          message={t('jobs.bulkDeleteConfirm', { count: selectedItems.length, defaultValue: `Delete ${selectedItems.length} job(s)? This cascade-removes their graph nodes, indexed chunks, and logs, and cannot be undone.` })}
+          confirmLabel={t('common.delete')} onConfirm={bulkDelete} onClose={() => setModal(null)} />
       )}
     </div>
   );

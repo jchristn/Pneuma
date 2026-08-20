@@ -5,6 +5,7 @@ import './IngestionLog.css';
 // Friendly labels for the ordered ingestion stages emitted by the backend.
 const STAGE_LABELS = {
   pending: 'Started',
+  contentretrieval: 'Content retrieval',
   typedetection: 'Type detection',
   cellextraction: 'Semantic cell extraction',
   classification: 'Ontology / knowledge-graph mapping',
@@ -75,6 +76,7 @@ export default function IngestionTimeline({ jobData, events, inProgressLabel, ru
             {ev.message && <div className="ilog-message">{ev.message}</div>}
             <div className="ilog-meta">
               {Number(ev.durationMs) > 0 && <span>{formatDuration(ev.durationMs)}</span>}
+              {Number(ev.queueDurationMs) > 0 && <span>Queue duration: {formatDuration(ev.queueDurationMs)}</span>}
               {ev.createdUtc && <span>{formatDateTime(ev.createdUtc)}</span>}
             </div>
           </div>

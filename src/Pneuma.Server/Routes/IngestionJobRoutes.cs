@@ -92,6 +92,19 @@ namespace Pneuma.Server.Routes
             }
 
             List<IngestionJob> jobs = await _Db.IngestionJobs.EnumerateAsync(tenantId, status, ctx.Token).ConfigureAwait(false);
+
+            // Optional subject filter, applied before pagination so the counts reflect the filtered set.
+            string? subjectFilter = ctx.Request.Query.Elements?["subjectId"];
+            if (!String.IsNullOrEmpty(subjectFilter))
+            {
+                List<IngestionJob> filtered = new List<IngestionJob>();
+                foreach (IngestionJob job in jobs)
+                {
+                    if (String.Equals(job.SubjectId, subjectFilter, StringComparison.Ordinal)) filtered.Add(job);
+                }
+                jobs = filtered;
+            }
+
             EnumerationResult<IngestionJob> result = EnumerationHelper.Paginate(jobs, RouteHelper.ReadEnumerationQuery(ctx), j => j.CreatedUtc, j => j.SourceUrl);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
         }

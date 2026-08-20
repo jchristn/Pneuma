@@ -113,6 +113,17 @@ namespace Pneuma.Server.Services
             Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.system", token).ConfigureAwait(false);
             string systemPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackSystemPrompt : prompt!.Content;
 
+            // Subject context drives the per-subject system prompt (global base + subject appended) and whether
+            // model thinking is surfaced to the caller. Thinking is always captured; the flag only gates display.
+            Subject? subject = String.IsNullOrWhiteSpace(subjectId)
+                ? null
+                : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            if (subject != null && !String.IsNullOrWhiteSpace(subject.SystemPrompt))
+            {
+                systemPrompt = systemPrompt + "\n\n" + subject.SystemPrompt!.Trim();
+            }
+            bool thinkingEnabled = subject?.ThinkingEnabled ?? false;
+
             string? apiKey = DecryptKey(runner);
             CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
             List<ToolDefinition> tools = McpToolCatalog.BuildAssistantToolDefinitions();
@@ -163,6 +174,11 @@ namespace Pneuma.Server.Services
             string finalAnswer = String.Empty;
             bool producedText = false;
 
+            // Model reasoning arrives inline as <think>...</think>. Strip it from the live delta stream and
+            // capture it (plus its duration) separately so it is never mixed into the answer; the subject's
+            // thinking flag governs whether the caller renders it.
+            ThinkParser thinkParser = new ThinkParser();
+
             try
             {
                 for (int iteration = 0; iteration < _MaxIterations; iteration++)
@@ -209,8 +225,12 @@ namespace Pneuma.Server.Services
                     {
                         if (!String.IsNullOrEmpty(chunk.Text))
                         {
-                            producedText = true;
-                            await emit(new { type = "delta", text = chunk.Text }, false, token).ConfigureAwait(false);
+                            string visible = thinkParser.Feed(chunk.Text);
+                            if (!String.IsNullOrEmpty(visible))
+                            {
+                                producedText = true;
+                                await emit(new { type = "delta", text = visible }, false, token).ConfigureAwait(false);
+                            }
                         }
                     }
 
@@ -227,7 +247,7 @@ namespace Pneuma.Server.Services
                     List<ToolCall> calls = response.ToolCalls ?? new List<ToolCall>();
                     if (calls.Count == 0)
                     {
-                        finalAnswer = response.Text ?? String.Empty;
+                        finalAnswer = ThinkParser.Strip(response.Text ?? String.Empty).Trim();
                         break;
                     }
 
@@ -275,6 +295,15 @@ namespace Pneuma.Server.Services
                 }
             }
 
+            // Flush any visible text held back for partial-marker detection.
+            string flushed = thinkParser.Finish();
+            if (!String.IsNullOrEmpty(flushed))
+            {
+                producedText = true;
+                await emit(new { type = "delta", text = flushed }, false, token).ConfigureAwait(false);
+                if (String.IsNullOrEmpty(finalAnswer)) finalAnswer = flushed.Trim();
+            }
+
             if (String.IsNullOrEmpty(finalAnswer) && !producedText)
             {
                 finalAnswer = "I wasn't able to complete the request.";
@@ -283,10 +312,32 @@ namespace Pneuma.Server.Services
 
             List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkScores, token).ConfigureAwait(false);
 
+            // Build the turn record up front so its id can be handed to the caller (for feedback) in the
+            // complete event; it is persisted immediately after.
+            ChatTurnRecord record = new ChatTurnRecord
+            {
+                TenantId = tenantId,
+                SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
+                UserId = rc.UserId,
+                Question = turns.Count > 0 ? (turns[turns.Count - 1].Content ?? String.Empty) : String.Empty,
+                Answer = finalAnswer,
+                Thinking = String.IsNullOrWhiteSpace(thinkParser.Thinking) ? null : thinkParser.Thinking,
+                Model = model,
+                PromptTokens = (int)promptTokens,
+                CompletionTokens = (int)completionTokens,
+                TotalTokens = (int)totalTokens,
+                TimeToFirstTokenMs = timeToFirstTokenMs < 0 ? 0 : timeToFirstTokenMs,
+                GenerationMs = generationMs,
+                ThinkingMs = thinkParser.ThinkingMs,
+                ContextSize = runner.ContextSize,
+                CitationsJson = citations.Count > 0 ? Json.Serialize(citations) : null
+            };
+
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;
             await emit(new
             {
                 type = "complete",
+                turnId = record.Id,
                 answer = finalAnswer,
                 model,
                 promptTokens,
@@ -298,9 +349,29 @@ namespace Pneuma.Server.Services
                 contextSize = runner.ContextSize,
                 toolCalls = toolTrace,
                 citations,
+                thinking = thinkParser.Thinking,
+                thinkingMs = thinkParser.ThinkingMs,
+                thinkingEnabled,
                 compacted = !String.IsNullOrWhiteSpace(compactedSummary),
                 compactedSummary
             }, true, token).ConfigureAwait(false);
+
+            // Persist the completed turn for the History/Feedback surfaces, then opportunistically prune this
+            // subject's history beyond its retention window. Best-effort: a persistence failure never fails the answer.
+            try
+            {
+                await _Db.ChatTurns.CreateAsync(record, token).ConfigureAwait(false);
+
+                if (subject != null && subject.HistoryRetentionDays > 0)
+                {
+                    DateTime cutoff = DateTime.UtcNow.AddDays(-subject.HistoryRetentionDays);
+                    await _Db.ChatTurns.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
+                }
+            }
+            catch (Exception persistError)
+            {
+                _Logging.Warn("[AgenticChatService] failed to persist chat turn: " + persistError.Message);
+            }
         }
 
         #endregion
@@ -428,6 +499,129 @@ namespace Pneuma.Server.Services
             catch (Exception)
             {
                 return null;
+            }
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        /// <summary>
+        /// Incremental splitter that separates model reasoning delimited by <c>&lt;think&gt;</c>/<c>&lt;/think&gt;</c>
+        /// from the visible answer as text streams in. Markers may straddle chunk boundaries, so a short tail is
+        /// held back until it can be classified. Also accumulates the total time spent inside think blocks.
+        /// </summary>
+        private sealed class ThinkParser
+        {
+            private const string _Open = "<think>";
+            private const string _Close = "</think>";
+
+            private bool _Inside = false;
+            private string _Pending = String.Empty;
+            private readonly System.Text.StringBuilder _Thinking = new System.Text.StringBuilder();
+            private long _ThinkingMs = 0;
+            private long _ThinkStartTicks = 0;
+
+            /// <summary>The accumulated reasoning text, trimmed.</summary>
+            public string Thinking { get { return _Thinking.ToString().Trim(); } }
+
+            /// <summary>Total milliseconds spent inside think blocks.</summary>
+            public long ThinkingMs { get { return _ThinkingMs; } }
+
+            /// <summary>Feed a streamed text fragment; returns the visible (non-thinking) portion to emit.</summary>
+            /// <param name="text">The incoming fragment.</param>
+            /// <returns>Visible text safe to stream to the caller.</returns>
+            public string Feed(string text)
+            {
+                _Pending += text ?? String.Empty;
+                System.Text.StringBuilder visible = new System.Text.StringBuilder();
+
+                while (_Pending.Length > 0)
+                {
+                    if (!_Inside)
+                    {
+                        int i = _Pending.IndexOf(_Open, StringComparison.Ordinal);
+                        if (i >= 0)
+                        {
+                            visible.Append(_Pending, 0, i);
+                            _Pending = _Pending.Substring(i + _Open.Length);
+                            _Inside = true;
+                            _ThinkStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                        }
+                        else
+                        {
+                            int keep = PartialTailLength(_Pending, _Open);
+                            visible.Append(_Pending, 0, _Pending.Length - keep);
+                            _Pending = _Pending.Substring(_Pending.Length - keep);
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        int j = _Pending.IndexOf(_Close, StringComparison.Ordinal);
+                        if (j >= 0)
+                        {
+                            _Thinking.Append(_Pending, 0, j);
+                            _Pending = _Pending.Substring(j + _Close.Length);
+                            _Inside = false;
+                            _ThinkingMs += ElapsedMs(_ThinkStartTicks);
+                        }
+                        else
+                        {
+                            int keep = PartialTailLength(_Pending, _Close);
+                            _Thinking.Append(_Pending, 0, _Pending.Length - keep);
+                            _Pending = _Pending.Substring(_Pending.Length - keep);
+                            break;
+                        }
+                    }
+                }
+
+                return visible.ToString();
+            }
+
+            /// <summary>Flush any held-back text at end of stream. Returns trailing visible text (empty if the
+            /// stream ended mid-think, in which case the remainder is folded into the captured reasoning).</summary>
+            /// <returns>Trailing visible text.</returns>
+            public string Finish()
+            {
+                string tail = _Pending;
+                _Pending = String.Empty;
+                if (_Inside)
+                {
+                    _Thinking.Append(tail);
+                    _ThinkingMs += ElapsedMs(_ThinkStartTicks);
+                    _Inside = false;
+                    return String.Empty;
+                }
+                return tail;
+            }
+
+            /// <summary>Strip all think blocks from a complete text (non-streaming).</summary>
+            /// <param name="text">Full text.</param>
+            /// <returns>Text with reasoning removed.</returns>
+            public static string Strip(string text)
+            {
+                if (String.IsNullOrEmpty(text)) return text ?? String.Empty;
+                ThinkParser parser = new ThinkParser();
+                string visible = parser.Feed(text);
+                return visible + parser.Finish();
+            }
+
+            private static long ElapsedMs(long startTicks)
+            {
+                return (long)((System.Diagnostics.Stopwatch.GetTimestamp() - startTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            }
+
+            // Longest suffix of s that is a proper prefix of marker, so a marker split across chunk boundaries
+            // is not emitted prematurely.
+            private static int PartialTailLength(string s, string marker)
+            {
+                int max = Math.Min(s.Length, marker.Length - 1);
+                for (int len = max; len > 0; len--)
+                {
+                    if (String.CompareOrdinal(s, s.Length - len, marker, 0, len) == 0) return len;
+                }
+                return 0;
             }
         }
 

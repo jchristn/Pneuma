@@ -47,7 +47,8 @@ namespace Pneuma.Server.Services
         /// <param name="message">The human-readable message shown in the log.</param>
         /// <param name="durationMs">The elapsed time this event represents, in milliseconds.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task RecordEventAsync(IngestionJob job, IngestionStageEnum stage, IngestionStatusEnum status, string message, double durationMs, CancellationToken token)
+        /// <returns>The created event (so a queued entry can later be resolved in place).</returns>
+        public async Task<IngestionJobEvent> RecordEventAsync(IngestionJob job, IngestionStageEnum stage, IngestionStatusEnum status, string message, double durationMs, CancellationToken token)
         {
             IngestionJobEvent jobEvent = new IngestionJobEvent
             {
@@ -59,6 +60,29 @@ namespace Pneuma.Server.Services
                 DurationMs = durationMs
             };
             await _Db.IngestionJobEvents.CreateAsync(jobEvent, token).ConfigureAwait(false);
+            return jobEvent;
+        }
+
+        /// <summary>
+        /// Resolve an existing (typically queued) stage event to its terminal state in place, recording the
+        /// stage runtime and the time it spent waiting for a free concurrency slot — so a contended stage shows
+        /// as a single entry that updates, rather than a "queued" row followed by a duplicate terminal row.
+        /// </summary>
+        /// <param name="jobEvent">The event to update (as returned by <see cref="RecordEventAsync"/>).</param>
+        /// <param name="status">The terminal status to set.</param>
+        /// <param name="message">The terminal message.</param>
+        /// <param name="durationMs">The stage runtime in milliseconds.</param>
+        /// <param name="queueMs">The time spent waiting for a free slot, in milliseconds.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="jobEvent"/> is null.</exception>
+        public async Task ResolveEventAsync(IngestionJobEvent jobEvent, IngestionStatusEnum status, string message, double durationMs, double queueMs, CancellationToken token)
+        {
+            if (jobEvent == null) throw new ArgumentNullException(nameof(jobEvent));
+            jobEvent.Status = status;
+            jobEvent.Message = message;
+            jobEvent.DurationMs = durationMs;
+            jobEvent.QueueDurationMs = queueMs;
+            await _Db.IngestionJobEvents.UpdateAsync(jobEvent, token).ConfigureAwait(false);
         }
 
         /// <summary>Persist a job's current state, stamping its last-update time.</summary>
@@ -113,7 +137,16 @@ namespace Pneuma.Server.Services
             job.Error = error;
             job.CompletedUtc = DateTime.UtcNow;
             await UpdateJobAsync(job, token).ConfigureAwait(false);
-            await RecordEventAsync(job, stage, IngestionStatusEnum.Failed, error, 0, token).ConfigureAwait(false);
+            if (job.StageFailureRecorded)
+            {
+                // The failing stage's event was already updated in place (a contended stage's queued entry was
+                // resolved to Failed), so don't insert a duplicate row — just clear the transient marker.
+                job.StageFailureRecorded = false;
+            }
+            else
+            {
+                await RecordEventAsync(job, stage, IngestionStatusEnum.Failed, error, 0, token).ConfigureAwait(false);
+            }
             await UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, error, token).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionFailed();
             PneumaMetrics.RecordIngestionJob("failed");

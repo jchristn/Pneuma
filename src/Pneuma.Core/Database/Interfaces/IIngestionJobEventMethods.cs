@@ -16,6 +16,13 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Created event.</returns>
         Task<IngestionJobEvent> CreateAsync(IngestionJobEvent jobEvent, CancellationToken token = default);
 
+        /// <summary>Update an existing job event in place (status, message, durations). Used to resolve a
+        /// contended stage's queued entry to its terminal state without inserting a duplicate row.</summary>
+        /// <param name="jobEvent">Event to update; matched by id and tenant.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Updated event.</returns>
+        Task<IngestionJobEvent> UpdateAsync(IngestionJobEvent jobEvent, CancellationToken token = default);
+
         /// <summary>Enumerate events for a job within a tenant, chronological.</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="jobId">Job identifier.</param>

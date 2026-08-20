@@ -226,6 +226,61 @@ namespace Test.Shared.Suites
                             }
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "DocumentAtom_TableAtom_BecomesPerRowMarkdownCells", "A table atom is flattened to one valid markdown cell per data row, header + separator + row",
+                        executeAsync: async ct =>
+                        {
+                            // A DocumentAtom table atom: declared columns plus three data rows. Each data row must
+                            // become its own cell carrying the column context as a compact, valid markdown table.
+                            string atomsJson =
+                                "[{\"Type\":\"Table\",\"Table\":{" +
+                                "\"Columns\":[{\"Name\":\"col1\"},{\"Name\":\"col2\"}]," +
+                                "\"Rows\":[" +
+                                "{\"col1\":\"val1\",\"col2\":\"val2\"}," +
+                                "{\"col1\":\"val3\",\"col2\":\"val4\"}," +
+                                "{\"col1\":\"val5\",\"col2\":\"val6\"}]}}]";
+                            RecordingHttpMessageHandler handler = new RecordingHttpMessageHandler(atomsJson);
+
+                            using (DocumentAtomClient client = new DocumentAtomClient("http://127.0.0.1:8000", retryCount: 0, handler: handler))
+                            {
+                                List<ExtractedCell> cells = await client.ExtractCellsAsync("Html", new byte[] { 1 }, ct);
+
+                                if (cells.Count != 3) throw new Exception("Expected 3 per-row cells, got " + cells.Count);
+                                string expected0 = "| col1 | col2 |\n| --- | --- |\n| val1 | val2 |";
+                                if (cells[0].Text != expected0) throw new Exception("Row 0 markdown mismatch; got: " + cells[0].Text);
+                                string expected2 = "| col1 | col2 |\n| --- | --- |\n| val5 | val6 |";
+                                if (cells[2].Text != expected2) throw new Exception("Row 2 markdown mismatch; got: " + cells[2].Text);
+                                if (cells[0].Type != "Table") throw new Exception("Per-row cell type should be Table; got " + cells[0].Type);
+                            }
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "DocumentAtom_FlattensAllTypes_SkipsBinary", "Atoms of every type become cells except Binary, which is skipped even when it carries text",
+                        executeAsync: async ct =>
+                        {
+                            // Text, list, and table atoms must all yield cells; a Binary atom must be skipped for now
+                            // even though it carries text. Column headers fall back to row keys when none are declared.
+                            string atomsJson =
+                                "[{\"Type\":\"Text\",\"Text\":\"hello\"}," +
+                                "{\"Type\":\"List\",\"UnorderedList\":[\"a\",\"b\"]}," +
+                                "{\"Type\":\"Binary\",\"Text\":\"should-be-skipped\"}," +
+                                "{\"Type\":\"Table\",\"Table\":{\"Rows\":[{\"c\":\"v\"}]}}]";
+                            RecordingHttpMessageHandler handler = new RecordingHttpMessageHandler(atomsJson);
+
+                            using (DocumentAtomClient client = new DocumentAtomClient("http://127.0.0.1:8000", retryCount: 0, handler: handler))
+                            {
+                                List<ExtractedCell> cells = await client.ExtractCellsAsync("Html", new byte[] { 1 }, ct);
+
+                                foreach (ExtractedCell cell in cells)
+                                {
+                                    if (cell.Text != null && cell.Text.IndexOf("should-be-skipped", StringComparison.Ordinal) >= 0)
+                                        throw new Exception("Binary atom must be skipped, but its text surfaced as a cell.");
+                                }
+                                if (cells.Count != 3) throw new Exception("Expected 3 cells (text, list, table), got " + cells.Count);
+                                if (cells[0].Text != "hello") throw new Exception("Text atom mismatch; got: " + cells[0].Text);
+                                if (cells[1].Text != "a\nb") throw new Exception("Unordered list should be newline-joined; got: " + cells[1].Text);
+                                if (cells[2].Text != "| c |\n| --- |\n| v |") throw new Exception("Table (row-key headers) mismatch; got: " + cells[2].Text);
+                            }
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "RecallDbVectors_Live_StoreAndSearch", "RecallDB-backed vectors round-trip against a live RecallDB (gated on PNEUMA_LIVE_STACK=1)",
                         executeAsync: async ct =>
                         {

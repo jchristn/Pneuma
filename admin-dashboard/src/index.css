@@ -291,6 +291,17 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .no-data, .empty-message { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl) !important; }
 .table-loading { display: flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-xl); color: var(--color-text-secondary); }
 
+/* row multi-select */
+.data-table th.select-col, .data-table td.select-col { width: 36px; text-align: center; padding-left: 0.5rem; padding-right: 0.5rem; }
+.data-table td.select-col input, .data-table th.select-col input { cursor: pointer; }
+.data-table tbody tr.row-selected { background: var(--color-primary-soft, rgba(59, 130, 246, 0.12)); }
+.data-table tbody tr.row-selected:hover { background: var(--color-primary-soft, rgba(59, 130, 246, 0.18)); }
+.table-bulkbar { padding: var(--spacing-sm) var(--spacing-md); border-bottom: 1px solid var(--color-border); background: var(--color-surface-alt); }
+.bulk-action-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); flex-wrap: wrap; }
+.bulk-count { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text); }
+.bulk-actions { display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: wrap; }
+.bulk-actions button { padding: 0.3rem 0.7rem; font-size: var(--font-size-xs); }
+
 /* ============================================================= status pills */
 .pill {
   display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.5rem;
@@ -680,6 +691,22 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .chat-compacted-note .chat-markdown { padding: 0 0.7rem 0.6rem; font-size: 0.85rem; color: var(--color-text-secondary); }
 
 /* Answer citations: links back to the ingested sources */
+.history-detail { display: flex; flex-direction: column; gap: 1rem; }
+.history-block { display: flex; flex-direction: column; gap: 0.3rem; }
+.history-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); font-weight: 700; }
+.history-text { font-size: 0.9rem; white-space: pre-wrap; line-height: 1.5; }
+.history-citations { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; }
+.chat-feedback { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.chat-feedback .fb-btn { background: transparent; border: 1px solid var(--color-border); border-radius: 6px; padding: 0.15rem 0.45rem; cursor: pointer; font-size: 0.95rem; line-height: 1; }
+.chat-feedback .fb-btn:hover:not(:disabled) { background: var(--color-surface-alt); }
+.chat-feedback .fb-btn.active { border-color: var(--color-primary, #3b82f6); background: var(--color-primary-soft, rgba(59,130,246,0.12)); }
+.chat-feedback .fb-comment { display: inline-flex; gap: 0.35rem; align-items: center; flex: 1 1 240px; }
+.chat-feedback .fb-comment input { flex: 1; padding: 0.25rem 0.5rem; font-size: 0.82rem; }
+.chat-feedback .fb-send { padding: 0.25rem 0.6rem; font-size: 0.78rem; }
+.chat-feedback-done { color: var(--color-text-secondary); font-size: 0.82rem; }
+.chat-thinking { margin-bottom: 0.5rem; border-left: 2px solid var(--color-border); padding: 0.1rem 0 0.1rem 0.6rem; }
+.chat-thinking-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); cursor: pointer; user-select: none; }
+.chat-thinking-content { margin-top: 0.3rem; font-size: 0.82rem; color: var(--color-text-secondary); white-space: pre-wrap; }
 .chat-citations { margin-top: 0.7rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
 .chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
 .chat-citations > summary { cursor: pointer; user-select: none; list-style-position: inside; }

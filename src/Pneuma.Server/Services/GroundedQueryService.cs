@@ -121,7 +121,7 @@ namespace Pneuma.Server.Services
                 };
             }
 
-            GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, token).ConfigureAwait(false);
+            GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, subjectId, token).ConfigureAwait(false);
             return new GroundedAnswer
             {
                 Answer = generated.Text,
@@ -283,9 +283,9 @@ namespace Pneuma.Server.Services
         /// <param name="runner">Answering model runner.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The answer text.</returns>
-        public async Task<string> GenerateAnswerAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, CancellationToken token = default)
+        public async Task<string> GenerateAnswerAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, string? subjectId = null, CancellationToken token = default)
         {
-            GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, token).ConfigureAwait(false);
+            GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, subjectId, token).ConfigureAwait(false);
             return generated.Text;
         }
 
@@ -296,10 +296,20 @@ namespace Pneuma.Server.Services
         /// <param name="runner">Answering model runner.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The generated answer with its model and duration (both null when generation failed).</returns>
-        public async Task<GeneratedAnswer> GenerateAnswerDetailedAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, CancellationToken token = default)
+        public async Task<GeneratedAnswer> GenerateAnswerDetailedAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, string? subjectId = null, CancellationToken token = default)
         {
             Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "user.answer", token).ConfigureAwait(false);
             string systemPrompt = prompt?.Content ?? "Answer using only the provided sources and cite them.";
+
+            // Append the subject's system prompt after the global one (global base + subject appended).
+            if (!String.IsNullOrEmpty(subjectId))
+            {
+                Subject? subject = await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+                if (subject != null && !String.IsNullOrWhiteSpace(subject.SystemPrompt))
+                {
+                    systemPrompt = systemPrompt + "\n\n" + subject.SystemPrompt!.Trim();
+                }
+            }
 
             string? apiKey = null;
             if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))

@@ -23,11 +23,28 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             jobEvent.CreatedUtc = DateTime.UtcNow;
 
             string sql =
-                "INSERT INTO ingestionjobevents (id, tenantid, jobid, stage, status, message, durationms, createdutc) VALUES (" +
+                "INSERT INTO ingestionjobevents (id, tenantid, jobid, stage, status, message, durationms, queuedurationms, createdutc) VALUES (" +
                 Sanitizer.Str(jobEvent.Id) + ", " + Sanitizer.Str(jobEvent.TenantId) + ", " +
                 Sanitizer.Str(jobEvent.JobId) + ", " + Sanitizer.Str(jobEvent.Stage.ToString()) + ", " +
                 Sanitizer.Str(jobEvent.Status.ToString()) + ", " + Sanitizer.Str(jobEvent.Message) + ", " +
-                jobEvent.DurationMs.ToString(CultureInfo.InvariantCulture) + ", " + Sanitizer.Ts(jobEvent.CreatedUtc) + ");";
+                jobEvent.DurationMs.ToString(CultureInfo.InvariantCulture) + ", " + jobEvent.QueueDurationMs.ToString(CultureInfo.InvariantCulture) + ", " + Sanitizer.Ts(jobEvent.CreatedUtc) + ");";
+            await Query(sql, token).ConfigureAwait(false);
+            return jobEvent;
+        }
+
+        /// <inheritdoc />
+        public async Task<IngestionJobEvent> UpdateAsync(IngestionJobEvent jobEvent, CancellationToken token = default)
+        {
+            if (jobEvent == null) throw new ArgumentNullException(nameof(jobEvent));
+
+            string sql =
+                "UPDATE ingestionjobevents SET " +
+                "stage = " + Sanitizer.Str(jobEvent.Stage.ToString()) + ", " +
+                "status = " + Sanitizer.Str(jobEvent.Status.ToString()) + ", " +
+                "message = " + Sanitizer.Str(jobEvent.Message) + ", " +
+                "durationms = " + jobEvent.DurationMs.ToString(CultureInfo.InvariantCulture) + ", " +
+                "queuedurationms = " + jobEvent.QueueDurationMs.ToString(CultureInfo.InvariantCulture) + " " +
+                "WHERE id = " + Sanitizer.Str(jobEvent.Id) + " AND tenantid = " + Sanitizer.Str(jobEvent.TenantId) + ";";
             await Query(sql, token).ConfigureAwait(false);
             return jobEvent;
         }
@@ -65,6 +82,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 Status = RowReader.GetEnum<IngestionStatusEnum>(row, "status", IngestionStatusEnum.Processing),
                 Message = RowReader.GetNullableString(row, "message"),
                 DurationMs = RowReader.GetDouble(row, "durationms"),
+                QueueDurationMs = RowReader.GetDouble(row, "queuedurationms"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc")
             };
         }

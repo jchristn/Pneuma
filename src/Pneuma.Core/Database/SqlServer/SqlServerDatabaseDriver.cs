@@ -74,6 +74,8 @@ namespace Pneuma.Core.Database.SqlServer
             IngestionJobEvents = new IngestionJobEventMethods(this);
             ModelRunners = new ModelRunnerMethods(this);
             Prompts = new PromptMethods(this);
+            ChatTurns = new ChatTurnMethods(this);
+            ChatFeedback = new ChatFeedbackMethods(this);
         }
 
         #endregion

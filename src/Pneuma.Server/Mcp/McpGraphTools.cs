@@ -256,7 +256,7 @@ namespace Pneuma.Server.Mcp
                     }
                     else
                     {
-                        GeneratedAnswer generated = await _Query.GenerateAnswerDetailedAsync(question, sources, tenantId, runner, token).ConfigureAwait(false);
+                        GeneratedAnswer generated = await _Query.GenerateAnswerDetailedAsync(question, sources, tenantId, runner, null, token).ConfigureAwait(false);
                         answer = generated.Text;
                         answerModel = generated.Model;
                         generationMs = generated.DurationMs;

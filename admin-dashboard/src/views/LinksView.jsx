@@ -205,6 +205,38 @@ function LinksView() {
     setRefreshKey((k) => k + 1);
   }, [apiClient, t]);
 
+  // Bulk-restart every failed link in the selection (each restarts its most recent ingestion job).
+  const bulkRestartFailed = useCallback(async (items) => {
+    const failed = items.filter(isLinkFailed);
+    for (const link of failed) {
+      const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
+      const latest = runs.length > 0 ? runs[runs.length - 1] : null;
+      const job = latest?.job || latest?.Job || null;
+      const jobId = job?.id || job?.Id;
+      if (jobId) await apiClient.restartJob(jobId);
+    }
+  }, [apiClient]);
+
+  const linkBulkActions = useCallback((selectedItems) => {
+    const failedCount = selectedItems.filter(isLinkFailed).length;
+    return [
+      {
+        key: 'restart',
+        label: t('links.restartJob', 'Restart Job'),
+        disabled: failedCount === 0,
+        tip: failedCount === 0
+          ? t('links.bulkRestartNone', 'Only failed links can be restarted.')
+          : t('links.bulkRestartTip', { count: failedCount, defaultValue: `Restart ${failedCount} failed link(s).` }),
+        confirm: {
+          title: t('jobs.restart', 'Restart'),
+          message: t('links.bulkRestartConfirm', { count: failedCount, defaultValue: `Restart ${failedCount} failed link(s) from the beginning?` }),
+          confirmLabel: t('common.restart', 'Restart')
+        },
+        run: bulkRestartFailed
+      }
+    ];
+  }, [t, bulkRestartFailed]);
+
   const toolbar = (
     <div className="filter-bar">
       <div className="field">
@@ -241,6 +273,7 @@ function LinksView() {
         createNotice={noEndpoints ? (noCollections ? t('links.noCollections') : t('links.noEndpoints')) : null}
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
+        bulkActions={linkBulkActions}
         extraActions={[
           { key: 'restartJob', label: t('links.restartJob', 'Restart Job'), tip: 'Re-run this failed link’s ingestion job from the beginning.', hidden: (item) => !isLinkFailed(item), onClick: (item) => setRestartTarget(item) },
           { key: 'ingestionLog', label: t('links.viewIngestionLog'), onClick: (item) => setLogLink(item) },

@@ -181,7 +181,7 @@ namespace Pneuma.Server.Routes
                     return;
                 }
 
-                GeneratedAnswer generated = await _Query.GenerateAnswerDetailedAsync(request.Question, sources, tenantId, runner, ctx.Token).ConfigureAwait(false);
+                GeneratedAnswer generated = await _Query.GenerateAnswerDetailedAsync(request.Question, sources, tenantId, runner, request.SubjectId, ctx.Token).ConfigureAwait(false);
                 string answer = generated.Text;
 
                 foreach (string chunk in SseWriter.SplitIntoChunks(answer, 48))

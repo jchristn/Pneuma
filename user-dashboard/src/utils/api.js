@@ -139,14 +139,31 @@ class ApiClient {
    * @param {number} maxResults
    * @param {{onEvent:(event:object)=>void, signal?:AbortSignal}} handlers
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId = null } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults },
+      body: { messages, maxResults, ...(subjectId ? { subjectId } : {}) },
       signal,
       onEvent,
     });
+  }
+
+  /** Submit thumbs up/down and/or a comment on a chat answer. */
+  async submitFeedback(turnId, rating, comment = null) {
+    return this._request('POST', '/v1.0/feedback', { body: { turnId, rating, comment } });
+  }
+
+  // ---- Subjects --------------------------------------------------------
+
+  /** List the subjects available to this user (tenant-scoped). */
+  async getSubjects() {
+    return this._request('GET', '/v1.0/subjects', { query: { maxResults: 1000 } });
+  }
+
+  /** Resolve a subject by its URL slug. */
+  async getSubjectBySlug(slug) {
+    return this._request('GET', `/v1.0/subjects/by-slug/${encodeURIComponent(slug)}`);
   }
 
   // ---- Knowledge graph -------------------------------------------------

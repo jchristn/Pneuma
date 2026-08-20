@@ -29,6 +29,8 @@ import RolesView from '../views/RolesView';
 import PermissionsView from '../views/PermissionsView';
 import AssignmentsView from '../views/AssignmentsView';
 import AuditView from '../views/AuditView';
+import HistoryView from '../views/HistoryView';
+import FeedbackView from '../views/FeedbackView';
 
 const VIEWS = {
   home: HomeView,
@@ -50,7 +52,9 @@ const VIEWS = {
   roles: RolesView,
   permissions: PermissionsView,
   assignments: AssignmentsView,
-  audit: AuditView
+  audit: AuditView,
+  history: HistoryView,
+  feedback: FeedbackView
 };
 
 function Dashboard() {

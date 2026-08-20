@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -73,6 +73,52 @@ namespace Pneuma.Server.Mcp
                     {
                         type = "object",
                         properties = new { id = new { type = "string", description = "Subject id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_create_subject",
+                    description = "Create a subject. Only displayName is required; a unique urlSlug is auto-generated from the name when omitted (an explicit slug that is already taken is rejected). systemPrompt/ontologyClassifyPrompt/ontologyDefinitionPrompt are appended after the corresponding global prompts.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            displayName = new { type = "string", description = "The subject's display name (required)." },
+                            type = new { type = "string", description = "Free-form kind (Person, Product, Topic…). Default Person." },
+                            description = new { type = "string", description = "Optional description." },
+                            urlSlug = new { type = "string", description = "URL-safe slug (unique per tenant). Auto-generated from displayName when omitted." },
+                            thinkingEnabled = new { type = "boolean", description = "Whether model thinking is shown for this subject's chats." },
+                            systemPrompt = new { type = "string", description = "Subject system prompt, appended after the global one." },
+                            ontologyClassifyPrompt = new { type = "string", description = "Subject ontology classification prompt, appended after the global one." },
+                            ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition, appended after the global one." },
+                            historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1). Default 90." }
+                        },
+                        required = new[] { "displayName" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_update_subject",
+                    description = "Update an existing subject. 'id' is required; only the fields you supply are changed. A changed urlSlug must remain unique within the tenant.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            id = new { type = "string", description = "Subject id (required)." },
+                            displayName = new { type = "string", description = "New display name." },
+                            type = new { type = "string", description = "New type." },
+                            description = new { type = "string", description = "New description." },
+                            urlSlug = new { type = "string", description = "New URL slug (must be unique per tenant)." },
+                            thinkingEnabled = new { type = "boolean", description = "Whether model thinking is shown for this subject's chats." },
+                            systemPrompt = new { type = "string", description = "Subject system prompt." },
+                            ontologyClassifyPrompt = new { type = "string", description = "Subject ontology classification prompt." },
+                            ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition." },
+                            historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1)." },
+                            active = new { type = "boolean", description = "Whether the subject is active." }
+                        },
                         required = new[] { "id" }
                     }
                 },

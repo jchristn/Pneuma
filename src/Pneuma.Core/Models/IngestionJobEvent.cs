@@ -44,6 +44,13 @@ namespace Pneuma.Core.Models
         /// <summary>Stage duration in milliseconds.</summary>
         public double DurationMs { get; set; } = 0;
 
+        /// <summary>
+        /// Time this stage spent waiting for a free concurrency slot before it began, in milliseconds.
+        /// Zero when the stage started immediately (no contention). Surfaced in the follow-logs as
+        /// "Queue duration" on the single, in-place-updated stage entry.
+        /// </summary>
+        public double QueueDurationMs { get; set; } = 0;
+
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

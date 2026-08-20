@@ -95,7 +95,20 @@ Response envelope:
 
 ## Subjects
 
-`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}`. A subject has `displayName`, `type` (Person…), `description`, `graphRootNodeId`. **`DELETE` cascades** through every subordinate object: all of the subject's links (each with its full link cascade — jobs, per-step processing logs, S3 pipeline artifacts + raw blobs, and RecallDB chunk documents) and the subject's entire LiteGraph subgraph (nodes/edges matched on the `subjectId` tag; entity nodes are resolved per subject, so other subjects are unaffected). External-store cleanup is best-effort so an unavailable subordinate service never blocks removal. When `graphRootNodeId` is omitted on create it is derived from `displayName` as a slug (lowercased, non-alphanumeric runs collapsed to single dashes) — e.g. `"The Bomb Squad"` → `the-bomb-squad`.
+`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}` · `GET /v1.0/subjects/by-slug/{slug}`. A subject has `displayName`, `type` (Person…), `description`, `graphRootNodeId`, plus: `urlSlug` (unique per tenant; auto-generated from the name when omitted — an explicit clash returns **409**), `thinkingEnabled` (show model reasoning in this subject's chats), `systemPrompt` (appended after the global system prompt for its chats), `ontologyClassifyPrompt` / `ontologyDefinitionPrompt` (appended after the global ontology prompts during ingestion), `historyRetentionDays` (chat-history retention, clamped ≥ 1), and a read-only `deletionStatus` (`None`/`Pending`/`Deleting`/`Failed`). `GET /v1.0/subjects/by-slug/{slug}` resolves a subject by its slug (tenant-scoped).
+
+**`DELETE` is asynchronous.** It marks the subject for deletion and returns **`202 Accepted`** immediately; a background worker then runs the full cascade — all of the subject's links (jobs, per-step processing logs, S3 pipeline artifacts + raw blobs, RecallDB chunk documents), the subject's entire LiteGraph subgraph (matched on the `subjectId` tag), and the subject's chat history + feedback — before removing the subject row. The subject shows `deletionStatus = Deleting` until it is gone; an interrupted deletion resumes on the next server start. External-store cleanup is best-effort so an unavailable subordinate service never blocks removal. When `graphRootNodeId` is omitted on create it is derived from `displayName` as a slug (lowercased, non-alphanumeric runs collapsed to single dashes) — e.g. `"The Bomb Squad"` → `the-bomb-squad`.
+
+## Chat History & Feedback
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1.0/history` | List persisted chat turns (newest first), optionally `?subjectId=`. Paginated `EnumerationResult`. Each turn carries the question, answer, `thinking`, `model`, token counts, timing (`timeToFirstTokenMs`, `generationMs`, `thinkingMs`), `contextSize`, and `citationsJson` |
+| GET | `/v1.0/history/{id}` | A single turn with its feedback: `{ turn, feedback: [...] }` |
+| GET | `/v1.0/feedback` | List feedback (newest first), optionally `?subjectId=`. Each item is `{ feedback, turn }` (the rated turn is enriched inline). Paginated `EnumerationResult` |
+| POST | `/v1.0/feedback` | Submit feedback on a turn: `{ turnId, rating: "Up"\|"Down"\|"None", comment? }`. Requires a rating and/or comment; unknown `turnId` → 404 |
+
+Chat turns are persisted automatically as chats complete (agentic `POST /v1.0/chat/stream`), and each answering turn's `complete` SSE event now carries a `turnId` for feedback. History is pruned per subject by its `historyRetentionDays`.
 
 ## Content Links & Ingestion
 

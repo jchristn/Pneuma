@@ -103,6 +103,23 @@ namespace Pneuma.Server.Services
             Prompt? ontology = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "ontology.definition", token).ConfigureAwait(false);
             string ontologyDefinition = ontology?.Content ?? String.Empty;
 
+            // Per-subject ontology overrides are appended after the global prompts (global base + subject
+            // appended), so a subject can refine classification and its ontology without losing the shared base.
+            Subject? subject = await _Db.Subjects.ReadAsync(job.TenantId, job.SubjectId, token).ConfigureAwait(false);
+            if (subject != null)
+            {
+                if (!String.IsNullOrWhiteSpace(subject.OntologyClassifyPrompt))
+                {
+                    systemPrompt = systemPrompt + "\n\n" + subject.OntologyClassifyPrompt!.Trim();
+                }
+                if (!String.IsNullOrWhiteSpace(subject.OntologyDefinitionPrompt))
+                {
+                    ontologyDefinition = String.IsNullOrWhiteSpace(ontologyDefinition)
+                        ? subject.OntologyDefinitionPrompt!.Trim()
+                        : ontologyDefinition + "\n\n" + subject.OntologyDefinitionPrompt!.Trim();
+                }
+            }
+
             return await _Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
         }
 

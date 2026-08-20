@@ -156,6 +156,12 @@ namespace Pneuma.Server
             {
                 worker.Start(shutdown.Token);
                 modelHealth.Start(shutdown.Token);
+
+                // Background subject cascade-deletion: subjects marked for deletion are removed asynchronously
+                // (and interrupted deletions resumed) so a large cascade never blocks the request that started it.
+                CascadeDeletionService cascade = new CascadeDeletionService(database, artifactStore, clients.Vectors, graphFactory, clients.Blobs);
+                SubjectDeletionWorker deletionWorker = new SubjectDeletionWorker(database, cascade, logging);
+                deletionWorker.Start(shutdown.Token);
                 // Ensure default model endpoints exist in Partio when none are configured (create-only, so
                 // operator edits persist across restarts). Runs in the background because it retries while
                 // Partio finishes coming up.

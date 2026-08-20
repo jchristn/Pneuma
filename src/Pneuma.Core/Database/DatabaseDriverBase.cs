@@ -79,6 +79,12 @@ namespace Pneuma.Core.Database
         /// <summary>Prompt methods.</summary>
         public IPromptMethods Prompts { get; protected set; } = null!;
 
+        /// <summary>Persisted chat-turn (history) methods.</summary>
+        public IChatTurnMethods ChatTurns { get; protected set; } = null!;
+
+        /// <summary>Chat feedback methods.</summary>
+        public IChatFeedbackMethods ChatFeedback { get; protected set; } = null!;
+
         #endregion
 
         #region Public-Methods

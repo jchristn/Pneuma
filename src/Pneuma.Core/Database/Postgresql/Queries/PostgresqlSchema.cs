@@ -31,6 +31,36 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS litegraphtenantguid TEXT;",
                     "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS litegraphgraphguid TEXT;"
                 }));
+                list.Add(new SchemaMigration(5, "Add ingestion job event queue duration", new List<string>
+                {
+                    "ALTER TABLE ingestionjobevents ADD COLUMN IF NOT EXISTS queuedurationms DOUBLE PRECISION;"
+                }));
+                list.Add(new SchemaMigration(6, "Add subject slug, prompts, thinking, retention, deletion status", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS urlslug TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS thinkingenabled INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS systemprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS ontologyclassifyprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS ontologydefinitionprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS historyretentiondays INTEGER NOT NULL DEFAULT 90;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS deletionstatus TEXT NOT NULL DEFAULT 'None';",
+                    "CREATE INDEX IF NOT EXISTS idx_subjects_slug ON subjects (tenantid, urlslug);"
+                }));
+                list.Add(new SchemaMigration(7, "Add chat history and feedback tables", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS chatturns (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT, userid TEXT, " +
+                        "question TEXT, answer TEXT, thinking TEXT, model TEXT, " +
+                        "prompttokens INTEGER NOT NULL DEFAULT 0, completiontokens INTEGER NOT NULL DEFAULT 0, totaltokens INTEGER NOT NULL DEFAULT 0, " +
+                        "timetofirsttokenms DOUBLE PRECISION, generationms DOUBLE PRECISION, thinkingms DOUBLE PRECISION, " +
+                        "contextsize INTEGER NOT NULL DEFAULT 0, citationsjson TEXT, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_chatturns_tenant_subject ON chatturns (tenantid, subjectid, createdutc);",
+                    "CREATE TABLE IF NOT EXISTS chatfeedback (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, turnid TEXT NOT NULL, subjectid TEXT, userid TEXT, " +
+                        "rating TEXT, comment TEXT, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_chatfeedback_tenant_subject ON chatfeedback (tenantid, subjectid, createdutc);",
+                    "CREATE INDEX IF NOT EXISTS idx_chatfeedback_turn ON chatfeedback (turnid);"
+                }));
                 return list;
             }
         }

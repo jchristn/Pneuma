@@ -1202,3 +1202,23 @@ a.relationship-target:hover {
 .chat-stop { background: var(--color-danger, #dc2626); }
 .chat-disclaimer { text-align: center; font-size: 0.72rem; color: var(--color-text-secondary); margin: 0.5rem 0 0; }
 .chat-view .error-banner, .ask-view .error-banner { margin: 0.75rem auto 0; max-width: 52rem; padding: 0.6rem 0.9rem; border: 1px solid var(--color-danger, #dc2626); border-radius: 8px; background: var(--color-danger-bg, rgba(220,38,38,0.08)); color: var(--color-danger, #dc2626); font-size: 0.85rem; }
+
+.chat-thinking { margin-bottom: 0.5rem; border-left: 2px solid var(--border-color); padding: 0.1rem 0 0.1rem 0.6rem; }
+.chat-thinking-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); cursor: pointer; user-select: none; }
+.chat-thinking-content { margin-top: 0.3rem; font-size: 0.82rem; color: var(--text-secondary); white-space: pre-wrap; }
+
+/* ---------- Subject cards (home) ---------- */
+.subject-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; padding: 0.5rem 0; }
+.subject-card { display: flex; flex-direction: column; gap: 0.4rem; padding: 1.1rem 1.2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); text-decoration: none; color: inherit; transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+.subject-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-md); transform: translateY(-2px); text-decoration: none; }
+.subject-card-type { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.subject-card-name { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); }
+.subject-card-desc { font-size: 0.82rem; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+.chat-feedback { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.chat-feedback .fb-btn { background: transparent; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.15rem 0.45rem; cursor: pointer; font-size: 0.95rem; line-height: 1; }
+.chat-feedback .fb-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.chat-feedback .fb-btn.active { border-color: var(--color-primary); background: var(--color-primary-alpha); }
+.chat-feedback .fb-comment { display: inline-flex; gap: 0.35rem; align-items: center; flex: 1 1 240px; }
+.chat-feedback .fb-comment input { flex: 1; padding: 0.25rem 0.5rem; font-size: 0.82rem; }
+.chat-feedback-done { color: var(--text-secondary); font-size: 0.82rem; }

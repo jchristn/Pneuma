@@ -5,6 +5,7 @@ import { asArray } from '../utils/api';
 import { formatRelativeTime, formatDateTime } from '../utils/format';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
+import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
 import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
 import StatusPill from '../components/StatusPill';
@@ -212,6 +213,36 @@ function LinksView() {
     }
   };
 
+  const { selectedItems, clear, selection } = useTableSelection(links);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      for (const link of selectedItems) {
+        await apiClient.deleteLink(link.id);
+      }
+      setBulkDeleteOpen(false);
+      clear();
+      await load(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const bulkBar = (
+    <BulkActionBar
+      count={selectedItems.length}
+      onClear={clear}
+      actions={[
+        { key: 'delete', label: t('common.delete'), danger: true, onClick: () => setBulkDeleteOpen(true) }
+      ]}
+    />
+  );
+
   const columns = [
     {
       key: 'url',
@@ -323,6 +354,8 @@ function LinksView() {
         toolbar={toolbar}
         emptyTitle={t('links.title')}
         emptyDescription={t('links.empty')}
+        selection={selection}
+        bulkBar={bulkBar}
       />
 
       <LinkSubmitModal
@@ -372,6 +405,16 @@ function LinksView() {
         entityName={deleteTarget?.url}
         confirmLabel={t('common.delete')}
         isLoading={deleting}
+      />
+
+      <ConfirmModal
+        isOpen={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={t('common.delete')}
+        message={`Delete ${selectedItems.length} selected content link(s)? This cannot be undone.`}
+        confirmLabel={t('common.delete')}
+        isLoading={bulkDeleting}
       />
     </div>
   );

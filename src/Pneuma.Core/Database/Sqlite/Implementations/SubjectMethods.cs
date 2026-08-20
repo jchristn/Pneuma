@@ -7,6 +7,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Models;
 
     /// <summary>SQLite subject methods.</summary>
@@ -22,10 +23,14 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, graphrootnodeid, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
+                Sanitizer.Str(subject.UrlSlug) + ", " + Sanitizer.Bit(subject.ThinkingEnabled) + ", " +
+                Sanitizer.Str(subject.SystemPrompt) + ", " + Sanitizer.Str(subject.OntologyClassifyPrompt) + ", " +
+                Sanitizer.Str(subject.OntologyDefinitionPrompt) + ", " + Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
+                Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
                 Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
                 Sanitizer.Ts(subject.CreatedUtc) + ", " + Sanitizer.Ts(subject.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
@@ -51,10 +56,31 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<Subject?> ReadBySlugAsync(string tenantId, string slug, CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM subjects WHERE tenantid = " + Sanitizer.Str(tenantId) + " AND urlslug = " + Sanitizer.Str(slug) + " LIMIT 1;",
+                token).ConfigureAwait(false);
+            if (table.Rows.Count == 0) return null;
+            return Map(table.Rows[0]);
+        }
+
+        /// <inheritdoc />
         public async Task<List<Subject>> EnumerateAsync(string tenantId, CancellationToken token = default)
         {
             DataTable table = await Query(
                 "SELECT * FROM subjects WHERE tenantid = " + Sanitizer.Str(tenantId) + " ORDER BY createdutc ASC;",
+                token).ConfigureAwait(false);
+            List<Subject> result = new List<Subject>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Subject>> EnumeratePendingDeletionAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM subjects WHERE deletionstatus IN ('Pending', 'Deleting') ORDER BY createdutc ASC;",
                 token).ConfigureAwait(false);
             List<Subject> result = new List<Subject>();
             foreach (DataRow row in table.Rows) result.Add(Map(row));
@@ -72,6 +98,13 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 ", type = " + Sanitizer.Str(subject.Type) +
                 ", description = " + Sanitizer.Str(subject.Description) +
                 ", graphrootnodeid = " + Sanitizer.Str(subject.GraphRootNodeId) +
+                ", urlslug = " + Sanitizer.Str(subject.UrlSlug) +
+                ", thinkingenabled = " + Sanitizer.Bit(subject.ThinkingEnabled) +
+                ", systemprompt = " + Sanitizer.Str(subject.SystemPrompt) +
+                ", ontologyclassifyprompt = " + Sanitizer.Str(subject.OntologyClassifyPrompt) +
+                ", ontologydefinitionprompt = " + Sanitizer.Str(subject.OntologyDefinitionPrompt) +
+                ", historyretentiondays = " + Sanitizer.Num(subject.HistoryRetentionDays) +
+                ", deletionstatus = " + Sanitizer.Str(subject.DeletionStatus.ToString()) +
                 ", active = " + Sanitizer.Bit(subject.Active) +
                 ", isprotected = " + Sanitizer.Bit(subject.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(subject.LastUpdateUtc) +
@@ -135,6 +168,13 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 Type = RowReader.GetString(row, "type"),
                 Description = RowReader.GetNullableString(row, "description"),
                 GraphRootNodeId = RowReader.GetNullableString(row, "graphrootnodeid"),
+                UrlSlug = RowReader.GetNullableString(row, "urlslug"),
+                ThinkingEnabled = RowReader.GetBool(row, "thinkingenabled"),
+                SystemPrompt = RowReader.GetNullableString(row, "systemprompt"),
+                OntologyClassifyPrompt = RowReader.GetNullableString(row, "ontologyclassifyprompt"),
+                OntologyDefinitionPrompt = RowReader.GetNullableString(row, "ontologydefinitionprompt"),
+                HistoryRetentionDays = RowReader.GetInt(row, "historyretentiondays"),
+                DeletionStatus = RowReader.GetEnum<SubjectDeletionStatusEnum>(row, "deletionstatus", SubjectDeletionStatusEnum.None),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

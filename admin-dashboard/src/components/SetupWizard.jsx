@@ -63,7 +63,7 @@ function EndpointForm({ kind, value, onChange }) {
   );
 }
 
-const blankEndpoint = (apiFormat = 'Ollama') => ({ name: '', model: '', endpoint: 'http://ollama:11434', apiFormat, apiKey: '', maxConcurrentRequests: 2 });
+const blankEndpoint = (apiFormat = 'Ollama') => ({ name: '', model: '', endpoint: 'http://ollama:11434', apiFormat, apiKey: '', maxConcurrentRequests: 1 });
 
 export default function SetupWizard({ onClose }) {
   const { t } = useTranslation();
@@ -133,7 +133,7 @@ export default function SetupWizard({ onClose }) {
   const createEndpoints = async () => {
     const mk = (type, f) => apiClient.create('model-runners', {
       type, name: f.name || type, model: f.model, endpoint: f.endpoint, apiFormat: f.apiFormat,
-      apiKey: f.apiKey || undefined, active: true, maxConcurrentRequests: Number(f.maxConcurrentRequests) || 2
+      apiKey: f.apiKey || undefined, active: true, maxConcurrentRequests: Number(f.maxConcurrentRequests) || 1
     });
     const e = await mk('Embedding', embed);
     const c = await mk('Completion', complete);

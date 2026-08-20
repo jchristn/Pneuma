@@ -53,13 +53,14 @@
     "UseHeadlessBrowser": true,
     "BrowserNavigationTimeoutMs": 60000,
     "StageConcurrency": {
+      "ContentRetrieval": 4,
       "TypeDetection": 8,
       "CellExtraction": 8,
-      "Classification": 4,
+      "Classification": 1,
       "GraphMerge": 8,
-      "Summarization": 4,
+      "Summarization": 1,
       "Chunking": 8,
-      "Embedding": 4,
+      "Embedding": 1,
       "Indexing": 8
     }
   },

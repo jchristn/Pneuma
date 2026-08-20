@@ -68,6 +68,8 @@ const en = {
       search: 'Search',
       jobs: 'Ingestion Queue',
       ingestionJobs: 'Ingestion Jobs',
+      history: 'History',
+      feedback: 'Feedback',
       tenants: 'Tenants',
       users: 'Users',
       credentials: 'Credentials',
@@ -243,6 +245,14 @@ const en = {
       activeYes: 'Active',
       activeNo: 'Inactive'
     },
+    history: {
+      title: 'History',
+      subtitle: 'Every chat turn, with its timing and metadata.'
+    },
+    feedback: {
+      title: 'Feedback',
+      subtitle: 'Thumbs up/down and comments left on chat answers.'
+    },
     subjects: {
       viewLinks: 'View Links'
     },
@@ -289,6 +299,7 @@ const en = {
       created: 'Created',
       completed: 'Completed',
       duration: 'Duration',
+      queueDuration: 'Queue duration',
       emptyQueued: 'No steps recorded yet — ingestion is queued.',
       emptyNoRuns: 'No ingestion runs found for this link.'
     },

@@ -29,11 +29,24 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Subject, or null if not found.</returns>
         Task<Subject?> ReadByIdAsync(string id, CancellationToken token = default);
 
+        /// <summary>Read a subject by its URL slug within a tenant.</summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="slug">URL slug.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Subject, or null if not found.</returns>
+        Task<Subject?> ReadBySlugAsync(string tenantId, string slug, CancellationToken token = default);
+
         /// <summary>Enumerate subjects within a tenant.</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Subjects.</returns>
         Task<List<Subject>> EnumerateAsync(string tenantId, CancellationToken token = default);
+
+        /// <summary>Enumerate, across all tenants, subjects whose cascade deletion is pending or in progress
+        /// (so an interrupted deletion can be resumed). Used by the background deletion worker.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Subjects awaiting or undergoing deletion.</returns>
+        Task<List<Subject>> EnumeratePendingDeletionAsync(CancellationToken token = default);
 
         /// <summary>Update a subject.</summary>
         /// <param name="subject">Subject to update.</param>

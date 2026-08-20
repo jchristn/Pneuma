@@ -31,6 +31,37 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "ALTER TABLE tenants ADD COLUMN litegraphtenantguid TEXT;",
                     "ALTER TABLE tenants ADD COLUMN litegraphgraphguid TEXT;"
                 }));
+                list.Add(new SchemaMigration(5, "Add ingestion job event queue duration", new List<string>
+                {
+                    "ALTER TABLE ingestionjobevents ADD COLUMN queuedurationms DOUBLE;"
+                }));
+                list.Add(new SchemaMigration(6, "Add subject slug, prompts, thinking, retention, deletion status", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN urlslug VARCHAR(255);",
+                    "ALTER TABLE subjects ADD COLUMN thinkingenabled TINYINT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjects ADD COLUMN systemprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN ontologyclassifyprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN ontologydefinitionprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN historyretentiondays INT NOT NULL DEFAULT 90;",
+                    "ALTER TABLE subjects ADD COLUMN deletionstatus VARCHAR(32) NOT NULL DEFAULT 'None';",
+                    "CREATE INDEX idx_subjects_slug ON subjects (tenantid, urlslug);"
+                }));
+                list.Add(new SchemaMigration(7, "Add chat history and feedback tables", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS chatturns (" +
+                        "id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64), userid VARCHAR(64), " +
+                        "question TEXT, answer TEXT, thinking TEXT, model VARCHAR(512), " +
+                        "prompttokens INT NOT NULL DEFAULT 0, completiontokens INT NOT NULL DEFAULT 0, totaltokens INT NOT NULL DEFAULT 0, " +
+                        "timetofirsttokenms DOUBLE, generationms DOUBLE, thinkingms DOUBLE, " +
+                        "contextsize INT NOT NULL DEFAULT 0, citationsjson TEXT, createdutc VARCHAR(32) NOT NULL, " +
+                        "KEY idx_chatturns_tenant_subject (tenantid, subjectid, createdutc)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
+                    "CREATE TABLE IF NOT EXISTS chatfeedback (" +
+                        "id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, turnid VARCHAR(64) NOT NULL, subjectid VARCHAR(64), userid VARCHAR(64), " +
+                        "rating VARCHAR(16), comment TEXT, createdutc VARCHAR(32) NOT NULL, " +
+                        "KEY idx_chatfeedback_tenant_subject (tenantid, subjectid, createdutc), KEY idx_chatfeedback_turn (turnid)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+                }));
                 return list;
             }
         }
