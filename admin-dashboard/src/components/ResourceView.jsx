@@ -278,7 +278,7 @@ function ResourceView({
           label: a.label,
           tip: a.tip,
           danger: a.danger,
-          hidden: a.hidden,
+          hidden: typeof a.hidden === 'function' ? a.hidden(item) : a.hidden,
           onClick: () => a.onClick(item)
         })),
         { key: 'edit', label: t('common.edit'), tip: t('common.editTip', { name: singular, defaultValue: `Edit this ${singular}'s fields.` }), hidden: !capabilities.edit || formFields.length === 0, onClick: () => setModal({ type: 'edit', item }) },

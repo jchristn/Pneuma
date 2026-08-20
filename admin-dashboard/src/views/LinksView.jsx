@@ -9,8 +9,14 @@ import StatusPill, { toneForStatus } from '../components/StatusPill';
 import IngestionLogModal from '../components/IngestionLogModal';
 import BulkAddLinksModal from '../components/BulkAddLinksModal';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 import JsonViewer from '../components/JsonViewer';
 import { formatDateTime } from '../i18n/formatters';
+
+// A link whose most recent ingestion failed can have its job restarted, mirroring the Ingestion Queue.
+function isLinkFailed(link) {
+  return String(link?.status || '').toLowerCase() === 'failed';
+}
 
 // Build { value, label } option lists from an ingestion-endpoint entry.
 function endpointOptions(list) {
@@ -47,6 +53,8 @@ function LinksView() {
   const [artifact, setArtifact] = useState(null);
   const [artifactNotice, setArtifactNotice] = useState('');
   const [artifactLoading, setArtifactLoading] = useState(false);
+  // The failed link whose ingestion job is pending a restart confirmation.
+  const [restartTarget, setRestartTarget] = useState(null);
 
   // Load the subject list once for the filter dropdown and the create form.
   useEffect(() => {
@@ -181,6 +189,22 @@ function LinksView() {
     }
   }, [apiClient, artifactErrorMessage, t]);
 
+  // Restart the failed link's most recent ingestion job (same effect as the Ingestion Queue restart action).
+  const restartLinkJob = useCallback(async (link) => {
+    const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
+    const latest = runs.length > 0 ? runs[runs.length - 1] : null;
+    const job = latest?.job || latest?.Job || null;
+    const jobId = job?.id || job?.Id;
+    if (!jobId) {
+      setRestartTarget(null);
+      setArtifactNotice(t('links.restartNoJob', 'No ingestion job was found for this link to restart.'));
+      return;
+    }
+    await apiClient.restartJob(jobId);
+    setRestartTarget(null);
+    setRefreshKey((k) => k + 1);
+  }, [apiClient, t]);
+
   const toolbar = (
     <div className="filter-bar">
       <div className="field">
@@ -218,6 +242,7 @@ function LinksView() {
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
         extraActions={[
+          { key: 'restartJob', label: t('links.restartJob', 'Restart Job'), tip: 'Re-run this failed link’s ingestion job from the beginning.', hidden: (item) => !isLinkFailed(item), onClick: (item) => setRestartTarget(item) },
           { key: 'ingestionLog', label: t('links.viewIngestionLog'), onClick: (item) => setLogLink(item) },
           { key: 'viewSource', label: t('links.viewSource'), onClick: (item) => openSource(item) },
           { key: 'viewAtoms', label: t('links.viewAtoms'), onClick: (item) => openArtifact(item, 'atoms', t('links.artifactAtoms')) },
@@ -227,6 +252,16 @@ function LinksView() {
         ]}
       />
       {logLink && <IngestionLogModal link={logLink} onClose={() => setLogLink(null)} />}
+      {restartTarget && (
+        <ConfirmModal
+          title={t('jobs.restart', 'Restart')}
+          message={t('jobs.restartConfirm', 'Restart this ingestion job from the beginning?')}
+          danger={false}
+          confirmLabel={t('common.restart', 'Restart')}
+          onConfirm={() => restartLinkJob(restartTarget)}
+          onClose={() => setRestartTarget(null)}
+        />
+      )}
       {artifactLoading && (
         <Modal title={t('common.loading')} size="sm" onClose={() => setArtifactLoading(false)}>
           <div className="table-loading"><div className="loading-spinner" /></div>
