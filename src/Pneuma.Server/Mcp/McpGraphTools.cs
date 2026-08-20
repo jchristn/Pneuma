@@ -59,10 +59,10 @@ namespace Pneuma.Server.Mcp
         /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="subjectId">Optional subject to scope the search to; null searches the whole tenant.</param>
-        /// <param name="citedLinkIds">Optional sink that collects the content-link ids of the hits (for citations).</param>
+        /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its hits.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked results payload.</returns>
-        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token)
+        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
         {
             string query = McpJsonRpc.GetStringArgument(arguments, "query");
             int max = 20;
@@ -94,7 +94,10 @@ namespace Pneuma.Server.Mcp
             {
                 if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                 if (!seen.Add(nodeId)) continue;
-                if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId)) citedLinkIds?.Add(linkId);
+                if (citedLinkScores != null && hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId))
+                {
+                    if (!citedLinkScores.TryGetValue(linkId, out double existing) || hit.Score > existing) citedLinkScores[linkId] = hit.Score;
+                }
                 GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
                 // RecallDB is the content authority; surface its chunk text as the snippet (falling back to any
                 // graph-node content) so the assistant can answer directly from search results.

@@ -675,8 +675,10 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
 .chat-citations-list { margin: 0.25rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
 .chat-citations-list li { font-size: 0.82rem; }
+.chat-citations-list li { display: flex; align-items: baseline; gap: 0.4rem; }
 .chat-citation { color: var(--color-primary); text-decoration: none; word-break: break-word; }
 .chat-citation:hover { text-decoration: underline; }
+.chat-citation-score { flex: 0 0 auto; font-size: 0.7rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 
 /* Per-answer telemetry: (i) affordance revealing a stats popover on hover/focus */
 .chat-stats-info { position: relative; display: inline-flex; margin-top: 0.6rem; }

@@ -139,6 +139,29 @@ function ToolTrace({ tools }) {
   );
 }
 
+/** Clickable citations to the ingested source links the answer drew from, with a relevance percentage. */
+function Citations({ citations }) {
+  const { t } = useTranslation();
+  if (!citations || citations.length === 0) return null;
+  return (
+    <div className="chat-citations">
+      <span className="chat-citations-label">{t('ask.sources', 'Sources')}</span>
+      <ol className="chat-citations-list">
+        {citations.map((c, i) => (
+          <li key={c.linkId || i}>
+            <a href={c.url} target="_blank" rel="noopener noreferrer" className="chat-citation" title={c.url}>
+              {c.title || c.url}
+            </a>
+            {typeof c.score === 'number' && c.score > 0 ? (
+              <span className="chat-citation-score" title={t('ask.relevance', 'Relevance of this source to the answer')}>{Math.round(c.score * 100)}%</span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 /**
  * Per-answer telemetry (model, TTFT, total time, token counts, throughput) surfaced underneath the
  * response behind a hover/focus (i) affordance so it stays out of the way until wanted.
@@ -256,6 +279,7 @@ export default function AskView() {
             patchLast((m) => {
               if (!m.content && evt.answer) m.content = evt.answer;
               m.streaming = false;
+              m.citations = Array.isArray(evt.citations) ? evt.citations : [];
               m.stats = {
                 model: evt.model || null,
                 promptTokens: evt.promptTokens || 0,
@@ -358,6 +382,7 @@ export default function AskView() {
                       ) : null
                     )}
                     {message.streaming && message.content ? <span className="chat-cursor">▍</span> : null}
+                    <Citations citations={message.citations} />
                     <StatsInfo stats={message.stats} />
                   </>
                 ) : (

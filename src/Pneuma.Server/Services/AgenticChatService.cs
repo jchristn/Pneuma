@@ -122,8 +122,9 @@ namespace Pneuma.Server.Services
             long generationMs = 0;
             string model = runner.DefaultModel ?? String.Empty;
             List<object> toolTrace = new List<object>();
-            // The content-link ids the assistant's search/answer tools drew from, resolved to citations at the end.
-            HashSet<string> citedLinkIds = new HashSet<string>(StringComparer.Ordinal);
+            // The content links the assistant's search/answer tools drew from (best relevance score each),
+            // resolved to citations at the end.
+            Dictionary<string, double> citedLinkScores = new Dictionary<string, double>(StringComparer.Ordinal);
             string finalAnswer = String.Empty;
             bool producedText = false;
 
@@ -203,7 +204,7 @@ namespace Pneuma.Server.Services
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkIds, token).ConfigureAwait(false);
+                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, token).ConfigureAwait(false);
                         long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });
@@ -245,7 +246,7 @@ namespace Pneuma.Server.Services
                 await emit(new { type = "delta", text = finalAnswer }, false, token).ConfigureAwait(false);
             }
 
-            List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkIds, token).ConfigureAwait(false);
+            List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkScores, token).ConfigureAwait(false);
 
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;
             await emit(new
@@ -268,7 +269,7 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, ISet<string> citedLinkIds, CancellationToken token)
+        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, IDictionary<string, double> citedLinkScores, CancellationToken token)
         {
             JsonElement arguments;
             try
@@ -284,31 +285,36 @@ namespace Pneuma.Server.Services
                 return ToolInvocationResult.Fail("Tool arguments were not valid JSON.");
             }
 
-            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, citedLinkIds, token).ConfigureAwait(false);
+            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Resolve the content-link ids the assistant drew from into citation objects (id, url, title) by
-        /// reading each link. Best-effort and bounded so a broken link read never fails the response.
+        /// Resolve the content links the assistant drew from into citation objects (id, url, title, score) by
+        /// reading each link. Most relevant first. The score is normalized to [0, 1] so every surface can render
+        /// it identically as a percentage. Best-effort and bounded so a broken link read never fails the response.
         /// </summary>
-        private async Task<List<object>> ResolveCitationsAsync(string tenantId, ISet<string> linkIds, CancellationToken token)
+        private async Task<List<object>> ResolveCitationsAsync(string tenantId, IDictionary<string, double> linkScores, CancellationToken token)
         {
             List<object> citations = new List<object>();
-            if (linkIds == null || linkIds.Count == 0 || String.IsNullOrEmpty(tenantId)) return citations;
+            if (linkScores == null || linkScores.Count == 0 || String.IsNullOrEmpty(tenantId)) return citations;
 
-            foreach (string linkId in linkIds)
+            List<KeyValuePair<string, double>> ordered = new List<KeyValuePair<string, double>>(linkScores);
+            ordered.Sort((KeyValuePair<string, double> a, KeyValuePair<string, double> b) => b.Value.CompareTo(a.Value));
+
+            foreach (KeyValuePair<string, double> entry in ordered)
             {
                 if (citations.Count >= 12) break;
-                if (String.IsNullOrEmpty(linkId)) continue;
+                if (String.IsNullOrEmpty(entry.Key)) continue;
                 try
                 {
-                    SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, linkId, token).ConfigureAwait(false);
+                    SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, entry.Key, token).ConfigureAwait(false);
                     if (link == null || String.IsNullOrWhiteSpace(link.Url)) continue;
-                    citations.Add(new { linkId = link.Id, url = link.Url, title = String.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title });
+                    double score = Math.Clamp(entry.Value, 0.0, 1.0);
+                    citations.Add(new { linkId = link.Id, url = link.Url, title = String.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title, score });
                 }
                 catch (Exception e)
                 {
-                    _Logging.Debug("[AgenticChatService] citation resolve failed for " + linkId + ": " + e.Message);
+                    _Logging.Debug("[AgenticChatService] citation resolve failed for " + entry.Key + ": " + e.Message);
                 }
             }
 

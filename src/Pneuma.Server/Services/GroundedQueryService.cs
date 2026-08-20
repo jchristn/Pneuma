@@ -94,12 +94,12 @@ namespace Pneuma.Server.Services
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum sources to retrieve.</param>
         /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
-        /// <param name="citedLinkIds">Optional sink that collects the content-link ids the answer drew from (for citations).</param>
+        /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its chunks.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The grounded answer.</returns>
-        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token = default)
+        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token = default)
         {
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, citedLinkIds, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -137,10 +137,10 @@ namespace Pneuma.Server.Services
         /// <param name="question">The question.</param>
         /// <param name="max">Maximum primary sources.</param>
         /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
-        /// <param name="citedLinkIds">Optional sink that collects the content-link ids the retrieved chunks came from (for citations).</param>
+        /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its chunks.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The supporting nodes.</returns>
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token = default)
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token = default)
         {
             List<GraphNode> primary = new List<GraphNode>();
             Dictionary<string, int> positionByNode = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -178,7 +178,7 @@ namespace Pneuma.Server.Services
                         if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId))
                         {
                             if (String.IsNullOrEmpty(node.CanonicalName)) node.CanonicalName = linkId;
-                            citedLinkIds?.Add(linkId);
+                            RecordCitationScore(citedLinkScores, linkId, hit.Score);
                         }
                         primary.Add(node);
                         positionByNode[nodeId] = hit.Position;
@@ -203,7 +203,7 @@ namespace Pneuma.Server.Services
                         GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
                         node = HydrateFromHit(node, hit.NodeId, hit.Content);
                         if (node == null) continue;
-                        if (!String.IsNullOrEmpty(hit.LinkId)) citedLinkIds?.Add(hit.LinkId!);
+                        if (!String.IsNullOrEmpty(hit.LinkId)) RecordCitationScore(citedLinkScores, hit.LinkId!, hit.Score);
                         primary.Add(node);
                         positionByNode[hit.NodeId] = hit.Position;
                         scoreByNode[hit.NodeId] = hit.Score;
@@ -386,6 +386,13 @@ namespace Pneuma.Server.Services
                 return pa.CompareTo(pb);
             });
             return ordered;
+        }
+
+        /// <summary>Record the best (highest) relevance score seen for a cited content link.</summary>
+        private static void RecordCitationScore(IDictionary<string, double>? scores, string linkId, double score)
+        {
+            if (scores == null || String.IsNullOrEmpty(linkId)) return;
+            if (!scores.TryGetValue(linkId, out double existing) || score > existing) scores[linkId] = score;
         }
 
         private static string GroupKey(GraphNode node)

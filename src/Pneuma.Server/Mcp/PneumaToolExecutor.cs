@@ -68,10 +68,10 @@ namespace Pneuma.Server.Mcp
         /// <param name="toolName">The tool name (e.g. "pneuma_search").</param>
         /// <param name="arguments">The tool arguments object.</param>
         /// <param name="subjectId">Optional subject to scope search/grounded-answer tools to; null searches the whole tenant.</param>
-        /// <param name="citedLinkIds">Optional sink that collects the content-link ids surfaced by search/answer tools (for citations).</param>
+        /// <param name="citedLinkScores">Optional sink mapping each cited content-link id surfaced by search/answer tools to its best relevance score.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The tool result or a failure with a message.</returns>
-        public async Task<ToolInvocationResult> ExecuteAsync(RequestContext rc, string toolName, JsonElement arguments, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token)
+        public async Task<ToolInvocationResult> ExecuteAsync(RequestContext rc, string toolName, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
         {
             if (String.IsNullOrEmpty(toolName)) return ToolInvocationResult.Fail("A tool name is required.");
 
@@ -97,7 +97,7 @@ namespace Pneuma.Server.Mcp
                     return ToolInvocationResult.Ok(await _Entities.EnumerateLinksAsync(rc, arguments, token).ConfigureAwait(false));
 
                 case "pneuma_search":
-                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(tenantId, arguments, subjectId, citedLinkIds, token).ConfigureAwait(false));
+                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(tenantId, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false));
 
                 case "pneuma_get_subject":
                     return await GetSubjectAsync(tenantId, arguments, token).ConfigureAwait(false);
@@ -115,7 +115,7 @@ namespace Pneuma.Server.Mcp
                     return await GetNeighborsAsync(tenantId, arguments, token).ConfigureAwait(false);
 
                 case "pneuma_query":
-                    return await GroundedQueryAsync(tenantId, arguments, subjectId, citedLinkIds, token).ConfigureAwait(false);
+                    return await GroundedQueryAsync(tenantId, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false);
 
                 default:
                     return ToolInvocationResult.Fail("Unknown tool: " + toolName);
@@ -177,7 +177,7 @@ namespace Pneuma.Server.Mcp
             return ToolInvocationResult.Ok(new { nodeId = id, count = summaries.Count, neighbors = summaries });
         }
 
-        private async Task<ToolInvocationResult> GroundedQueryAsync(string tenantId, JsonElement arguments, string? subjectId, ISet<string>? citedLinkIds, CancellationToken token)
+        private async Task<ToolInvocationResult> GroundedQueryAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
         {
             string question = McpJsonRpc.GetStringArgument(arguments, "question");
             if (String.IsNullOrWhiteSpace(question)) return ToolInvocationResult.Fail("'question' is required.");
@@ -188,7 +188,7 @@ namespace Pneuma.Server.Mcp
                 max = Math.Clamp(parsed, 1, 20);
             }
 
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkIds, token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
             {

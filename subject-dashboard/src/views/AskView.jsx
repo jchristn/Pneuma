@@ -152,6 +152,9 @@ function Citations({ citations }) {
             <a href={c.url} target="_blank" rel="noopener noreferrer" className="chat-citation" title={c.url}>
               {c.title || c.url}
             </a>
+            {typeof c.score === 'number' && c.score > 0 ? (
+              <span className="chat-citation-score" title={t('ask.relevance', 'Relevance of this source to the answer')}>{Math.round(c.score * 100)}%</span>
+            ) : null}
           </li>
         ))}
       </ol>
