@@ -194,6 +194,7 @@ function StatsInfo({ stats }) {
   if (stats.completionTokens) rows.push([t('ask.statCompletion', 'Completion tokens'), String(stats.completionTokens)]);
   if (total) rows.push([t('ask.statTotal', 'Total tokens'), String(total)]);
   if (stats.tokensPerSecond) rows.push([t('ask.statTps', 'Tokens / second'), stats.tokensPerSecond.toFixed(1)]);
+  if (stats.contextSize) rows.push([t('ask.statContext', 'Context window'), `${stats.contextSize.toLocaleString()} tokens`]);
   if (rows.length === 0) return null;
   return (
     <div className="chat-stats-info">
@@ -327,6 +328,7 @@ export default function AskView() {
                 timeToFirstTokenMs: evt.timeToFirstTokenMs || 0,
                 generationMs: evt.generationMs || 0,
                 tokensPerSecond: evt.tokensPerSecond || 0,
+                contextSize: evt.contextSize || 0,
               };
             });
             if (evt.compacted && evt.compactedSummary) {

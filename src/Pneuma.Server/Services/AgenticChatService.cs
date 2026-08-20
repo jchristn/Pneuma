@@ -295,6 +295,7 @@ namespace Pneuma.Server.Services
                 timeToFirstTokenMs = timeToFirstTokenMs < 0 ? 0 : timeToFirstTokenMs,
                 generationMs,
                 tokensPerSecond,
+                contextSize = runner.ContextSize,
                 toolCalls = toolTrace,
                 citations,
                 compacted = !String.IsNullOrWhiteSpace(compactedSummary),
