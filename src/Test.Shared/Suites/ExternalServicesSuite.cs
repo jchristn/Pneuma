@@ -175,6 +175,27 @@ namespace Test.Shared.Suites
                             }
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "LiteGraph_ReadRequestsFullNode_AndRoundTripsDataTags", "Node reads request incldata/inclsub and map Data, Tags, and Labels back",
+                        executeAsync: async ct =>
+                        {
+                            // A LiteGraph node as v7 returns it once the include flags are set.
+                            string nodeJson = "{\"GUID\":\"11111111-1111-1111-1111-111111111111\",\"Name\":\"Chunk label\",\"Labels\":[\"Chunk\"],\"Tags\":{\"subjectId\":\"sub_1\",\"sourceId\":\"src_1\"},\"Data\":{\"content\":\"Full chunk text.\",\"nodeType\":\"Chunk\"}}";
+                            RecordingHttpMessageHandler handler = new RecordingHttpMessageHandler(nodeJson);
+
+                            using (LiteGraphClient client = new LiteGraphClient("http://127.0.0.1:8701", null, "00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000", retryCount: 0, handler: handler))
+                            {
+                                GraphNode? node = await client.ReadNodeAsync("11111111-1111-1111-1111-111111111111", ct);
+
+                                if (handler.LastRequestUri == null || handler.LastRequestUri.IndexOf("incldata=true", StringComparison.Ordinal) < 0 || handler.LastRequestUri.IndexOf("inclsub=true", StringComparison.Ordinal) < 0)
+                                    throw new Exception("Node read must request incldata=true&inclsub=true; got " + (handler.LastRequestUri ?? "<none>"));
+                                if (node == null) throw new Exception("Expected the node to map");
+                                if (node.Content != "Full chunk text.") throw new Exception("Data.content should round-trip; got " + (node.Content ?? "<null>"));
+                                if (node.NodeType != "Chunk") throw new Exception("Data.nodeType/label should round-trip; got '" + node.NodeType + "'");
+                                if (!node.Tags.TryGetValue("subjectId", out string? sub) || sub != "sub_1") throw new Exception("Tags should round-trip");
+                                if (!node.Labels.Contains("Chunk")) throw new Exception("Labels should round-trip");
+                            }
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "RecallDbVectors_Live_StoreAndSearch", "RecallDB-backed vectors round-trip against a live RecallDB (gated on PNEUMA_LIVE_STACK=1)",
                         executeAsync: async ct =>
                         {

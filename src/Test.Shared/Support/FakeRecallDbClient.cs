@@ -147,7 +147,7 @@ namespace Test.Shared.Support
                     double score = Cosine(embedding, doc.Embedding);
                     if (score < minimumScore) continue;
                     if (!doc.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || string.IsNullOrEmpty(nodeId)) continue;
-                    hits.Add(new VectorSearchHit { NodeId = nodeId, Score = score });
+                    hits.Add(new VectorSearchHit { NodeId = nodeId, Score = score, Content = doc.Content, Position = doc.Position });
                 }
             }
             return Task.FromResult(hits.OrderByDescending(h => h.Score).Take(Math.Max(1, topK)).ToList());
@@ -180,6 +180,7 @@ namespace Test.Shared.Support
                     {
                         DocumentId = doc.DocumentKey,
                         Score = 1.0,
+                        Position = doc.Position,
                         Snippet = doc.Content,
                         Tags = new Dictionary<string, string>(doc.Tags, StringComparer.Ordinal)
                     });
