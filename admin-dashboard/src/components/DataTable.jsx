@@ -96,14 +96,15 @@ function DataTable({
         <div className="table-toolbar-right">
           {toolbarRight}
           <div className="pagination-controls">
-            <select value={effPageSize} onChange={(e) => changePageSize(Number(e.target.value))} aria-label={t('table.pageSize')}>
+            <select value={effPageSize} onChange={(e) => changePageSize(Number(e.target.value))} aria-label={t('table.pageSize')}
+              title="How many rows to show per page.">
               {PAGE_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button type="button" onClick={() => goTo(0)} disabled={currentPage === 0}>{t('table.first')}</button>
-            <button type="button" onClick={() => goTo(currentPage - 1)} disabled={currentPage === 0}>{t('table.prev')}</button>
+            <button type="button" onClick={() => goTo(0)} disabled={currentPage === 0} title="Jump to the first page.">{t('table.first')}</button>
+            <button type="button" onClick={() => goTo(currentPage - 1)} disabled={currentPage === 0} title="Go to the previous page.">{t('table.prev')}</button>
             <span className="page-input-container">
               {t('table.page')}{' '}
-              <input className="page-input" type="text" value={pageInput}
+              <input className="page-input" type="text" value={pageInput} title="Type a page number and press Enter to jump to it."
                 onChange={(e) => setPageInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -114,11 +115,11 @@ function DataTable({
                 }} />{' '}
               {t('table.of')} {totalPages}
             </span>
-            <button type="button" onClick={() => goTo(currentPage + 1)} disabled={currentPage >= totalPages - 1}>{t('table.next')}</button>
-            <button type="button" onClick={() => goTo(totalPages - 1)} disabled={currentPage >= totalPages - 1}>{t('table.last')}</button>
+            <button type="button" onClick={() => goTo(currentPage + 1)} disabled={currentPage >= totalPages - 1} title="Go to the next page.">{t('table.next')}</button>
+            <button type="button" onClick={() => goTo(totalPages - 1)} disabled={currentPage >= totalPages - 1} title="Jump to the last page.">{t('table.last')}</button>
           </div>
           {onRefresh && (
-            <button type="button" className="icon-button" onClick={onRefresh} title={t('common.refresh')} aria-label={t('common.refresh')} disabled={loading}>
+            <button type="button" className="icon-button" onClick={onRefresh} title="Reload this table from the server." aria-label={t('common.refresh')} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={loading ? { animation: 'spin 1s linear infinite' } : undefined}>
                 <polyline points="23 4 23 10 17 10" />
                 <polyline points="1 20 1 14 7 14" />

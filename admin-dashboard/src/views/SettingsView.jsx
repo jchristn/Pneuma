@@ -9,6 +9,34 @@ import ErrorBanner from '../components/ErrorBanner';
 import StatusPill, { toneForStatus } from '../components/StatusPill';
 import LanguageSelector from '../i18n/LanguageSelector';
 
+// Useful, non-redundant help text for known settings. Keyed by full dot-path first, then by leaf key.
+const TIP_BY_PATH = {
+  'Retrieval.UseInvertedIndex': 'Use RecallDB full-text (lexical) search alongside vector search. Off = vector-only retrieval.',
+  'Retrieval.NeighborExpansionEnabled': 'After finding relevant chunks, pull in their connected graph neighbors (entities, source) for richer, cited answers.',
+  'Retrieval.NeighborExpansionMaxNodes': 'Upper bound on extra neighbor nodes added during expansion. Higher = more context but larger prompts.',
+  'Retrieval.VectorTopK': 'How many nearest vectors to fetch per query. Higher recall, more to rank.',
+  'Retrieval.VectorMinimumScore': 'Discard vector hits below this cosine similarity (0–1). Raise to keep only strong matches.',
+  'Retrieval.ChatMaxToolIterations': 'Max tool-calling rounds the chat assistant may take before it must answer. Higher = more digging, more latency.',
+  'ModelRunner.MaxConcurrentRequests': 'Server-wide cap on concurrent model-runner (answering) requests before they queue.',
+  'ModelRunner.MaxQueueDepth': 'How many requests may wait in the queue once at capacity before callers get HTTP 429.',
+  'Ingestion.MaxConcurrentTasks': 'How many ingestion jobs run in parallel. Match to your model runner’s throughput.',
+  'Ingestion.MaxAttempts': 'How many times a failed ingestion stage is retried before the job is marked failed.',
+  'Ingestion.StageTimeoutSeconds': 'Abort a single ingestion stage if it exceeds this many seconds.',
+  'Ingestion.UseHeadlessBrowser': 'Render pages in a headless browser before extraction, so JavaScript-heavy sites ingest correctly.',
+  'RequestHistory.Enabled': 'Capture every API request for the Request History view. Secrets are redacted and bodies truncated.',
+  'RequestHistory.RetentionDays': 'How long captured requests are kept before automatic pruning.'
+};
+const TIP_BY_KEY = {
+  Hostname: 'Network interface the server binds to. * listens on all interfaces.',
+  Port: 'TCP port the server listens on.',
+  Ssl: 'Whether the server terminates HTTPS itself.',
+  Endpoint: 'Base URL of this dependency the server calls.',
+  BearerToken: 'Auth token sent to this dependency. Stored server-side; shown masked.',
+  MinimumSeverity: 'Lowest log level to record (lower number = more verbose).',
+  Provider: 'Which backend implementation to use for this feature.',
+  Enabled: 'Turn this subsystem on or off.'
+};
+
 // camelCase / snake_case / kebab-case -> "Title Case".
 function humanize(key) {
   const spaced = String(key)
@@ -117,11 +145,13 @@ function SettingsView() {
   const renderField = (path, key, value) => {
     const label = humanize(key);
     const isSecret = secretFields.includes(path);
+    const tip = TIP_BY_PATH[path] || TIP_BY_KEY[key] || `Server configuration value (${path}). Some changes take effect immediately; others require a restart.`;
+    const labelClass = 'has-tip';
 
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
       return (
         <fieldset className="settings-subgroup" key={path}>
-          <legend>{label}</legend>
+          <legend title={`Settings for ${label.toLowerCase()}.`}>{label}</legend>
           <div className="settings-field-grid">
             {Object.entries(value).map(([k, v]) => renderField(`${path}.${k}`, k, v))}
           </div>
@@ -133,8 +163,8 @@ function SettingsView() {
       const raw = drafts[path] ?? JSON.stringify(value, null, 2);
       return (
         <div className="field" style={{ gridColumn: '1 / -1' }} key={path}>
-          <label htmlFor={`s-${path}`}>{label}</label>
-          <textarea id={`s-${path}`} rows={Math.min(10, Math.max(3, value.length + 2))} value={raw} onChange={(e) => updateJson(path, e.target.value)} />
+          <label htmlFor={`s-${path}`} className={labelClass} title={tip}>{label}</label>
+          <textarea id={`s-${path}`} rows={Math.min(10, Math.max(3, value.length + 2))} value={raw} onChange={(e) => updateJson(path, e.target.value)} title={`${tip} (Edit as JSON.)`} />
           {jsonErrors[path] && <div className="error-message" style={{ marginTop: '0.35rem' }}>{t('settings.invalidJson')}</div>}
         </div>
       );
@@ -142,9 +172,9 @@ function SettingsView() {
 
     if (typeof value === 'boolean') {
       return (
-        <div className="checkbox-field" key={path}>
-          <input id={`s-${path}`} type="checkbox" checked={value} onChange={(e) => update(path, e.target.checked)} />
-          <label htmlFor={`s-${path}`} style={{ margin: 0 }}>{label}</label>
+        <div className="checkbox-field" key={path} title={tip}>
+          <input id={`s-${path}`} type="checkbox" checked={value} onChange={(e) => update(path, e.target.checked)} title={tip} />
+          <label htmlFor={`s-${path}`} className={labelClass} style={{ margin: 0 }} title={tip}>{label}</label>
         </div>
       );
     }
@@ -152,8 +182,8 @@ function SettingsView() {
     if (typeof value === 'number') {
       return (
         <div className="field" key={path}>
-          <label htmlFor={`s-${path}`}>{label}</label>
-          <input id={`s-${path}`} type="number" value={value} onChange={(e) => update(path, e.target.value === '' ? '' : Number(e.target.value))} />
+          <label htmlFor={`s-${path}`} className={labelClass} title={tip}>{label}</label>
+          <input id={`s-${path}`} type="number" value={value} onChange={(e) => update(path, e.target.value === '' ? '' : Number(e.target.value))} title={tip} />
         </div>
       );
     }
@@ -162,12 +192,13 @@ function SettingsView() {
     const strVal = value ?? (isSecret ? secretMask : '');
     return (
       <div className="field" key={path}>
-        <label htmlFor={`s-${path}`}>{label}{isSecret ? ' 🔒' : ''}</label>
+        <label htmlFor={`s-${path}`} className={labelClass} title={isSecret ? `${tip} Shown masked; leave as ******** to keep the stored value.` : tip}>{label}{isSecret ? ' 🔒' : ''}</label>
         <input
           id={`s-${path}`}
           type={isSecret ? 'password' : 'text'}
           value={strVal}
           onChange={(e) => update(path, e.target.value)}
+          title={isSecret ? `${tip} Shown masked; leave as ******** to keep the stored value.` : tip}
         />
       </div>
     );

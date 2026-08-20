@@ -60,8 +60,9 @@ function SearchView() {
 
       <form className="filter-bar" onSubmit={onSubmit}>
         <div className="field" style={{ minWidth: '195px' }}>
-          <label htmlFor="search-subject">{t('search.subject')}</label>
-          <select id="search-subject" value={subjectId} onChange={(e) => setSubjectId(e.target.value)} required>
+          <label htmlFor="search-subject" className="has-tip" title="Search is scoped to one subject’s ingested documents. Pick which subject to search within.">{t('search.subject')}</label>
+          <select id="search-subject" value={subjectId} onChange={(e) => setSubjectId(e.target.value)} required
+            title="Search is scoped to one subject’s ingested documents. Pick which subject to search within.">
             <option value="">{t('search.selectSubject')}</option>
             {subjects.map((c) => (
               <option key={c.id} value={c.id}>{c.displayName || c.name || c.id}</option>
@@ -69,12 +70,14 @@ function SearchView() {
           </select>
         </div>
         <div className="field" style={{ flex: 1, minWidth: '240px' }}>
-          <label htmlFor="search-query">{t('search.query')}</label>
+          <label htmlFor="search-query" className="has-tip" title="Keywords to match against the indexed chunk text (full-text search, not a question). Results link to the matching documents.">{t('search.query')}</label>
           <input id="search-query" type="text" value={query} placeholder={t('search.queryPlaceholder')}
-            onChange={(e) => setQuery(e.target.value)} />
+            onChange={(e) => setQuery(e.target.value)}
+            title="Keywords to match against the indexed chunk text (full-text search, not a question). Results link to the matching documents." />
         </div>
         <div className="field" style={{ alignSelf: 'flex-end' }}>
-          <button type="submit" className="button-primary" disabled={!subjectId || !query.trim() || loading}>
+          <button type="submit" className="button-primary" disabled={!subjectId || !query.trim() || loading}
+            title="Run the full-text search over the selected subject’s documents.">
             {loading ? t('common.loading') : t('common.search')}
           </button>
         </div>
