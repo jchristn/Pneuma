@@ -1175,6 +1175,7 @@ a.relationship-target:hover {
 /* Answer citations: links back to the ingested sources with a relevance percentage */
 .chat-citations { margin-top: 0.7rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
 .chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); }
+.chat-citations > summary { cursor: pointer; user-select: none; list-style-position: inside; }
 .chat-citations-list { margin: 0.25rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
 .chat-citations-list li { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.82rem; }
 .chat-citation { color: var(--color-primary); text-decoration: none; word-break: break-word; }

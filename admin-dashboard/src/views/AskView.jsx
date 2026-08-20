@@ -162,8 +162,8 @@ function Citations({ citations }) {
   const { t } = useTranslation();
   if (!citations || citations.length === 0) return null;
   return (
-    <div className="chat-citations">
-      <span className="chat-citations-label">{t('ask.sources', 'Sources')}</span>
+    <details className="chat-citations">
+      <summary className="chat-citations-label">{t('ask.sources', 'Sources')} ({citations.length})</summary>
       <ol className="chat-citations-list">
         {citations.map((c, i) => (
           <li key={c.linkId || i}>
@@ -176,7 +176,7 @@ function Citations({ citations }) {
           </li>
         ))}
       </ol>
-    </div>
+    </details>
   );
 }
 
@@ -197,6 +197,10 @@ function StatsInfo({ stats }) {
   if (total) rows.push([t('ask.statTotal', 'Total tokens'), String(total)]);
   if (stats.tokensPerSecond) rows.push([t('ask.statTps', 'Tokens / second'), stats.tokensPerSecond.toFixed(1)]);
   if (stats.contextSize) rows.push([t('ask.statContext', 'Context window'), `${stats.contextSize.toLocaleString()} tokens`]);
+  if (stats.contextSize && total) {
+    const usedPct = Math.min(100, Math.round((total / stats.contextSize) * 100));
+    rows.push([t('ask.statContextUsed', 'Context used'), `${total.toLocaleString()} tokens (${usedPct}%)`]);
+  }
   if (rows.length === 0) return null;
   return (
     <div className="chat-stats-info">

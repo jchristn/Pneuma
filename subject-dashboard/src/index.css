@@ -1007,6 +1007,7 @@ select {
 /* Answer citations: links back to the ingested sources */
 .chat-citations { margin-top: 0.7rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem; }
 .chat-citations-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+.chat-citations > summary { cursor: pointer; user-select: none; list-style-position: inside; }
 .chat-citations-list { margin: 0.25rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
 .chat-citations-list li { font-size: 0.82rem; }
 .chat-citations-list li { display: flex; align-items: baseline; gap: 0.4rem; }
