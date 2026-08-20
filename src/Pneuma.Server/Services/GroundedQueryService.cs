@@ -167,6 +167,10 @@ namespace Pneuma.Server.Services
                         if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                         if (!seen.Add(nodeId)) continue;
                         GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
+                        // The chunk's authoritative text lives in the retrieval store; use it whenever the graph
+                        // node carries no content (and synthesize a node if the graph read returns nothing) so the
+                        // answer model always sees the full chunk rather than a truncated display name.
+                        node = HydrateFromHit(node, nodeId, hit.Snippet);
                         if (node != null) sources.Add(node);
                     }
                 }
@@ -186,6 +190,7 @@ namespace Pneuma.Server.Services
                     {
                         if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;
                         GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
+                        node = HydrateFromHit(node, hit.NodeId, hit.Content);
                         if (node != null) sources.Add(node);
                     }
                 }
@@ -316,6 +321,28 @@ namespace Pneuma.Server.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Ensure a retrieved source carries usable content. The retrieval store holds the authoritative chunk
+        /// text; the graph node's own content is not always available on read, so fall back to the hit's text
+        /// (and synthesize a minimal node when the graph read returned nothing) rather than answering from a
+        /// truncated display name.
+        /// </summary>
+        private static GraphNode? HydrateFromHit(GraphNode? node, string nodeId, string? hitContent)
+        {
+            if (node == null)
+            {
+                if (String.IsNullOrWhiteSpace(hitContent)) return null;
+                return new GraphNode { Id = nodeId, Content = hitContent };
+            }
+
+            if (String.IsNullOrWhiteSpace(node.Content) && !String.IsNullOrWhiteSpace(hitContent))
+            {
+                node.Content = hitContent;
+            }
+
+            return node;
+        }
 
         private async Task<ModelRunner?> ResolvePartioCompletionRunnerAsync(CancellationToken token)
         {

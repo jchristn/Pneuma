@@ -19,6 +19,9 @@ namespace Pneuma.Core.Integrations.Models
         /// <summary>The hydrated node when the store returned it; otherwise null.</summary>
         public GraphNode? Node { get; set; }
 
+        /// <summary>The matched chunk's stored text content, when the store returned it; otherwise null.</summary>
+        public string? Content { get; set; } = null;
+
         #endregion
     }
 }

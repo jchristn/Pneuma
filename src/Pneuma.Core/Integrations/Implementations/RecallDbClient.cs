@@ -189,7 +189,7 @@ namespace Pneuma.Core.Integrations.Implementations
             {
                 string? nodeId = GetTag(docElement, "litegraphNodeId");
                 if (String.IsNullOrEmpty(nodeId)) continue;
-                hits.Add(new VectorSearchHit { NodeId = nodeId!, Score = GetDouble(docElement, "Score") });
+                hits.Add(new VectorSearchHit { NodeId = nodeId!, Score = GetDouble(docElement, "Score"), Content = GetString(docElement, "Content", "content") });
             }
             return hits;
         }

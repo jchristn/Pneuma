@@ -94,8 +94,12 @@ namespace Pneuma.Server.Mcp
                 if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
                 if (!seen.Add(nodeId)) continue;
                 GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
-                if (node == null) continue;
-                results.Add(new { id = node.Id, name = node.Name, nodeType = node.NodeType, score = hit.Score });
+                // The chunk's full text comes from the retrieval store; surface it as the snippet (preferring the
+                // graph node's content when present) so the assistant can answer directly from search results.
+                string? snippet = !String.IsNullOrWhiteSpace(node?.Content) ? node!.Content : hit.Snippet;
+                string name = !String.IsNullOrWhiteSpace(node?.Name) ? node!.Name! : (nodeId);
+                string nodeType = node?.NodeType ?? String.Empty;
+                results.Add(new { id = nodeId, name, nodeType, score = hit.Score, snippet = Truncate(snippet, 1200) });
                 if (results.Count >= max) break;
             }
 
@@ -287,6 +291,12 @@ namespace Pneuma.Server.Mcp
                 return Math.Clamp(parsed, 1, 20);
             }
             return 10;
+        }
+
+        private static string? Truncate(string? value, int max)
+        {
+            if (String.IsNullOrEmpty(value) || value.Length <= max) return value;
+            return value.Substring(0, max) + "…";
         }
 
         #endregion
