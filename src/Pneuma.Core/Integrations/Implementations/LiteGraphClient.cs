@@ -37,6 +37,10 @@ namespace Pneuma.Core.Integrations.Implementations
         // Bounded concurrency for bulk node/edge deletion during cascade cleanup.
         private const int _MaxDeleteConcurrency = 8;
 
+        // LiteGraph excludes a node's Data (and, in practice, Labels/Tags) from reads unless these include
+        // flags are set. Appended to node GET/neighbor reads so nodes round-trip their full structure.
+        private const string _NodeReadQuery = "?incldata=true&inclsub=true";
+
         private readonly string _BaseUrl;
         private readonly string? _BearerToken;
         private readonly string _TenantGuid;
@@ -202,7 +206,9 @@ namespace Pneuma.Core.Integrations.Implementations
             if (String.IsNullOrWhiteSpace(nodeId)) throw new ArgumentNullException(nameof(nodeId));
             string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
 
-            string url = _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/" + nodeId;
+            // LiteGraph omits the node's Data (and, in practice, Labels/Tags) unless these include flags are
+            // set, so the node comes back as bare identity without them. Always request the full node.
+            string url = _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/" + nodeId + _NodeReadQuery;
 
             IntegrationResponse response = await SendRawResilientAsync(
                 RouteNormalizer.NormalizeUrl(url),
@@ -231,6 +237,8 @@ namespace Pneuma.Core.Integrations.Implementations
                 string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
                 object requestBody = new
                 {
+                    IncludeData = true,
+                    IncludeSubordinates = true,
                     Tags = new Dictionary<string, string>
                     {
                         { "nodeType", nodeType },
@@ -269,7 +277,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
                 string body = await SendAsync(HttpMethod.Post,
                     _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/search",
-                    JsonSerializer.Serialize(new { Tags = tags ?? new Dictionary<string, string>() }, _RequestJson), token).ConfigureAwait(false);
+                    JsonSerializer.Serialize(new { IncludeData = true, IncludeSubordinates = true, Tags = tags ?? new Dictionary<string, string>() }, _RequestJson), token).ConfigureAwait(false);
 
                 using (JsonDocument doc = JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
                 {
@@ -299,7 +307,7 @@ namespace Pneuma.Core.Integrations.Implementations
             {
                 string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
                 string body = await SendAsync(HttpMethod.Get,
-                    _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/" + nodeId + "/neighbors",
+                    _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/" + nodeId + "/neighbors" + _NodeReadQuery,
                     null, token).ConfigureAwait(false);
 
                 using (JsonDocument doc = JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
@@ -392,7 +400,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
                 string body = await SendAsync(HttpMethod.Post,
                     _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/edges/search",
-                    JsonSerializer.Serialize(new { Tags = tags ?? new Dictionary<string, string>() }, _RequestJson), token).ConfigureAwait(false);
+                    JsonSerializer.Serialize(new { IncludeData = true, Tags = tags ?? new Dictionary<string, string>() }, _RequestJson), token).ConfigureAwait(false);
 
                 using (JsonDocument doc = JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
                 {
