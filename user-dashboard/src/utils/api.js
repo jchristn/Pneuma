@@ -139,11 +139,11 @@ class ApiClient {
    * @param {number} maxResults
    * @param {{onEvent:(event:object)=>void, signal?:AbortSignal}} handlers
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId = null } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId = null, threadId = null } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults, ...(subjectId ? { subjectId } : {}) },
+      body: { messages, maxResults, ...(subjectId ? { subjectId } : {}), ...(threadId ? { threadId } : {}) },
       signal,
       onEvent,
     });

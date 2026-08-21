@@ -103,6 +103,19 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "ALTER TABLE subjects ADD COLUMN retrievalfilterjson TEXT;",
                     "ALTER TABLE chatturns ADD COLUMN retrievalfilterjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(13, "Add conversation threads and tool-call trace", new List<string>
+                {
+                    "ALTER TABLE chatturns ADD COLUMN threadid VARCHAR(64);",
+                    "CREATE TABLE IF NOT EXISTS chatthreads (" +
+                        "id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64), userid VARCHAR(64), " +
+                        "title VARCHAR(512), createdutc VARCHAR(32) NOT NULL, lastactivityutc VARCHAR(32) NOT NULL, " +
+                        "KEY idx_chatthreads_tenant_subject (tenantid, subjectid, lastactivityutc));",
+                    "CREATE TABLE IF NOT EXISTS chattoolcalls (" +
+                        "id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, turnid VARCHAR(64) NOT NULL, subjectid VARCHAR(64), " +
+                        "toolname VARCHAR(128), argumentsjson TEXT, outputjson TEXT, success TINYINT NOT NULL DEFAULT 1, " +
+                        "durationms DOUBLE, sequence INT NOT NULL DEFAULT 0, createdutc VARCHAR(32) NOT NULL, " +
+                        "KEY idx_chattoolcalls_turn (turnid), KEY idx_chattoolcalls_tenant_subject (tenantid, subjectid, createdutc));"
+                }));
                 return list;
             }
         }

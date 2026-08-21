@@ -193,7 +193,17 @@ Pneuma already stores on chunks/nodes (`rights`, `authority`, `confidence`, `nod
 
 ---
 
-## Phase 3 — #6 Conversation threads (full) + persisted tool-call trace  ⬜
+## Phase 3 — #6 Conversation threads (full) + persisted tool-call trace  ✅
+
+> **Status note:** backend complete — `chatthreads` + `chattoolcalls` tables (migration v13, all four
+> providers), thread CRUD at `/v1.0/threads` (list/create/get-with-turns/rename/delete + cascade),
+> `threadId` on turns + history filter, `AgenticChatService` creates/continues a thread per turn (id on the
+> `complete` event), auto-title from the first question, and the tool-call trace persisted + returned on
+> `GET /v1.0/history/{id}`. All three dashboards thread the `threadId` through chat (a conversation stays in
+> one thread; "clear" starts a new one) and render the persisted tool trace in the History detail modal.
+> Tests (94 pass), REST_API + CHANGELOG updated. **Deferred to a follow-up:** the visual thread
+> switcher/sidebar + rename/delete UI in the Ask views and thread-grouping in the History list, and the MCP
+> thread tools (folded into Phase 7).
 
 **Goal:** group turns into named conversations with a thread switcher and "new conversation" UX in all three
 Ask views, auto-generated titles, and per-thread history; and persist the agentic tool-call trace (currently
@@ -355,6 +365,54 @@ without drifting from REST authorization.
 
 ---
 
+## Phase 7.5 — Telemetry & Grafana (full metrics + traces across ingestion and retrieval)  ⬜
+
+**Goal:** metrics (meters) and distributed traces cover **every** ingestion and retrieval/answer step and are
+exposed (`/metrics` + OTLP), collected (Prometheus + Tempo), and displayed in **domain-sectioned** Grafana
+dashboards. Ship a `TELEMETRY.md` operator guide.
+
+### Instrumentation (backend)
+- [ ] **Metrics — ingestion:** ensure `PneumaMetrics` exposes counters/histograms for every pipeline stage
+      (ContentRetrieval, TypeDetection, CellExtraction, Classification, GraphMerge, Summarization, Chunking,
+      Embedding, Indexing): stage duration histogram, stage outcome counter (ok/failed/queued), queue-wait
+      histogram, and job lifecycle counters (started/completed/failed/cancelled). Add content-bytes and
+      cells/chunks/embeddings produced as counters where missing.
+- [ ] **Metrics — retrieval/answer:** counters/histograms for each answer stage (prompt-rewrite, retrieval
+      [vector/full-text], rerank, neighbor-expansion, final inference), request outcome (ok/insufficient/4xx/429),
+      tokens in/out, tokens/sec, and per-integration call latency (RecallDB, Partio, LiteGraph, DocumentAtom).
+- [ ] **Traces:** confirm a span wraps each ingestion stage (already partially present via `TelemetryService`)
+      and add spans for each retrieval/answer stage and each outbound integration call, with tenant/subject/job
+      tags. Every `/v1.0/query`, `/v1.0/chat/stream`, and MCP answer path is a root span with child stage spans.
+- [ ] Verify metric names/labels are stable and low-cardinality (no ids in labels; tenant/subject only where bounded).
+
+### Collection / config (docker + docker/factory)
+- [ ] Confirm Prometheus scrapes Pneuma `/metrics` and Tempo receives OTLP; update `prometheus.yaml`/`tempo.yaml`
+      scrape/receiver config if any new endpoint or job is needed.
+- [ ] Provision datasources (Prometheus + Tempo) and dashboards via Grafana provisioning in both `docker/` and
+      `docker/factory/`.
+
+### Grafana dashboards — sectioned by domain
+- [ ] Rebuild the observability dashboard(s) into **domain sections** (Grafana rows): **Overview** (uptime,
+      request rate, error rate, p95), **Ingestion** (per-stage duration/throughput/queue-wait, job outcomes,
+      contention), **Retrieval & Answer** (per-stage latency, tokens/sec, rerank/rewrite usage, outcomes),
+      **Integrations** (RecallDB/Partio/LiteGraph/DocumentAtom latency + error rate), **Traces** (Tempo
+      trace-search panel linked from the metrics). Store the JSON model under `assets/grafana/` and both
+      `docker/` + `docker/factory/` provisioning paths.
+- [ ] Ensure exemplars / trace-to-metrics linking where supported so an operator can jump from a slow metric to
+      the trace.
+
+### Docs
+- [ ] Write **`TELEMETRY.md`**: what telemetry Pneuma emits (metrics + traces inventory by domain), how it is
+      exposed (`/metrics`, OTLP) and collected (Prometheus/Tempo), how to access Grafana (URL, default creds,
+      the sectioned dashboards), and how to use the data (reading each section, finding a slow ingestion stage,
+      tracing a slow answer, spotting integration errors). Link it from `README`/`PNEUMA_PLAN.md`.
+
+### Acceptance — Telemetry
+- [ ] Every ingestion and retrieval stage shows up as both a metric and a span; the Grafana dashboard has the
+      domain sections above populated with live data after a rebuild; `TELEMETRY.md` walks an operator end-to-end.
+
+---
+
 ## Phase 8 — Cross-cutting validation: usability, design, aesthetics, compliance (run at the end)
 
 Do not close the project until every box here passes. This is the "does it look and feel right, and does it
@@ -398,8 +456,9 @@ comply" gate.
 |---|---|---|---|---|---|---|---|---|
 | 1 | #1 Telemetry | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 2 | #2 Facet filters | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (JSON editor) | ✅ | 🟨 |
-| 3 | #6 Threads + tool trace | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading; switcher deferred) | ✅ | 🟨 |
 | 4 | #5 Analytics | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 5 | #4 Eval harness | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 6 | #10 Slash commands | ⬜ | n/a | n/a | ⬜ | ⬜ (fe) | ⬜ | ⬜ |
 | 7 | #11 MCP surface | ⬜ | n/a | ⬜ | ⬜ | n/a | ⬜ | ⬜ |
+| 7.5 | Telemetry & Grafana | ⬜ (instrument) | n/a | n/a | ⬜ (TELEMETRY.md) | ⬜ (Grafana) | ⬜ | ⬜ |

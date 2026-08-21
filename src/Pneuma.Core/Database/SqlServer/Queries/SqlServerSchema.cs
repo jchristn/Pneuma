@@ -102,6 +102,20 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF COL_LENGTH('dbo.subjects', 'retrievalfilterjson') IS NULL ALTER TABLE dbo.subjects ADD retrievalfilterjson NVARCHAR(MAX);",
                     "IF COL_LENGTH('dbo.chatturns', 'retrievalfilterjson') IS NULL ALTER TABLE dbo.chatturns ADD retrievalfilterjson NVARCHAR(MAX);"
                 }));
+                list.Add(new SchemaMigration(13, "Add conversation threads and tool-call trace", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.chatturns', 'threadid') IS NULL ALTER TABLE dbo.chatturns ADD threadid NVARCHAR(64);",
+                    "IF OBJECT_ID(N'dbo.chatthreads', N'U') IS NULL CREATE TABLE dbo.chatthreads (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), userid NVARCHAR(64), " +
+                        "title NVARCHAR(512), createdutc NVARCHAR(32) NOT NULL, lastactivityutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatthreads_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatthreads')) CREATE INDEX idx_chatthreads_tenant_subject ON dbo.chatthreads (tenantid, subjectid, lastactivityutc);",
+                    "IF OBJECT_ID(N'dbo.chattoolcalls', N'U') IS NULL CREATE TABLE dbo.chattoolcalls (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, turnid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), " +
+                        "toolname NVARCHAR(128), argumentsjson NVARCHAR(MAX), outputjson NVARCHAR(MAX), success BIT NOT NULL DEFAULT 1, " +
+                        "durationms FLOAT, sequence INT NOT NULL DEFAULT 0, createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chattoolcalls_turn' AND object_id = OBJECT_ID(N'dbo.chattoolcalls')) CREATE INDEX idx_chattoolcalls_turn ON dbo.chattoolcalls (turnid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chattoolcalls_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chattoolcalls')) CREATE INDEX idx_chattoolcalls_tenant_subject ON dbo.chattoolcalls (tenantid, subjectid, createdutc);"
+                }));
                 return list;
             }
         }

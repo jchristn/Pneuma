@@ -1175,3 +1175,5 @@ select {
 .hd-filter { display: flex; flex-wrap: wrap; gap: 6px; }
 .hd-filter-chip { display: inline-block; padding: 3px 8px; font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); }
 .hd-filter-exc { color: var(--color-danger); border-color: var(--color-danger); text-decoration: line-through; }
+.hd-ok { color: var(--color-success); font-weight: 600; }
+.hd-fail { color: var(--color-danger); font-weight: 600; }

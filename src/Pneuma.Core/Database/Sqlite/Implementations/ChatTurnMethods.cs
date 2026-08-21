@@ -21,9 +21,9 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
             turn.CreatedUtc = DateTime.UtcNow;
 
             string sql =
-                "INSERT INTO chatturns (id, tenantid, subjectid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, performancejson, performanceschemaversion, retrievalfilterjson, createdutc) VALUES (" +
+                "INSERT INTO chatturns (id, tenantid, subjectid, threadid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, performancejson, performanceschemaversion, retrievalfilterjson, createdutc) VALUES (" +
                 Sanitizer.Str(turn.Id) + ", " + Sanitizer.Str(turn.TenantId) + ", " +
-                Sanitizer.Str(turn.SubjectId) + ", " + Sanitizer.Str(turn.UserId) + ", " +
+                Sanitizer.Str(turn.SubjectId) + ", " + Sanitizer.Str(turn.ThreadId) + ", " + Sanitizer.Str(turn.UserId) + ", " +
                 Sanitizer.Str(turn.Question) + ", " + Sanitizer.Str(turn.Answer) + ", " +
                 Sanitizer.Str(turn.Thinking) + ", " + Sanitizer.Str(turn.Model) + ", " +
                 Sanitizer.Num(turn.PromptTokens) + ", " + Sanitizer.Num(turn.CompletionTokens) + ", " +
@@ -65,6 +65,22 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<ChatTurnRecord>> EnumerateByThreadAsync(string tenantId, string threadId, CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM chatturns WHERE tenantid = " + Sanitizer.Str(tenantId) + " AND threadid = " + Sanitizer.Str(threadId) + " ORDER BY createdutc ASC;", token).ConfigureAwait(false);
+            List<ChatTurnRecord> result = new List<ChatTurnRecord>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteByThreadAsync(string tenantId, string threadId, CancellationToken token = default)
+        {
+            await Query("DELETE FROM chatturns WHERE tenantid = " + Sanitizer.Str(tenantId) + " AND threadid = " + Sanitizer.Str(threadId) + ";", token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task DeleteOlderThanAsync(string tenantId, string subjectId, DateTime cutoffUtc, CancellationToken token = default)
         {
             await Query(
@@ -84,6 +100,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 Id = RowReader.GetString(row, "id"),
                 TenantId = RowReader.GetString(row, "tenantid"),
                 SubjectId = RowReader.GetNullableString(row, "subjectid"),
+                ThreadId = RowReader.GetNullableString(row, "threadid"),
                 UserId = RowReader.GetNullableString(row, "userid"),
                 Question = RowReader.GetString(row, "question"),
                 Answer = RowReader.GetString(row, "answer"),

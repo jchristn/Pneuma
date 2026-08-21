@@ -24,6 +24,12 @@ namespace Pneuma.Core.Requests
         /// </summary>
         public string? SubjectId { get; set; } = null;
 
+        /// <summary>
+        /// Optional conversation thread to attach this turn to. When null, a new thread is created and its id is
+        /// returned on the <c>complete</c> event so the client can continue the conversation.
+        /// </summary>
+        public string? ThreadId { get; set; } = null;
+
         #endregion
     }
 }

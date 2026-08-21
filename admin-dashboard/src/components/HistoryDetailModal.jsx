@@ -86,6 +86,8 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
     catch { return null; }
   }, [turn]);
 
+  const toolCalls = detail?.toolCalls || [];
+
   if (!turn) return null;
 
   const total = turn.totalTokens || ((turn.promptTokens || 0) + (turn.completionTokens || 0));
@@ -250,6 +252,41 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
                       <td>{c.title || '—'}</td>
                       <td className="hd-td-url">{c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer">{c.url}</a> : '—'}</td>
                       <td>{c.url ? <CopyButton value={c.url} title={t('history.copyUrl', 'Copy URL')} /> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tool activity */}
+        {toolCalls.length > 0 && (
+          <div className="hd-section">
+            <div className="hd-section-title">{t('history.toolActivity', 'Tool activity')} <span className="hd-count">{toolCalls.length}</span></div>
+            <div className="hd-table-wrap">
+              <table className="hd-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '2.5rem' }}>#</th>
+                    <th>{t('history.tool', 'Tool')}</th>
+                    <th>{t('common.status', 'Status')}</th>
+                    <th>{t('history.stageDuration', 'Runtime')}</th>
+                    <th>{t('history.toolDetails', 'Arguments / output')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {toolCalls.map((c, i) => (
+                    <tr key={c.id || i}>
+                      <td className="hd-td-num">{(c.sequence ?? i) + 1}</td>
+                      <td>{c.toolName || '—'}</td>
+                      <td><span className={c.success ? 'hd-ok' : 'hd-fail'}>{c.success ? t('history.ok', 'ok') : t('history.failed', 'failed')}</span></td>
+                      <td>{fmtMs(c.durationMs)}</td>
+                      <td>
+                        {c.argumentsJson ? <CopyButton value={c.argumentsJson} title={t('history.copyArgs', 'Copy arguments')} /> : null}
+                        {c.outputJson ? <CopyButton value={c.outputJson} title={t('history.copyOutput', 'Copy output')} /> : null}
+                        {!c.argumentsJson && !c.outputJson ? <span className="hd-muted">—</span> : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

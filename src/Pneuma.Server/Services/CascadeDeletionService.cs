@@ -127,6 +127,8 @@ namespace Pneuma.Server.Services
             // Remove the subject's chat feedback and history (feedback first, since it references turns).
             await TryExternalAsync(() => _Db.ChatFeedback.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatTurnPerfEvents.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+            await TryExternalAsync(() => _Db.ChatToolCalls.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+            await TryExternalAsync(() => _Db.ChatThreads.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatTurns.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
 
             // The subject, its links, its jobs, and all job events are removed in one transaction.

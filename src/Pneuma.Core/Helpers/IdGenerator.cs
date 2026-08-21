@@ -92,6 +92,14 @@ namespace Pneuma.Core.Helpers
         /// <returns>Performance-event identifier.</returns>
         public static string GeneratePerfEventId() => Generate(Constants.PerfEventPrefix);
 
+        /// <summary>Generate a chat thread identifier.</summary>
+        /// <returns>Chat thread identifier.</returns>
+        public static string GenerateChatThreadId() => Generate(Constants.ChatThreadPrefix);
+
+        /// <summary>Generate a chat tool-call identifier.</summary>
+        /// <returns>Chat tool-call identifier.</returns>
+        public static string GenerateChatToolCallId() => Generate(Constants.ChatToolCallPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

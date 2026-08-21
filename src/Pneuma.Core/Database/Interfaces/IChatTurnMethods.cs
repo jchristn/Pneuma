@@ -31,11 +31,24 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Turns, newest first.</returns>
         Task<List<ChatTurnRecord>> EnumerateAsync(string tenantId, string? subjectId, CancellationToken token = default);
 
+        /// <summary>Enumerate a thread's chat turns, oldest first.</summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The thread's turns, oldest first.</returns>
+        Task<List<ChatTurnRecord>> EnumerateByThreadAsync(string tenantId, string threadId, CancellationToken token = default);
+
         /// <summary>Delete all chat turns for a subject within a tenant. Idempotent.</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="subjectId">Subject identifier.</param>
         /// <param name="token">Cancellation token.</param>
         Task DeleteBySubjectAsync(string tenantId, string subjectId, CancellationToken token = default);
+
+        /// <summary>Delete all chat turns in a thread within a tenant. Idempotent.</summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="threadId">Thread identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task DeleteByThreadAsync(string tenantId, string threadId, CancellationToken token = default);
 
         /// <summary>Delete chat turns for a subject older than a cutoff (retention pruning). Idempotent.</summary>
         /// <param name="tenantId">Tenant identifier.</param>

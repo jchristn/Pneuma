@@ -73,6 +73,12 @@ namespace Pneuma.Core
         /// <summary>Chat-turn performance-event identifier prefix.</summary>
         public const string PerfEventPrefix = "perf_";
 
+        /// <summary>Chat thread (conversation) identifier prefix.</summary>
+        public const string ChatThreadPrefix = "thr_";
+
+        /// <summary>Chat tool-call identifier prefix.</summary>
+        public const string ChatToolCallPrefix = "tcall_";
+
         #endregion
 
         #region General

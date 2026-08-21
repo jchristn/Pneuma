@@ -95,7 +95,7 @@ namespace Pneuma.Server.Services
         /// <param name="emit">Async delegate that writes one event: (payload, isFinal, token).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task.</returns>
-        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, string? subjectId, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
+        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, string? subjectId, string? threadId, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
         {
             if (rc == null) throw new ArgumentNullException(nameof(rc));
             if (turns == null) throw new ArgumentNullException(nameof(turns));
@@ -115,6 +115,19 @@ namespace Pneuma.Server.Services
                 await emit(new { type = "complete", answer = "No answering model is configured. Ask an administrator to add a model runner.", model = (string?)null }, true, token).ConfigureAwait(false);
                 return;
             }
+
+            // Resolve or create the conversation thread this turn belongs to; its id is returned on the complete
+            // event so the client can continue the same conversation.
+            ChatThread thread = (String.IsNullOrWhiteSpace(threadId)
+                ? null
+                : await _Db.ChatThreads.ReadAsync(tenantId, threadId!, token).ConfigureAwait(false))
+                ?? await _Db.ChatThreads.CreateAsync(new ChatThread
+                {
+                    TenantId = tenantId,
+                    SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
+                    UserId = rc.UserId,
+                    Title = MakeThreadTitle(turns)
+                }, token).ConfigureAwait(false);
 
             Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.system", token).ConfigureAwait(false);
             string systemPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackSystemPrompt : prompt!.Content;
@@ -137,6 +150,8 @@ namespace Pneuma.Server.Services
             }
             // Per-stage performance telemetry for this turn (rewrite, compaction, tool calls, final inference).
             List<TurnPerformanceStage> perfStages = new List<TurnPerformanceStage>();
+            // Persisted tool-call trace for this turn (args/output/duration), surfaced later in the history view.
+            List<ChatToolCall> toolCallRecords = new List<ChatToolCall>();
             long rewriteStart = System.Diagnostics.Stopwatch.GetTimestamp();
             string? rewrittenLastTurn = lastUserIndex >= 0
                 ? await _Query.RewriteQuestionAsync(tenantId, subject, turns[lastUserIndex].Content ?? String.Empty, token).ConfigureAwait(false)
@@ -288,6 +303,17 @@ namespace Pneuma.Server.Services
 
                         toolTrace.Add(new { name = call.Name, ok = result.Success });
                         perfStages.Add(new TurnPerformanceStage { Name = "tool:" + (call.Name ?? "unknown"), Kind = "tool", DurationMs = toolDurationMs, Success = result.Success });
+                        toolCallRecords.Add(new ChatToolCall
+                        {
+                            TenantId = tenantId,
+                            SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
+                            ToolName = call.Name ?? String.Empty,
+                            ArgumentsJson = Truncate(call.ArgumentsJson ?? String.Empty, 8192),
+                            OutputJson = Truncate(resultJson, 8192),
+                            Success = result.Success,
+                            DurationMs = toolDurationMs,
+                            Sequence = toolCallRecords.Count
+                        });
                         // The result payload is echoed to the caller (truncated) so the UI can show the tool's
                         // response alongside its query and runtime when a tool row is expanded.
                         await emit(new
@@ -356,6 +382,7 @@ namespace Pneuma.Server.Services
             {
                 TenantId = tenantId,
                 SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
+                ThreadId = thread.Id,
                 UserId = rc.UserId,
                 Question = turns.Count > 0 ? (turns[turns.Count - 1].Content ?? String.Empty) : String.Empty,
                 Answer = finalAnswer,
@@ -379,6 +406,8 @@ namespace Pneuma.Server.Services
             {
                 type = "complete",
                 turnId = record.Id,
+                threadId = thread.Id,
+                threadTitle = thread.Title,
                 answer = finalAnswer,
                 model,
                 promptTokens,
@@ -424,11 +453,18 @@ namespace Pneuma.Server.Services
                 }
                 await _Db.ChatTurnPerfEvents.CreateManyAsync(perfEvents, token).ConfigureAwait(false);
 
+                foreach (ChatToolCall call in toolCallRecords) call.TurnId = record.Id;
+                await _Db.ChatToolCalls.CreateManyAsync(toolCallRecords, token).ConfigureAwait(false);
+
+                thread.LastActivityUtc = DateTime.UtcNow;
+                await _Db.ChatThreads.UpdateAsync(thread, token).ConfigureAwait(false);
+
                 if (subject != null && subject.HistoryRetentionDays > 0)
                 {
                     DateTime cutoff = DateTime.UtcNow.AddDays(-subject.HistoryRetentionDays);
                     await _Db.ChatTurns.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
                     await _Db.ChatTurnPerfEvents.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
+                    await _Db.ChatToolCalls.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
                 }
             }
             catch (Exception persistError)
@@ -499,6 +535,22 @@ namespace Pneuma.Server.Services
         private static double ElapsedMs(long startTimestamp)
         {
             return (System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
+        /// <summary>Derive a short conversation title from the first user turn.</summary>
+        /// <param name="turns">The conversation turns.</param>
+        /// <returns>A trimmed, length-bounded title.</returns>
+        private static string MakeThreadTitle(List<ChatTurn> turns)
+        {
+            foreach (ChatTurn turn in turns)
+            {
+                if (!String.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase) && !String.IsNullOrWhiteSpace(turn.Content))
+                {
+                    string text = turn.Content!.Trim();
+                    return text.Length > 60 ? text.Substring(0, 60) + "…" : text;
+                }
+            }
+            return "New conversation";
         }
 
         /// <summary>Rough token estimate for the running conversation (≈4 characters per token).</summary>

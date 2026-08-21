@@ -88,6 +88,12 @@ namespace Pneuma.Core.Database
         /// <summary>Chat-turn performance-event methods.</summary>
         public IChatTurnPerfEventMethods ChatTurnPerfEvents { get; protected set; } = null!;
 
+        /// <summary>Conversation-thread methods.</summary>
+        public IChatThreadMethods ChatThreads { get; protected set; } = null!;
+
+        /// <summary>Chat tool-call methods.</summary>
+        public IChatToolCallMethods ChatToolCalls { get; protected set; } = null!;
+
         #endregion
 
         #region Public-Methods

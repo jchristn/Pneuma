@@ -492,6 +492,39 @@ namespace Test.Shared.Suites
                             if ((await db.ChatTurnPerfEvents.EnumerateByTurnAsync(t.Id, turn.Id, ct)).Count != 0) throw new Exception("DeleteBySubject must remove the subject's perf events");
                         }),
 
+                    new TestCaseDescriptor("Database", "ChatThread_And_ToolCall_Crud_And_Cascade", "Threads and tool calls persist, enumerate by thread/turn, and cascade on thread delete",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Thr" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+
+                            ChatThread thread = await db.ChatThreads.CreateAsync(new ChatThread { TenantId = t.Id, SubjectId = s.Id, Title = "First convo" }, ct);
+                            ChatThread readThread = await db.ChatThreads.ReadAsync(t.Id, thread.Id, ct) ?? throw new Exception("Thread vanished after create");
+                            if (readThread.Title != "First convo") throw new Exception("Thread title did not round-trip");
+
+                            readThread.Title = "Renamed";
+                            await db.ChatThreads.UpdateAsync(readThread, ct);
+                            if ((await db.ChatThreads.ReadAsync(t.Id, thread.Id, ct))!.Title != "Renamed") throw new Exception("Thread rename did not persist");
+
+                            ChatTurnRecord turn = await db.ChatTurns.CreateAsync(new ChatTurnRecord { TenantId = t.Id, SubjectId = s.Id, ThreadId = thread.Id, Question = "q", Answer = "a" }, ct);
+                            if ((await db.ChatTurns.EnumerateByThreadAsync(t.Id, thread.Id, ct)).Count != 1) throw new Exception("Expected 1 turn in the thread");
+
+                            await db.ChatToolCalls.CreateManyAsync(new List<ChatToolCall>
+                            {
+                                new ChatToolCall { TenantId = t.Id, TurnId = turn.Id, SubjectId = s.Id, ToolName = "pneuma_search", ArgumentsJson = "{\"query\":\"x\"}", OutputJson = "{}", Success = true, DurationMs = 12, Sequence = 0 }
+                            }, ct);
+                            if ((await db.ChatToolCalls.EnumerateByTurnAsync(t.Id, turn.Id, ct)).Count != 1) throw new Exception("Expected 1 tool call for the turn");
+
+                            // Cascade: deleting the turn's tool calls, then the thread's turns, then the thread.
+                            await db.ChatToolCalls.DeleteByTurnAsync(t.Id, turn.Id, ct);
+                            if ((await db.ChatToolCalls.EnumerateByTurnAsync(t.Id, turn.Id, ct)).Count != 0) throw new Exception("DeleteByTurn must remove the turn's tool calls");
+                            await db.ChatTurns.DeleteByThreadAsync(t.Id, thread.Id, ct);
+                            if ((await db.ChatTurns.EnumerateByThreadAsync(t.Id, thread.Id, ct)).Count != 0) throw new Exception("DeleteByThread must remove the thread's turns");
+                            await db.ChatThreads.DeleteAsync(t.Id, thread.Id, ct);
+                            if (await db.ChatThreads.ReadAsync(t.Id, thread.Id, ct) != null) throw new Exception("Thread delete must remove the thread");
+                        }),
+
                     new TestCaseDescriptor("Database", "Subject_PendingDeletion_Enumeration", "EnumeratePendingDeletion returns only Pending/Deleting subjects, across tenants",
                         executeAsync: async ct =>
                         {

@@ -106,7 +106,13 @@ Response envelope:
 | Method | Path | Description |
 |---|---|---|
 | GET | `/v1.0/history` | List persisted chat turns (newest first), optionally `?subjectId=`. Paginated `EnumerationResult`. Each turn carries the question, answer, `thinking`, `model`, token counts, timing (`timeToFirstTokenMs`, `generationMs`, `thinkingMs`), `contextSize`, `citationsJson`, and structured per-stage telemetry in `performanceJson` (a serialized `{ schemaVersion, wallTimeMs, stages[] }`; each stage has `name`, `kind`, `provider`, `model`, `durationMs`, `timeToFirstTokenMs`, `promptTokens`, `completionTokens`, `success`) |
-| GET | `/v1.0/history/{id}` | A single turn with its feedback: `{ turn, feedback: [...] }`. The turn's `performanceJson` drives the dashboard History detail stage table and timing bars |
+| GET | `/v1.0/history/{id}` | A single turn with its feedback and tool-call trace: `{ turn, feedback: [...], toolCalls: [...] }`. The turn's `performanceJson` drives the dashboard History detail stage table and timing bars; `toolCalls` (tool, args, output, success, duration) drives the Tool activity table |
+| GET | `/v1.0/history?threadId=` | The history list also accepts `threadId` to return only a thread's turns |
+| GET | `/v1.0/threads` | List conversation threads (most-recently-active first), optionally `?subjectId=`. Paginated `EnumerationResult` |
+| POST | `/v1.0/threads` | Create a thread. Body `{ subjectId?, title? }` → the created thread |
+| GET | `/v1.0/threads/{id}` | A thread with its turns: `{ thread, turns: [...] }` |
+| PUT | `/v1.0/threads/{id}` | Rename a thread. Body `{ title }` |
+| DELETE | `/v1.0/threads/{id}` | Delete a thread and cascade its turns + tool calls. Returns 204 |
 | GET | `/v1.0/feedback` | List feedback (newest first), optionally `?subjectId=`. Each item is `{ feedback, turn }` (the rated turn is enriched inline). Paginated `EnumerationResult` |
 | POST | `/v1.0/feedback` | Submit feedback on a turn: `{ turnId, rating: "Up"\|"Down"\|"None", comment? }`. Requires a rating and/or comment; unknown `turnId` → 404 |
 

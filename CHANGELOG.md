@@ -7,6 +7,14 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Conversation threads + persisted tool-call trace.** Chat turns are now grouped into named conversation
+  threads (schema v13): every agentic turn creates or continues a thread (id returned on the `complete` SSE
+  event), and the three dashboards thread the `threadId` through so a conversation stays together. New
+  `chatthreads` table + thread CRUD at `/v1.0/threads` (list/create/get-with-turns/rename/delete, cascading
+  its turns + tool calls); `GET /v1.0/history?threadId=` filters by thread. The agentic tool-call trace
+  (tool, args, output, success, duration) is persisted to a new `chattoolcalls` table and returned on
+  `GET /v1.0/history/{id}`, rendered as a "Tool activity" table in the History detail modal. Threads, turns,
+  and tool calls are pruned with the subject's retention window and removed on subject cascade.
 - **Metadata / facet retrieval filters.** A subject can carry a default retrieval facet filter
   (`retrievalFilterJson`, schema v12) and `/v1.0/query` accepts a per-request `metadataFilter`; both are
   chunk-tag predicates (`required`/`excluded` with conditions Equals/NotEquals/Contains/StartsWith/EndsWith/

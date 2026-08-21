@@ -16,6 +16,9 @@ namespace Pneuma.Core.Responses
         /// <summary>Feedback recorded against this turn.</summary>
         public List<ChatFeedback> Feedback { get; set; } = new List<ChatFeedback>();
 
+        /// <summary>The agentic tool calls made while producing this turn, in call order.</summary>
+        public List<ChatToolCall> ToolCalls { get; set; } = new List<ChatToolCall>();
+
         #endregion
     }
 }

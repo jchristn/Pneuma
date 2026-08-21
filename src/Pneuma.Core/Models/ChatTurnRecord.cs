@@ -29,6 +29,9 @@ namespace Pneuma.Core.Models
         /// <summary>Subject the chat was scoped to, or null for a whole-tenant chat.</summary>
         public string? SubjectId { get; set; } = null;
 
+        /// <summary>The conversation thread this turn belongs to, or null for an un-threaded turn.</summary>
+        public string? ThreadId { get; set; } = null;
+
         /// <summary>Identifier of the user who asked, or null when unauthenticated/unknown.</summary>
         public string? UserId { get; set; } = null;
 

@@ -102,6 +102,20 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS retrievalfilterjson TEXT;",
                     "ALTER TABLE chatturns ADD COLUMN IF NOT EXISTS retrievalfilterjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(13, "Add conversation threads and tool-call trace", new List<string>
+                {
+                    "ALTER TABLE chatturns ADD COLUMN IF NOT EXISTS threadid TEXT;",
+                    "CREATE TABLE IF NOT EXISTS chatthreads (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT, userid TEXT, " +
+                        "title TEXT, createdutc TEXT NOT NULL, lastactivityutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_chatthreads_tenant_subject ON chatthreads (tenantid, subjectid, lastactivityutc);",
+                    "CREATE TABLE IF NOT EXISTS chattoolcalls (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, turnid TEXT NOT NULL, subjectid TEXT, " +
+                        "toolname TEXT, argumentsjson TEXT, outputjson TEXT, success INTEGER NOT NULL DEFAULT 1, " +
+                        "durationms DOUBLE PRECISION, sequence INTEGER NOT NULL DEFAULT 0, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_chattoolcalls_turn ON chattoolcalls (turnid);",
+                    "CREATE INDEX IF NOT EXISTS idx_chattoolcalls_tenant_subject ON chattoolcalls (tenantid, subjectid, createdutc);"
+                }));
                 return list;
             }
         }

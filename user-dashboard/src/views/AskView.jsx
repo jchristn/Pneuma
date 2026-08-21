@@ -319,6 +319,7 @@ export default function AskView() {
   const [waitMessage, setWaitMessage] = useState('');
 
   const abortRef = useRef(null);
+  const threadIdRef = useRef(null);
   const textareaRef = useRef(null);
   const endRef = useRef(null);
   const recentQuips = useRef([]);
@@ -400,6 +401,7 @@ export default function AskView() {
       await apiClient.chatStream(history, 8, {
         signal: controller.signal,
         subjectId: subject?.id || null,
+        threadId: threadIdRef.current,
         onEvent: (evt) => {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; m.compacting = false; });
@@ -421,6 +423,7 @@ export default function AskView() {
               m.compacting = false;
               m.citations = Array.isArray(evt.citations) ? evt.citations : [];
               m.turnId = evt.turnId || null;
+              if (evt.threadId) threadIdRef.current = evt.threadId;
               m.thinking = evt.thinking || '';
               m.thinkingEnabled = !!evt.thinkingEnabled;
               m.stats = {
@@ -469,6 +472,7 @@ export default function AskView() {
 
   const handleNewChat = useCallback(() => {
     if (streaming) return;
+    threadIdRef.current = null;
     setMessages([]);
     setError(null);
     setInput('');

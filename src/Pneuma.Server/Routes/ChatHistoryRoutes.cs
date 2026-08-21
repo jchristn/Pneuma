@@ -59,6 +59,17 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("List chat feedback", "Feedback"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/feedback", SubmitFeedbackAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Submit feedback on a chat answer", "Feedback"));
+
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/threads", ListThreadsAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("List conversation threads", "History"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/threads", CreateThreadAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a conversation thread", "History"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/threads/{id}", ThreadDetailAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Get a thread with its turns", "History"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/threads/{id}", RenameThreadAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Rename a conversation thread", "History"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/threads/{id}", DeleteThreadAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete a conversation thread and its turns", "History"));
         }
 
         #endregion
@@ -82,7 +93,10 @@ namespace Pneuma.Server.Routes
                 return;
             }
             string? subjectId = ctx.Request.Query.Elements?["subjectId"];
-            List<ChatTurnRecord> turns = await _Db.ChatTurns.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false);
+            string? threadId = ctx.Request.Query.Elements?["threadId"];
+            List<ChatTurnRecord> turns = String.IsNullOrEmpty(threadId)
+                ? await _Db.ChatTurns.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false)
+                : await _Db.ChatTurns.EnumerateByThreadAsync(rc.TenantId, threadId!, ctx.Token).ConfigureAwait(false);
             EnumerationResult<ChatTurnRecord> result = EnumerationHelper.Paginate(turns, RouteHelper.ReadEnumerationQuery(ctx), t => t.CreatedUtc, t => t.Id);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
         }
@@ -109,7 +123,107 @@ namespace Pneuma.Server.Routes
             {
                 if (String.Equals(item.TurnId, turn.Id, StringComparison.Ordinal)) feedback.Add(item);
             }
-            await RouteHelper.SendJsonAsync(ctx, 200, new ChatTurnDetail { Turn = turn, Feedback = feedback }).ConfigureAwait(false);
+            List<ChatToolCall> toolCalls = await _Db.ChatToolCalls.EnumerateByTurnAsync(rc.TenantId, turn.Id, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, new ChatTurnDetail { Turn = turn, Feedback = feedback, ToolCalls = toolCalls }).ConfigureAwait(false);
+        }
+
+        private async Task ListThreadsAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            List<ChatThread> threads = await _Db.ChatThreads.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false);
+            EnumerationResult<ChatThread> result = EnumerationHelper.Paginate(threads, RouteHelper.ReadEnumerationQuery(ctx), t => t.LastActivityUtc, t => t.Id);
+            await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
+        }
+
+        private async Task CreateThreadAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Create).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            ThreadRequest? request = RouteHelper.ReadBody<ThreadRequest>(ctx);
+            ChatThread created = await _Db.ChatThreads.CreateAsync(new ChatThread
+            {
+                TenantId = rc.TenantId,
+                SubjectId = String.IsNullOrWhiteSpace(request?.SubjectId) ? null : request!.SubjectId,
+                UserId = rc.UserId,
+                Title = String.IsNullOrWhiteSpace(request?.Title) ? "New conversation" : request!.Title!.Trim()
+            }, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 201, created).ConfigureAwait(false);
+        }
+
+        private async Task ThreadDetailAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            string id = RouteHelper.Param(ctx, "id");
+            ChatThread? thread = await _Db.ChatThreads.ReadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            if (thread == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Thread not found.").ConfigureAwait(false);
+                return;
+            }
+            List<ChatTurnRecord> turns = await _Db.ChatTurns.EnumerateByThreadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, new { thread, turns }).ConfigureAwait(false);
+        }
+
+        private async Task RenameThreadAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Update).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            string id = RouteHelper.Param(ctx, "id");
+            ChatThread? thread = await _Db.ChatThreads.ReadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            if (thread == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Thread not found.").ConfigureAwait(false);
+                return;
+            }
+            ThreadRequest? request = RouteHelper.ReadBody<ThreadRequest>(ctx);
+            if (!String.IsNullOrWhiteSpace(request?.Title)) thread.Title = request!.Title!.Trim();
+            ChatThread updated = await _Db.ChatThreads.UpdateAsync(thread, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, updated).ConfigureAwait(false);
+        }
+
+        private async Task DeleteThreadAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+            string id = RouteHelper.Param(ctx, "id");
+            // Cascade: remove each turn's tool calls, then the turns, then the thread. Best-effort ordering.
+            List<ChatTurnRecord> turns = await _Db.ChatTurns.EnumerateByThreadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            foreach (ChatTurnRecord turn in turns)
+            {
+                await _Db.ChatToolCalls.DeleteByTurnAsync(rc.TenantId, turn.Id, ctx.Token).ConfigureAwait(false);
+            }
+            await _Db.ChatTurns.DeleteByThreadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            await _Db.ChatThreads.DeleteAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+            ctx.Response.StatusCode = 204;
+            await ctx.Response.Send(ctx.Token).ConfigureAwait(false);
         }
 
         private async Task ListFeedbackAsync(HttpContextBase ctx)
