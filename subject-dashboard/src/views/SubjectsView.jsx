@@ -10,10 +10,26 @@ import ActionMenu from '../components/ActionMenu';
 import CopyableId from '../components/CopyableId';
 
 
+// Sensible starter prompts pre-filled when creating a subject. Appended after the global prompts, so they
+// refine (not replace) the platform defaults; operators can edit or clear them.
+const DEFAULT_SYSTEM_PROMPT =
+  'Focus your answers on this subject. Prefer its ingested sources, be precise about names, dates, and relationships, '
+  + 'and clearly say when the archive does not cover something.';
+const DEFAULT_ONTOLOGY_CLASSIFY =
+  'Identify the entities (people, organizations, works, events, places, and themes) and the relationships among them '
+  + "that are relevant to this subject, and map them into the subject's knowledge-graph ontology.";
+const DEFAULT_ONTOLOGY_DEFINITION =
+  'Entities: Person, Organization, Work, Event, Place, Theme. '
+  + 'Relationships: created, contributed-to, participated-in, located-in, part-of, influenced, associated-with.';
+// Default ask-page subtitle, mirroring the backend Subject.DefaultTagline and the user dashboard's built-in label.
+const DEFAULT_TAGLINE = 'Get an answer grounded in the archive, with the sources that support it.';
+
 const EMPTY_FORM = {
-  displayName: '', type: 'Subject', description: '', urlSlug: '',
+  displayName: '', type: 'Subject', description: '', tagline: DEFAULT_TAGLINE, urlSlug: '',
   thinkingEnabled: false, historyRetentionDays: 90,
-  systemPrompt: '', ontologyClassifyPrompt: '', ontologyDefinitionPrompt: ''
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  ontologyClassifyPrompt: DEFAULT_ONTOLOGY_CLASSIFY,
+  ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION
 };
 
 // Slug: lowercase, collapse non-alphanumeric runs to single dashes, trim dashes.
@@ -70,6 +86,7 @@ function SubjectsView() {
       displayName: subject.displayName || '',
       type: subject.type || 'Subject',
       description: subject.description || '',
+      tagline: subject.tagline != null ? subject.tagline : DEFAULT_TAGLINE,
       urlSlug: subject.urlSlug || '',
       thinkingEnabled: !!subject.thinkingEnabled,
       historyRetentionDays: subject.historyRetentionDays || 90,
@@ -194,8 +211,8 @@ function SubjectsView() {
       >
         <form onSubmit={handleSave}>
           {formError && <div className="form-error">{formError}</div>}
-          <div className="form-group">
-            <label htmlFor="cd-name">
+          <div className="form-group" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}>
+            <label htmlFor="cd-name" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}>
               {t('subjects.displayName')} <span className="required-mark">*</span>
             </label>
             <input
@@ -203,84 +220,104 @@ function SubjectsView() {
               value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })}
               required
+              title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-type">{t('subjects.type')}</label>
+          <div className="form-group" title={t('subjects.typeTip', 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.')}>
+            <label htmlFor="cd-type" title={t('subjects.typeTip', 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.')}>{t('subjects.type')}</label>
             <input
               id="cd-type"
               type="text"
               value={form.type}
               placeholder="Subject"
               onChange={(e) => setForm({ ...form, type: e.target.value })}
+              title={t('subjects.typeTip', 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-desc">{t('subjects.description')}</label>
+          <div className="form-group" title={t('subjects.descriptionTip', 'Optional notes shown in the subjects list to help you tell similar subjects apart.')}>
+            <label htmlFor="cd-desc" title={t('subjects.descriptionTip', 'Optional notes shown in the subjects list to help you tell similar subjects apart.')}>{t('subjects.description')}</label>
             <textarea
               id="cd-desc"
               rows={4}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+              title={t('subjects.descriptionTip', 'Optional notes shown in the subjects list to help you tell similar subjects apart.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-slug">{t('subjects.urlSlug', 'URL Slug')}</label>
+          <div className="form-group" title={t('subjects.taglineTip', "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject.")}>
+            <label htmlFor="cd-tagline" title={t('subjects.taglineTip', "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject.")}>{t('subjects.tagline', 'Ask-Page Tagline')}</label>
+            <textarea
+              id="cd-tagline"
+              rows={2}
+              value={form.tagline}
+              placeholder={DEFAULT_TAGLINE}
+              onChange={(e) => setForm({ ...form, tagline: e.target.value })}
+              title={t('subjects.taglineTip', "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject.")}
+            />
+          </div>
+          <div className="form-group" title={t('subjects.urlSlugTip', 'URL-safe slug used to reach this subject in the user dashboard (must be unique within the tenant). Auto-derived from the display name when left blank.')}>
+            <label htmlFor="cd-slug" title={t('subjects.urlSlugTip', 'URL-safe slug used to reach this subject in the user dashboard (must be unique within the tenant). Auto-derived from the display name when left blank.')}>{t('subjects.urlSlug', 'URL Slug')}</label>
             <input
               id="cd-slug"
               type="text"
               value={form.urlSlug}
               placeholder={slugify(form.displayName) || 'derived-from-name'}
               onChange={(e) => setForm({ ...form, urlSlug: e.target.value })}
+              title={t('subjects.urlSlugTip', 'URL-safe slug used to reach this subject in the user dashboard (must be unique within the tenant). Auto-derived from the display name when left blank.')}
             />
             <div className="field-hint">{t('subjects.urlSlugHint', 'URL-safe slug used to reach this subject in the user dashboard. Must be unique.')}</div>
           </div>
-          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={t('subjects.thinkingEnabledTip', "When on, the model's reasoning is shown in a collapsible section (with a thinking-time statistic) for chats about this subject. Off hides it.")}>
             <input
               id="cd-thinking"
               type="checkbox"
               style={{ width: 'auto' }}
               checked={form.thinkingEnabled}
               onChange={(e) => setForm({ ...form, thinkingEnabled: e.target.checked })}
+              title={t('subjects.thinkingEnabledTip', "When on, the model's reasoning is shown in a collapsible section (with a thinking-time statistic) for chats about this subject. Off hides it.")}
             />
-            <label htmlFor="cd-thinking" style={{ margin: 0 }}>{t('subjects.thinkingEnabled', 'Show model thinking in chat')}</label>
+            <label htmlFor="cd-thinking" style={{ margin: 0 }} title={t('subjects.thinkingEnabledTip', "When on, the model's reasoning is shown in a collapsible section (with a thinking-time statistic) for chats about this subject. Off hides it.")}>{t('subjects.thinkingEnabled', 'Show model thinking in chat')}</label>
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-retention">{t('subjects.historyRetentionDays', 'History Retention (days)')}</label>
+          <div className="form-group" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>
+            <label htmlFor="cd-retention" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>{t('subjects.historyRetentionDays', 'History Retention (days)')}</label>
             <input
               id="cd-retention"
               type="number"
               min={1}
               value={form.historyRetentionDays}
               onChange={(e) => setForm({ ...form, historyRetentionDays: e.target.value })}
+              title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-sysprompt">{t('subjects.systemPrompt', 'Subject System Prompt')}</label>
+          <div className="form-group" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>
+            <label htmlFor="cd-sysprompt" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.systemPrompt', 'System Prompt')}</label>
             <textarea
               id="cd-sysprompt"
               rows={3}
               value={form.systemPrompt}
               placeholder={t('subjects.systemPromptHint', 'Appended after the global system prompt for chats about this subject.')}
               onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+              title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-ontclass">{t('subjects.ontologyClassifyPrompt', 'Subject Ontology Classification Prompt')}</label>
+          <div className="form-group" title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}>
+            <label htmlFor="cd-ontclass" title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.ontologyClassifyPrompt', 'Ontology Classification Prompt')}</label>
             <textarea
               id="cd-ontclass"
               rows={3}
               value={form.ontologyClassifyPrompt}
               onChange={(e) => setForm({ ...form, ontologyClassifyPrompt: e.target.value })}
+              title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="cd-ontdef">{t('subjects.ontologyDefinitionPrompt', 'Subject Ontology Definition')}</label>
+          <div className="form-group" title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}>
+            <label htmlFor="cd-ontdef" title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.ontologyDefinitionPrompt', 'Ontology Definition')}</label>
             <textarea
               id="cd-ontdef"
               rows={3}
               value={form.ontologyDefinitionPrompt}
               onChange={(e) => setForm({ ...form, ontologyDefinitionPrompt: e.target.value })}
+              title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}
             />
           </div>
           <div className="form-actions">

@@ -63,10 +63,11 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_capabilities` | Describe the platform and restate the paging protocol. | Any authenticated principal |
 | `pneuma_enumerate_subjects` | Page subject summaries (`EnumerationQuery` in, `EnumerationResult` out). | Subject / Read |
 | `pneuma_get_subject` | Fetch one full subject by id. | Subject / Read |
-| `pneuma_create_subject` | Create a subject (`displayName` required; `type`, `description`, `urlSlug`, `thinkingEnabled`, `systemPrompt`, `ontologyClassifyPrompt`, `ontologyDefinitionPrompt`, `historyRetentionDays` optional). A unique slug is auto-generated when omitted; an explicit slug clash is rejected. | Subject / Create |
-| `pneuma_update_subject` | Update a subject (`id` required; only supplied fields change; a changed `urlSlug` must stay unique). | Subject / Update |
+| `pneuma_create_subject` | Create a subject (`displayName` required; `type`, `description`, `tagline`, `urlSlug`, `thinkingEnabled`, `systemPrompt`, `ontologyClassifyPrompt`, `ontologyDefinitionPrompt`, `historyRetentionDays` optional). `tagline` is the ask-page subtitle shown in the user dashboard and defaults to the built-in label when omitted. A unique slug is auto-generated when omitted; an explicit slug clash is rejected. | Subject / Create |
+| `pneuma_update_subject` | Update a subject (`id` required; only supplied fields change — including `tagline`; a changed `urlSlug` must stay unique). | Subject / Update |
 | `pneuma_enumerate_jobs` | Page ingestion-job summaries (id, status, stage, source url). | IngestionJob / Read |
 | `pneuma_get_job` | Fetch one full ingestion job by id. | IngestionJob / Read |
+| `pneuma_ingestion_summary` | Summarize ingestion activity over time, broken down by pipeline stage: fixed-width time buckets with per-stage event counts plus overall per-stage totals. Optional `subjectId`, `fromUtc`/`toUtc` window, and `bucketMinutes` (1–1440, default 15). | IngestionJob / Read |
 | `pneuma_enumerate_links` | Page content-link summaries (id, url, title, status). | Subject / Read |
 | `pneuma_get_link` | Fetch one full content link by id. | Subject / Read |
 | `pneuma_search` | Full-text search the corpus (RecallDB) against the resolved default collection; bounded, ranked node summaries (a top-N query, not an enumeration). | GraphNode / Read |

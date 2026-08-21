@@ -214,6 +214,11 @@ class ApiClient {
   async getRequestHistorySummary(query = {}, options = {}) {
     return this._request('GET', '/v1.0/api/request-history/summary', { ...options, query });
   }
+  // Time-bucketed ingestion activity, broken down by pipeline stage.
+  // query: { fromUtc, toUtc, bucketMinutes, subjectId }
+  async getIngestionSummary(query = {}, options = {}) {
+    return this._request('GET', '/v1.0/jobs/summary', { ...options, query });
+  }
   async getRequestHistoryEntry(id, options = {}) {
     return this._request('GET', `/v1.0/api/request-history/${encodeURIComponent(id)}`, options);
   }

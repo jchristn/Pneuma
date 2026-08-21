@@ -356,6 +356,31 @@ select {
   margin-bottom: 20px;
 }
 
+/* Shared top-level range selector above the activity charts. */
+.chart-range-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.chart-range-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+.chart-subject-select {
+  padding: 5px 8px;
+  font-size: 0.78rem;
+  max-width: 16rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
 /* ---------- Page header ---------- */
 .page-header {
   display: flex;
@@ -565,6 +590,23 @@ select {
 .pagination-jump input {
   width: 58px;
 }
+.auto-refresh-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+}
+.auto-refresh-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.auto-refresh-control select {
+  width: auto;
+  padding: 5px 8px;
+  font-size: 0.78rem;
+}
 .pagination-nav {
   display: flex;
   align-items: center;
@@ -673,6 +715,8 @@ select {
 .modal-small { max-width: 440px; }
 .modal-medium { max-width: 620px; }
 .modal-large { max-width: 900px; }
+/* Feedback detail: 66% wider than the standard large modal, for side-by-side request/response. */
+.modal-feedback { max-width: 1295px; }
 .modal-fullscreen { max-width: 1200px; }
 .modal-header {
   display: flex;
@@ -1063,3 +1107,15 @@ select {
 .history-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 700; }
 .history-text { font-size: 0.9rem; white-space: pre-wrap; line-height: 1.5; color: var(--text-primary); }
 .history-citations { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; }
+
+/* ---------- Feedback detail ---------- */
+.feedback-detail { display: flex; flex-direction: column; gap: 20px; }
+.feedback-meta { display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.feedback-meta-item { display: flex; flex-direction: column; gap: 3px; }
+.feedback-meta-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); font-weight: 600; }
+.feedback-meta-value { font-size: 0.85rem; color: var(--text-primary); }
+.feedback-columns { display: flex; flex-direction: column; gap: 20px; }
+.feedback-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.feedback-section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); font-weight: 600; }
+.feedback-panel { border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); padding: 14px; font-size: 0.85rem; color: var(--text-primary); max-height: 420px; overflow: auto; word-break: break-word; }
+.feedback-panel-empty { color: var(--text-secondary); }

@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages';
 import ErrorBanner from '../components/ErrorBanner';
+import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
@@ -159,36 +160,67 @@ function collapseHistory(prev, summary) {
   ];
 }
 
-/** Thumbs up/down + optional comment for one answer, submitted against its persisted turn. */
+/** Thumbs up/down for one answer. Either rating opens a modal to collect the "why", then submits once. */
 function FeedbackBar({ turnId }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
-  const [rating, setRating] = useState(null);
+  const [pending, setPending] = useState(null); // 'Up' | 'Down' while the modal is open
   const [comment, setComment] = useState('');
-  const [showComment, setShowComment] = useState(false);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!turnId) return null;
 
-  const submit = async (r, c) => {
+  const open = (r) => { setComment(''); setPending(r); };
+  const close = () => { if (!busy) setPending(null); };
+  const submit = async () => {
     setBusy(true);
-    try { await apiClient.submitFeedback(turnId, r, c || null); setSent(true); }
+    try { await apiClient.submitFeedback(turnId, pending, comment.trim() || null); setSent(true); }
     catch { /* ignore */ }
     finally { setBusy(false); }
   };
-  const pick = (r) => { setRating(r); if (r === 'Down') setShowComment(true); else submit(r, ''); };
 
-  if (sent) return <div className="chat-feedback chat-feedback-done">{t('ask.feedbackThanks', 'Thanks for your feedback.')}</div>;
+  const verb = pending === 'Up' ? t('ask.feedbackLiked', 'liked') : t('ask.feedbackDisliked', 'disliked');
   return (
     <div className="chat-feedback">
-      <button type="button" className={`fb-btn ${rating === 'Up' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Up')} title={t('ask.thumbsUp', 'Helpful')} aria-label={t('ask.thumbsUp', 'Helpful')}>👍</button>
-      <button type="button" className={`fb-btn ${rating === 'Down' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Down')} title={t('ask.thumbsDown', 'Not helpful')} aria-label={t('ask.thumbsDown', 'Not helpful')}>👎</button>
-      {showComment ? (
-        <span className="fb-comment">
-          <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('ask.feedbackComment', 'Add a comment (optional)')} />
-          <button type="button" className="button-secondary fb-send" disabled={busy} onClick={() => submit(rating || 'Down', comment)}>{t('common.send', 'Send')}</button>
-        </span>
-      ) : null}
+      {sent && !pending ? (
+        <span className="chat-feedback-done">{t('ask.feedbackThanks', 'Thanks for your feedback.')}</span>
+      ) : (
+        <>
+          <button type="button" className={`fb-btn ${pending === 'Up' ? 'active' : ''}`} disabled={busy || sent} onClick={() => open('Up')} title={t('ask.thumbsUp', 'Helpful')} aria-label={t('ask.thumbsUp', 'Helpful')}>👍</button>
+          <button type="button" className={`fb-btn ${pending === 'Down' ? 'active' : ''}`} disabled={busy || sent} onClick={() => open('Down')} title={t('ask.thumbsDown', 'Not helpful')} aria-label={t('ask.thumbsDown', 'Not helpful')}>👎</button>
+        </>
+      )}
+      {pending && (
+        <Modal
+          title={t('ask.feedbackModalTitle', 'Share more feedback')}
+          size="sm"
+          onClose={close}
+          footer={sent ? (
+            <button type="button" className="button-primary" onClick={close}>{t('common.close', 'Close')}</button>
+          ) : (
+            <>
+              <button type="button" className="button-secondary" onClick={close} disabled={busy}>{t('common.cancel', 'Cancel')}</button>
+              <button type="button" className="button-primary" onClick={submit} disabled={busy}>{busy ? t('common.loading', 'Sending…') : t('common.send', 'Send')}</button>
+            </>
+          )}
+        >
+          {sent ? (
+            <p style={{ margin: 0 }}>{t('ask.feedbackThankYou', 'Thank you for your feedback!')}</p>
+          ) : (
+            <>
+              <p style={{ marginBottom: '0.75rem' }}>{t('ask.feedbackPrompt', { verb, defaultValue: 'Tell me more about why you {{verb}} this response.' })}</p>
+              <textarea
+                style={{ width: '100%', resize: 'vertical' }}
+                rows={4}
+                value={comment}
+                autoFocus
+                onChange={(e) => setComment(e.target.value)}
+                placeholder={t('ask.feedbackComment', 'Add a comment (optional)')}
+              />
+            </>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

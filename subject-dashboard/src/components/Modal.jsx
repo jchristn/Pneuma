@@ -7,13 +7,18 @@ import { createPortal } from 'react-dom';
  */
 function Modal({ isOpen, onClose, title, children, size = 'medium', headerAction = null }) {
   const panelRef = useRef(null);
+  // Keep the latest onClose in a ref so the effect below depends only on `isOpen`. Depending on onClose too
+  // re-runs the effect on every parent render (callers pass a fresh arrow each time), which re-focuses an
+  // element on each keystroke and disrupts typing in inputs inside the modal.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     if (!isOpen) return undefined;
 
     const handleKey = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current?.();
         return;
       }
       if (e.key === 'Tab') {
@@ -47,7 +52,7 @@ function Modal({ isOpen, onClose, title, children, size = 'medium', headerAction
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

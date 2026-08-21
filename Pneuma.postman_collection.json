@@ -367,7 +367,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\"\n}"
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\"\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects"
           }
@@ -485,6 +485,13 @@
           }
         },
         {
+          "name": "Ingestion Activity Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs/summary?bucketMinutes=15&subjectId="
+          }
+        },
+        {
           "name": "Job Detail",
           "request": {
             "method": "GET",
@@ -533,7 +540,7 @@
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\"\n}"
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\"\n}"
             }
           }
         },

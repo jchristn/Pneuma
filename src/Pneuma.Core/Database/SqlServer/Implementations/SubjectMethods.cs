@@ -23,10 +23,10 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
-                Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
+                Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
                 Sanitizer.Str(subject.UrlSlug) + ", " + Sanitizer.Bit(subject.ThinkingEnabled) + ", " +
                 Sanitizer.Str(subject.SystemPrompt) + ", " + Sanitizer.Str(subject.OntologyClassifyPrompt) + ", " +
                 Sanitizer.Str(subject.OntologyDefinitionPrompt) + ", " + Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
@@ -97,6 +97,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 "UPDATE subjects SET displayname = " + Sanitizer.Str(subject.DisplayName) +
                 ", type = " + Sanitizer.Str(subject.Type) +
                 ", description = " + Sanitizer.Str(subject.Description) +
+                ", tagline = " + Sanitizer.Str(subject.Tagline) +
                 ", graphrootnodeid = " + Sanitizer.Str(subject.GraphRootNodeId) +
                 ", urlslug = " + Sanitizer.Str(subject.UrlSlug) +
                 ", thinkingenabled = " + Sanitizer.Bit(subject.ThinkingEnabled) +
@@ -167,6 +168,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 DisplayName = RowReader.GetString(row, "displayname"),
                 Type = RowReader.GetString(row, "type"),
                 Description = RowReader.GetNullableString(row, "description"),
+                Tagline = RowReader.GetNullableString(row, "tagline"),
                 GraphRootNodeId = RowReader.GetNullableString(row, "graphrootnodeid"),
                 UrlSlug = RowReader.GetNullableString(row, "urlslug"),
                 ThinkingEnabled = RowReader.GetBool(row, "thinkingenabled"),

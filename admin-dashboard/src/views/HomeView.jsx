@@ -1,13 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
-import ActivityChart, { RANGES, rangeToParams } from '../components/ActivityChart';
+import ActivityChart, { rangeToParams } from '../components/ActivityChart';
+import ChartRangeControls from '../components/ChartRangeControls';
+import IngestionActivityChart from '../components/IngestionActivityChart';
 import ErrorBanner from '../components/ErrorBanner';
 import Icon from '../components/Icon';
 import { formatNumber } from '../i18n/formatters';
+import { copyChartPng } from '../utils/chartExport';
+import { normalizeIngestionBuckets, stagesPresent, stageColor, stageLabel } from '../utils/ingestionActivity';
+
+// Refresh + copy-PNG controls shared by both activity chart cards.
+function ChartActions({ onRefresh, onCopy, loading, copyState, refreshTitle, copyTitle, t }) {
+  return (
+    <>
+      <button type="button" className="icon-button" onClick={onCopy}
+        title={copyTitle} aria-label={t('chart.copyPng', 'Copy chart as PNG')}>
+        {copyState === 'copied' || copyState === 'downloaded' ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+        )}
+      </button>
+      <button type="button" className="icon-button" onClick={onRefresh} title={refreshTitle} aria-label={t('common.refresh')} disabled={loading}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={loading ? { animation: 'spin 1s linear infinite' } : undefined}>
+          <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
+      </button>
+    </>
+  );
+}
 
 // External system UIs, linked with their default credentials. Hosts use localhost since these
 // links open in the operator's browser against the docker-compose published ports.
@@ -48,13 +74,24 @@ function HomeView() {
   const { apiClient } = useAuth();
 
   const [counts, setCounts] = useState({ tenants: null, users: null, subjects: null, links: null, jobsQueued: null, jobsFailed: null });
+  // Range is shared by both activity charts so they stay in lockstep.
   const [rangeId, setRangeId] = useState('day');
   const [summary, setSummary] = useState(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [ingestion, setIngestion] = useState(null);
+  const [ingestionLoading, setIngestionLoading] = useState(false);
+  const [ingestionError, setIngestionError] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [ingestionSubjectId, setIngestionSubjectId] = useState('');
+
+  const [copyState, setCopyState] = useState({});
+  const reqChartRef = useRef(null);
+  const ingChartRef = useRef(null);
+
   const loadCounts = useCallback(async () => {
-    const [tenants, users, subjects, links, jobsQueued, jobsFailed] = await Promise.all([
+    const [tenants, users, subjectsCount, links, jobsQueued, jobsFailed] = await Promise.all([
       countOf(apiClient.list('tenants', { maxResults: 1 })),
       countOf(apiClient.list('users', { maxResults: 1 })),
       countOf(apiClient.list('subjects', { maxResults: 1 })),
@@ -62,15 +99,23 @@ function HomeView() {
       countOf(apiClient.list('jobs', { status: 'Queued', maxResults: 1 })),
       countOf(apiClient.list('jobs', { status: 'Failed', maxResults: 1 }))
     ]);
-    setCounts({ tenants, users, subjects, links, jobsQueued, jobsFailed });
+    setCounts({ tenants, users, subjects: subjectsCount, links, jobsQueued, jobsFailed });
+  }, [apiClient]);
+
+  const loadSubjects = useCallback(async () => {
+    try {
+      const resp = await apiClient.list('subjects', { maxResults: 1000 });
+      setSubjects(normalizeList(resp).items);
+    } catch {
+      /* subject filter is best-effort; leave it empty */
+    }
   }, [apiClient]);
 
   const loadSummary = useCallback(async () => {
     setChartLoading(true);
     setError(null);
     try {
-      const params = rangeToParams(rangeId);
-      const resp = await apiClient.getRequestHistorySummary(params);
+      const resp = await apiClient.getRequestHistorySummary(rangeToParams(rangeId));
       setSummary(resp);
     } catch (err) {
       setError(err?.message || 'Failed to load request activity');
@@ -80,17 +125,67 @@ function HomeView() {
     }
   }, [apiClient, rangeId]);
 
+  const loadIngestion = useCallback(async () => {
+    setIngestionLoading(true);
+    setIngestionError(null);
+    try {
+      const params = rangeToParams(rangeId);
+      if (ingestionSubjectId) params.subjectId = ingestionSubjectId;
+      const resp = await apiClient.getIngestionSummary(params);
+      setIngestion(resp);
+    } catch (err) {
+      setIngestionError(err?.message || 'Failed to load ingestion activity');
+      setIngestion(null);
+    } finally {
+      setIngestionLoading(false);
+    }
+  }, [apiClient, rangeId, ingestionSubjectId]);
+
   useEffect(() => { loadCounts(); }, [loadCounts]);
+  useEffect(() => { loadSubjects(); }, [loadSubjects]);
   useEffect(() => { loadSummary(); }, [loadSummary]);
+  useEffect(() => { loadIngestion(); }, [loadIngestion]);
 
   const totals = {
     total: summary?.totalCount ?? summary?.TotalCount ?? 0,
     success: summary?.totalSuccess ?? summary?.TotalSuccess ?? 0,
     failure: summary?.totalFailure ?? summary?.TotalFailure ?? 0
   };
+  const ingestionTotal = ingestion?.totalCount ?? ingestion?.TotalCount ?? 0;
 
   const handleBucketClick = (bucket) => {
     navigate(`/dashboard/requests?fromUtc=${encodeURIComponent(bucket.startUtc)}&toUtc=${encodeURIComponent(bucket.endUtc)}`);
+  };
+
+  const flashCopy = (key, result) => {
+    setCopyState((prev) => ({ ...prev, [key]: result }));
+    window.setTimeout(() => setCopyState((prev) => ({ ...prev, [key]: null })), 1800);
+  };
+
+  const copyRequestChart = async () => {
+    const svg = reqChartRef.current?.querySelector('svg');
+    const result = await copyChartPng(svg, {
+      title: t('home.activity'),
+      xLabel: t('chart.axisTime', 'Time'),
+      yLabel: t('chart.axisRequests', 'Requests'),
+      legend: [
+        { label: t('chart.successLegend'), color: getComputedStyle(document.documentElement).getPropertyValue('--color-success').trim() || '#16a34a' },
+        { label: t('chart.failedLegend'), color: getComputedStyle(document.documentElement).getPropertyValue('--color-danger').trim() || '#dc2626' }
+      ]
+    });
+    flashCopy('req', result);
+  };
+
+  const copyIngestionChart = async () => {
+    const svg = ingChartRef.current?.querySelector('svg');
+    const present = stagesPresent(normalizeIngestionBuckets(ingestion));
+    const result = await copyChartPng(svg, {
+      title: t('home.ingestionActivity', 'Ingestion Activity'),
+      xLabel: t('chart.axisTime', 'Time'),
+      yLabel: t('chart.axisStageEvents', 'Stage events'),
+      legend: present.map((s) => ({ label: stageLabel(s), color: stageColor(s) }))
+    });
+    flashCopy('ing', result);
   };
 
   return (
@@ -107,25 +202,21 @@ function HomeView() {
       </div>
 
       {error && <ErrorBanner message={error} onRetry={loadSummary} onDismiss={() => setError(null)} />}
+      {ingestionError && <ErrorBanner message={ingestionError} onRetry={loadIngestion} onDismiss={() => setIngestionError(null)} />}
+
+      <div className="chart-range-bar">
+        <span className="chart-range-label">{t('chart.rangeLabel', 'Time range')}</span>
+        <ChartRangeControls value={rangeId} onChange={setRangeId} />
+      </div>
 
       <div className="chart-card" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <div className="chart-header">
           <h2>{t('home.activity')}</h2>
           <div className="chart-controls">
-            <div className="segmented">
-              {Object.keys(RANGES).map((id) => (
-                <button key={id} type="button" className={rangeId === id ? 'active' : ''} onClick={() => setRangeId(id)}
-                  title={`Show request activity over the last ${t(RANGES[id].labelKey).toLowerCase()}.`}>
-                  {t(RANGES[id].labelKey)}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="icon-button" onClick={loadSummary} title="Reload the activity chart with the latest data." aria-label={t('common.refresh')} disabled={chartLoading}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={chartLoading ? { animation: 'spin 1s linear infinite' } : undefined}>
-                <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-            </button>
+            <ChartActions t={t} loading={chartLoading} copyState={copyState.req}
+              onRefresh={loadSummary} onCopy={copyRequestChart}
+              refreshTitle="Reload the request activity chart with the latest data."
+              copyTitle={t('chart.copyPngHint', 'Copy this chart as a PNG (with title and axis labels).')} />
           </div>
         </div>
         <div className="chart-stats">
@@ -133,7 +224,34 @@ function HomeView() {
           <div className="chart-stat"><span className="chart-stat-value" style={{ color: 'var(--color-success)' }}>{formatNumber(totals.success)}</span><span className="chart-stat-label">{t('chart.success')}</span></div>
           <div className="chart-stat"><span className="chart-stat-value" style={{ color: 'var(--color-danger)' }}>{formatNumber(totals.failure)}</span><span className="chart-stat-label">{t('chart.failed')}</span></div>
         </div>
-        <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
+        <div ref={reqChartRef}>
+          <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
+        </div>
+      </div>
+
+      <div className="chart-card" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="chart-header">
+          <h2>{t('home.ingestionActivity', 'Ingestion Activity')}</h2>
+          <div className="chart-controls">
+            <select className="chart-subject-select" value={ingestionSubjectId} onChange={(e) => setIngestionSubjectId(e.target.value)}
+              title={t('chart.subjectFilterHint', 'Limit ingestion activity to a single subject.')} aria-label={t('chart.subjectFilter', 'Subject')}>
+              <option value="">{t('chart.allSubjects', 'All subjects')}</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.displayName || s.name || s.id}</option>
+              ))}
+            </select>
+            <ChartActions t={t} loading={ingestionLoading} copyState={copyState.ing}
+              onRefresh={loadIngestion} onCopy={copyIngestionChart}
+              refreshTitle="Reload the ingestion activity chart with the latest data."
+              copyTitle={t('chart.copyPngHint', 'Copy this chart as a PNG (with title and axis labels).')} />
+          </div>
+        </div>
+        <div className="chart-stats">
+          <div className="chart-stat"><span className="chart-stat-value">{formatNumber(ingestionTotal)}</span><span className="chart-stat-label">{t('chart.stageEventsTotal', 'Stage events')}</span></div>
+        </div>
+        <div ref={ingChartRef}>
+          <IngestionActivityChart summary={ingestion} rangeId={rangeId} />
+        </div>
       </div>
 
       <div className="section">

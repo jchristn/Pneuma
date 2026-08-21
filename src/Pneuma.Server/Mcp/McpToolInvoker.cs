@@ -118,6 +118,9 @@ namespace Pneuma.Server.Mcp
                     toolResult = await _Entities.GetJobAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
+                case "pneuma_ingestion_summary":
+                    toolResult = await _Entities.IngestionSummaryAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
                 case "pneuma_enumerate_links":
                     toolResult = await _Entities.EnumerateLinksAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
                     break;

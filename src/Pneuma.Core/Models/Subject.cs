@@ -38,6 +38,19 @@ namespace Pneuma.Core.Models
         /// <summary>Optional biography / description.</summary>
         public string? Description { get; set; } = null;
 
+        /// <summary>
+        /// Default <see cref="Tagline"/> text, applied at creation when none is supplied. Mirrors the
+        /// user dashboard's built-in ask-page subtitle so a subject reads sensibly out of the box.
+        /// </summary>
+        public const string DefaultTagline = "Get an answer grounded in the archive, with the sources that support it.";
+
+        /// <summary>
+        /// Subject-configurable subtitle shown beneath the subject's name on its ask page in the user
+        /// dashboard (under the search hero before asking, and under the chat header after). Falls back to
+        /// the dashboard's built-in label when empty. Defaults to <see cref="DefaultTagline"/> at creation.
+        /// </summary>
+        public string? Tagline { get; set; } = null;
+
         /// <summary>Identifier of the root LiteGraph node representing this subject.</summary>
         public string? GraphRootNodeId { get; set; } = null;
 

@@ -2,11 +2,13 @@ namespace Pneuma.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
@@ -55,6 +57,8 @@ namespace Pneuma.Server.Routes
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/jobs", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List ingestion jobs", "Ingestion"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/jobs/summary", SummaryAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Summarize ingestion activity by pipeline stage", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/jobs/{id}", DetailAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get ingestion job detail with events", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/jobs/{id}/restart", RestartAsync, RouteHelper.ExceptionAsync,
@@ -76,6 +80,22 @@ namespace Pneuma.Server.Routes
             if (await _Authz.AuthorizeAsync(rc, ResourceTypeEnum.IngestionJob, op, null, ctx.Token).ConfigureAwait(false)) return true;
             await RouteHelper.SendErrorAsync(ctx, 403, "Forbidden", "Not permitted.").ConfigureAwait(false);
             return false;
+        }
+
+        private static string? Q(System.Collections.Specialized.NameValueCollection? q, string key)
+        {
+            string? value = q?[key];
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        private static DateTime? ParseUtc(string? value)
+        {
+            if (String.IsNullOrEmpty(value)) return null;
+            if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime parsed))
+            {
+                return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            }
+            return null;
         }
 
         private async Task ListAsync(HttpContextBase ctx)
@@ -107,6 +127,27 @@ namespace Pneuma.Server.Routes
 
             EnumerationResult<IngestionJob> result = EnumerationHelper.Paginate(jobs, RouteHelper.ReadEnumerationQuery(ctx), j => j.CreatedUtc, j => j.SourceUrl);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
+        }
+
+        private async Task SummaryAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+
+            System.Collections.Specialized.NameValueCollection? q = ctx.Request.Query.Elements;
+            IngestionActivityFilter filter = new IngestionActivityFilter
+            {
+                TenantId = rc.TenantId,
+                SubjectId = Q(q, "subjectId"),
+                FromUtc = ParseUtc(Q(q, "fromUtc")),
+                ToUtc = ParseUtc(Q(q, "toUtc"))
+            };
+
+            string? bucketMinutes = Q(q, "bucketMinutes");
+            if (!String.IsNullOrEmpty(bucketMinutes) && Int32.TryParse(bucketMinutes, out int bm)) filter.BucketMinutes = bm;
+
+            IngestionActivitySummary summary = await _Db.IngestionJobEvents.SummarizeAsync(filter, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, summary).ConfigureAwait(false);
         }
 
         private async Task DetailAsync(HttpContextBase ctx)
@@ -182,6 +223,7 @@ namespace Pneuma.Server.Routes
             {
                 TenantId = tenantId,
                 JobId = job.Id,
+                SubjectId = job.SubjectId,
                 Stage = job.Stage,
                 Status = IngestionStatusEnum.Cancelled,
                 Message = "Job cancelled by operator."

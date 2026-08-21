@@ -5,20 +5,25 @@ import { useTranslation } from 'react-i18next';
 function Modal({ title, subtitle, headerExtra, children, footer, onClose, size = '' }) {
   const { t } = useTranslation();
   const panelRef = useRef(null);
+  // Keep the latest onClose in a ref so the mount effect below can run exactly once. Depending on onClose
+  // directly re-runs the effect on every parent render (callers pass a fresh arrow each time), which would
+  // re-focus the panel on each keystroke and steal focus from inputs inside the modal.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    // focus the panel for accessibility
+    // focus the panel for accessibility (once, on open)
     const timer = setTimeout(() => { panelRef.current?.focus(); }, 0);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
       clearTimeout(timer);
     };
-  }, [onClose]);
+  }, []);
 
   const handleBackdrop = (e) => {
     if (e.target === e.currentTarget) onClose();

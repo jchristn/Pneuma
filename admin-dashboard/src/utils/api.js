@@ -133,6 +133,12 @@ class ApiClient {
     return this._request('GET', '/v1.0/api/request-history/summary', { query: filters });
   }
 
+  // Time-bucketed ingestion activity, broken down by pipeline stage.
+  // filters: { fromUtc, toUtc, bucketMinutes, subjectId }
+  getIngestionSummary(filters = {}) {
+    return this._request('GET', '/v1.0/jobs/summary', { query: filters });
+  }
+
   getRequestHistoryEntry(id) {
     return this._request('GET', `/v1.0/api/request-history/${encodeURIComponent(id)}`);
   }

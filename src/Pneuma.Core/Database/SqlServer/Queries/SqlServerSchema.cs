@@ -61,6 +61,17 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatfeedback_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatfeedback')) CREATE INDEX idx_chatfeedback_tenant_subject ON dbo.chatfeedback (tenantid, subjectid, createdutc);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chatfeedback_turn' AND object_id = OBJECT_ID(N'dbo.chatfeedback')) CREATE INDEX idx_chatfeedback_turn ON dbo.chatfeedback (turnid);"
                 }));
+                list.Add(new SchemaMigration(8, "Add subject id to ingestion job events", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.ingestionjobevents', 'subjectid') IS NULL ALTER TABLE dbo.ingestionjobevents ADD subjectid NVARCHAR(64);",
+                    "UPDATE e SET e.subjectid = j.subjectid FROM dbo.ingestionjobevents e INNER JOIN dbo.ingestionjobs j ON j.id = e.jobid WHERE e.subjectid IS NULL;",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_jobevents_tenant_subject' AND object_id = OBJECT_ID(N'dbo.ingestionjobevents')) CREATE INDEX idx_jobevents_tenant_subject ON dbo.ingestionjobevents (tenantid, subjectid, createdutc);"
+                }));
+                list.Add(new SchemaMigration(9, "Add subject ask-page tagline", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'tagline') IS NULL ALTER TABLE dbo.subjects ADD tagline NVARCHAR(MAX);",
+                    "UPDATE dbo.subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
+                }));
                 return list;
             }
         }

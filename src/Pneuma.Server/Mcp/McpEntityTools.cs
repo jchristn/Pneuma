@@ -2,6 +2,7 @@ namespace Pneuma.Server.Mcp
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -122,6 +123,8 @@ namespace Pneuma.Server.Mcp
             string? typeArg = GetOptionalString(arguments, "type");
             if (!String.IsNullOrWhiteSpace(typeArg)) subject.Type = typeArg!;
             subject.Description = GetOptionalString(arguments, "description");
+            subject.Tagline = GetOptionalString(arguments, "tagline");
+            if (String.IsNullOrWhiteSpace(subject.Tagline)) subject.Tagline = Subject.DefaultTagline;
             subject.SystemPrompt = GetOptionalString(arguments, "systemPrompt");
             subject.OntologyClassifyPrompt = GetOptionalString(arguments, "ontologyClassifyPrompt");
             subject.OntologyDefinitionPrompt = GetOptionalString(arguments, "ontologyDefinitionPrompt");
@@ -166,6 +169,7 @@ namespace Pneuma.Server.Mcp
             string? typeArg = GetOptionalString(arguments, "type");
             if (typeArg != null) existing.Type = typeArg;
             if (HasProperty(arguments, "description")) existing.Description = GetOptionalString(arguments, "description");
+            if (HasProperty(arguments, "tagline")) existing.Tagline = GetOptionalString(arguments, "tagline");
             if (HasProperty(arguments, "systemPrompt")) existing.SystemPrompt = GetOptionalString(arguments, "systemPrompt");
             if (HasProperty(arguments, "ontologyClassifyPrompt")) existing.OntologyClassifyPrompt = GetOptionalString(arguments, "ontologyClassifyPrompt");
             if (HasProperty(arguments, "ontologyDefinitionPrompt")) existing.OntologyDefinitionPrompt = GetOptionalString(arguments, "ontologyDefinitionPrompt");
@@ -301,6 +305,50 @@ namespace Pneuma.Server.Mcp
             }
 
             return job;
+        }
+
+        /// <summary>
+        /// Summarize ingestion activity for the caller's tenant into time buckets broken down by pipeline
+        /// stage. Optional <c>subjectId</c>, <c>fromUtc</c>/<c>toUtc</c> window, and <c>bucketMinutes</c>.
+        /// </summary>
+        /// <param name="rc">Request context.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A stage-stacked ingestion activity summary.</returns>
+        public async Task<object> IngestionSummaryAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            IngestionActivityFilter filter = new IngestionActivityFilter
+            {
+                TenantId = String.IsNullOrEmpty(tenantId) ? null : tenantId
+            };
+
+            string subjectId = McpJsonRpc.GetStringArgument(arguments, "subjectId");
+            if (!String.IsNullOrEmpty(subjectId)) filter.SubjectId = subjectId;
+
+            filter.FromUtc = ParseUtcArgument(arguments, "fromUtc");
+            filter.ToUtc = ParseUtcArgument(arguments, "toUtc");
+
+            if (arguments.ValueKind == JsonValueKind.Object
+                && arguments.TryGetProperty("bucketMinutes", out JsonElement bmEl)
+                && bmEl.ValueKind == JsonValueKind.Number
+                && bmEl.TryGetInt32(out int bucketMinutes))
+            {
+                filter.BucketMinutes = bucketMinutes;
+            }
+
+            return await _Db.IngestionJobEvents.SummarizeAsync(filter, token).ConfigureAwait(false);
+        }
+
+        private static DateTime? ParseUtcArgument(JsonElement arguments, string name)
+        {
+            string value = McpJsonRpc.GetStringArgument(arguments, name);
+            if (String.IsNullOrEmpty(value)) return null;
+            if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime parsed))
+            {
+                return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            }
+            return null;
         }
 
         /// <summary>Enumerate content-link summaries for the caller's tenant, paged.</summary>

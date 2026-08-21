@@ -61,6 +61,17 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "CREATE INDEX IF NOT EXISTS idx_chatfeedback_tenant_subject ON chatfeedback (tenantid, subjectid, createdutc);",
                     "CREATE INDEX IF NOT EXISTS idx_chatfeedback_turn ON chatfeedback (turnid);"
                 }));
+                list.Add(new SchemaMigration(8, "Add subject id to ingestion job events", new List<string>
+                {
+                    "ALTER TABLE ingestionjobevents ADD COLUMN subjectid TEXT;",
+                    "UPDATE ingestionjobevents SET subjectid = (SELECT j.subjectid FROM ingestionjobs j WHERE j.id = ingestionjobevents.jobid) WHERE subjectid IS NULL;",
+                    "CREATE INDEX IF NOT EXISTS idx_jobevents_tenant_subject ON ingestionjobevents (tenantid, subjectid, createdutc);"
+                }));
+                list.Add(new SchemaMigration(9, "Add subject ask-page tagline", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN tagline TEXT;",
+                    "UPDATE subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
+                }));
                 return list;
             }
         }

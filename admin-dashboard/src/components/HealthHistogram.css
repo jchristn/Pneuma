@@ -1,6 +1,7 @@
 /* Compact pass/fail history strip + health-detail modal styling. */
 .health-histogram {
   display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 1px;
   min-width: 60px;
@@ -20,12 +21,23 @@
   font-size: var(--font-size-xs);
 }
 
-/* Clickable in-row health cell (opens the detail modal; must not trigger the row edit). */
+/* Clickable in-row health cell (opens the detail modal; must not trigger the row edit).
+   Badge and sparkline sit side by side on a single line and never wrap. */
 .health-cell {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   cursor: pointer;
+}
+/* Fixed, compact in-row strip (up to 10 bars) that neither wraps nor balloons the column. */
+.health-cell .health-histogram {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  flex: 0 0 auto;
 }
 
 .health-detail { display: flex; flex-direction: column; gap: 1rem; }

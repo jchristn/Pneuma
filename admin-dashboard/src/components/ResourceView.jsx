@@ -20,6 +20,7 @@ function getId(item, idField) {
 function FieldInput({ field, value, onChange }) {
   const tip = field.tip || undefined;
   const labelClass = tip ? 'has-tip' : undefined;
+  const fullClass = field.fullWidth ? ' field-full' : '';
   const common = {
     id: `field-${field.name}`,
     value: value ?? '',
@@ -31,7 +32,7 @@ function FieldInput({ field, value, onChange }) {
   };
   if (field.type === 'checkbox') {
     return (
-      <div className="checkbox-field" title={tip}>
+      <div className={`checkbox-field${fullClass}`} title={tip}>
         <input id={common.id} type="checkbox" checked={!!value} onChange={common.onChange} disabled={field.readOnly} title={tip} />
         <label htmlFor={common.id} className={labelClass} style={{ margin: 0 }} title={tip}>{field.label}</label>
       </div>
@@ -39,7 +40,7 @@ function FieldInput({ field, value, onChange }) {
   }
   if (field.type === 'select') {
     return (
-      <div className="field">
+      <div className={`field${fullClass}`}>
         <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
         <select {...common}>
           {field.placeholder && <option value="">{field.placeholder}</option>}
@@ -59,7 +60,7 @@ function FieldInput({ field, value, onChange }) {
       onChange(field.name, next);
     };
     return (
-      <div className="field">
+      <div className={`field${fullClass}`}>
         <label className={labelClass} title={tip}>{field.label}</label>
         <div className="checkbox-group">
           {(field.options || []).map((o) => {
@@ -77,7 +78,7 @@ function FieldInput({ field, value, onChange }) {
   }
   if (field.type === 'textarea') {
     return (
-      <div className="field">
+      <div className={`field${fullClass}`}>
         <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
         <textarea {...common} rows={field.rows || 6} />
       </div>
@@ -97,7 +98,7 @@ function emptyDefault(field) {
   return '';
 }
 
-function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabled = false, notice = null }) {
+function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabled = false, notice = null, twoColumn = false }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(() => {
     const v = {};
@@ -148,7 +149,7 @@ function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabl
 
   return (
     <form onSubmit={submit}>
-      <div className="form-grid">
+      <div className={twoColumn ? 'form-grid form-grid-2col' : 'form-grid'}>
         {fields.map((f) => (
           <FieldInput key={f.name} field={f} value={values[f.name]} onChange={change} />
         ))}
@@ -204,7 +205,8 @@ function ResourceView({
   modalSize = 'lg',
   selectable = false,
   bulkActions = null,
-  postDeleteNotice = null
+  postDeleteNotice = null,
+  twoColumnForm = false
 }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
@@ -368,14 +370,14 @@ function ResourceView({
 
       {modal?.type === 'create' && (
         <Modal title={t('resource.addTitle', { name: singular })} size={modalSize} onClose={() => setModal(null)}>
-          <ResourceForm fields={formFields} onSubmit={doCreate} onCancel={() => setModal(null)} submitLabel={t('common.create')} disabled={createDisabled} notice={createNotice} />
+          <ResourceForm fields={formFields} onSubmit={doCreate} onCancel={() => setModal(null)} submitLabel={t('common.create')} disabled={createDisabled} notice={createNotice} twoColumn={twoColumnForm} />
         </Modal>
       )}
       {modal?.type === 'edit' && (
         <Modal title={t('resource.editTitle', { name: singular })} size={modalSize}
           subtitle={<span className="copyable-id"><code>{String(getId(modal.item, idField))}</code><CopyButton value={String(getId(modal.item, idField))} label={null} /></span>}
           onClose={() => setModal(null)}>
-          <ResourceForm fields={formFields} initial={modal.item} onSubmit={(body) => doUpdate(modal.item, body)} onCancel={() => setModal(null)} submitLabel={t('common.save')} />
+          <ResourceForm fields={formFields} initial={modal.item} onSubmit={(body) => doUpdate(modal.item, body)} onCancel={() => setModal(null)} submitLabel={t('common.save')} twoColumn={twoColumnForm} />
         </Modal>
       )}
       {modal?.type === 'view' && (

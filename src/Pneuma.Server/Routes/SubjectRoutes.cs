@@ -109,6 +109,7 @@ namespace Pneuma.Server.Routes
             }
             subject.TenantId = rc.TenantId;
             if (String.IsNullOrWhiteSpace(subject.GraphRootNodeId)) subject.GraphRootNodeId = SlugHelper.Slugify(subject.DisplayName);
+            if (String.IsNullOrWhiteSpace(subject.Tagline)) subject.Tagline = Subject.DefaultTagline;
 
             // Resolve the URL slug: an explicit, already-taken slug is a conflict; an auto-generated one is
             // de-duplicated by appending a numeric suffix so subject creation never fails on a name clash.
@@ -206,6 +207,7 @@ namespace Pneuma.Server.Routes
             existing.DisplayName = String.IsNullOrWhiteSpace(update.DisplayName) ? existing.DisplayName : update.DisplayName;
             existing.Type = update.Type;
             existing.Description = update.Description;
+            existing.Tagline = update.Tagline;
             existing.Active = update.Active;
             existing.ThinkingEnabled = update.ThinkingEnabled;
             existing.SystemPrompt = update.SystemPrompt;

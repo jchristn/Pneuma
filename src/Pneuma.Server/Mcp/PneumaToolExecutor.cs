@@ -105,6 +105,9 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_get_job":
                     return await GetJobAsync(tenantId, arguments, token).ConfigureAwait(false);
 
+                case "pneuma_ingestion_summary":
+                    return ToolInvocationResult.Ok(await _Entities.IngestionSummaryAsync(rc, arguments, token).ConfigureAwait(false));
+
                 case "pneuma_get_link":
                     return await GetLinkAsync(tenantId, arguments, token).ConfigureAwait(false);
 

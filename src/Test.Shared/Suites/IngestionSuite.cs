@@ -9,6 +9,8 @@ namespace Test.Shared.Suites
     using Pneuma.Core.Graph;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
@@ -127,6 +129,36 @@ namespace Test.Shared.Suites
                             if (!log.Contains("Categorization complete")) throw new Exception("ingestion log missing the candidate-plan (Categorization) event. Log: " + log);
                             if (!log.Contains("Hydration started")) throw new Exception("ingestion log missing the Hydration event. Log: " + log);
                             if (!log.Contains("Prompt provenance")) throw new Exception("ingestion log missing the prompt-provenance (reproducibility) event. Log: " + log);
+
+                            // Every stage event is stamped with its parent job's subject id (denormalized for
+                            // subject-scoped activity aggregation).
+                            foreach (IngestionJobEvent ev in events)
+                            {
+                                if (ev.SubjectId != context.SubjectId) throw new Exception("stage event missing/incorrect SubjectId");
+                            }
+
+                            // The ingestion activity summary buckets those events by stage over time.
+                            IngestionActivityFilter summaryFilter = new IngestionActivityFilter
+                            {
+                                TenantId = context.TenantId,
+                                FromUtc = DateTime.UtcNow.AddHours(-1),
+                                ToUtc = DateTime.UtcNow.AddMinutes(1),
+                                BucketMinutes = 5
+                            };
+                            IngestionActivitySummary summary = await db.IngestionJobEvents.SummarizeAsync(summaryFilter, ct);
+                            if (summary.TotalCount != events.Count) throw new Exception("summary total (" + summary.TotalCount + ") should equal event count (" + events.Count + ")");
+                            if (!summary.Totals.Exists(s => s.Stage == IngestionStageEnum.Done && s.Count >= 1)) throw new Exception("summary totals should include a Done stage");
+                            long bucketSum = 0;
+                            foreach (IngestionActivityBucket bucket in summary.Buckets) bucketSum += bucket.TotalCount;
+                            if (bucketSum != summary.TotalCount) throw new Exception("summary bucket counts should sum to the total");
+
+                            // The subject filter scopes the summary: the job's own subject sees all events; another does not.
+                            summaryFilter.SubjectId = context.SubjectId;
+                            IngestionActivitySummary scoped = await db.IngestionJobEvents.SummarizeAsync(summaryFilter, ct);
+                            if (scoped.TotalCount != events.Count) throw new Exception("subject-scoped summary should match the subject's events");
+                            summaryFilter.SubjectId = "sub_does_not_exist";
+                            IngestionActivitySummary empty = await db.IngestionJobEvents.SummarizeAsync(summaryFilter, ct);
+                            if (empty.TotalCount != 0) throw new Exception("summary for an unknown subject should be empty");
                         }),
 
                     new TestCaseDescriptor("Ingestion", "CascadeDelete_RemovesArtifacts", "Deleting a subject cascades through links, jobs, logs, graph nodes, and stored chunk documents",

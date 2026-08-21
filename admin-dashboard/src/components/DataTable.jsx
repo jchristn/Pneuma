@@ -1,9 +1,18 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const INTERACTIVE = ['button', 'a', 'input', 'select', 'textarea', 'label', '[role="button"]', '[data-row-click-ignore="true"]'].join(', ');
 
 const PAGE_SIZES = [10, 25, 50, 100];
+// Auto-refresh interval options (seconds); 0 = off.
+const AUTO_REFRESH_OPTIONS = [
+  { value: 0, label: 'None' },
+  { value: 15, label: '15 seconds' },
+  { value: 30, label: '30 seconds' },
+  { value: 60, label: '60 seconds' },
+  { value: 180, label: '180 seconds' },
+  { value: 300, label: '300 seconds' }
+];
 
 /**
  * Reusable data table with above-table pagination.
@@ -29,6 +38,17 @@ function DataTable({
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [sort, setSort] = useState({ key: null, dir: 'asc' });
   const [pageInput, setPageInput] = useState('1');
+  const [autoRefreshSec, setAutoRefreshSec] = useState(0);
+
+  // Auto-refresh: re-run onRefresh on the chosen interval. A ref keeps the timer pointed at the latest
+  // callback without restarting on every render (only a changed interval resets the timer).
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => { onRefreshRef.current = onRefresh; }, [onRefresh]);
+  useEffect(() => {
+    if (!autoRefreshSec || !onRefresh) return undefined;
+    const timer = setInterval(() => { onRefreshRef.current?.(); }, autoRefreshSec * 1000);
+    return () => clearInterval(timer);
+  }, [autoRefreshSec, onRefresh]);
 
   const isServer = !!server;
 
@@ -145,6 +165,15 @@ function DataTable({
             <button type="button" onClick={() => goTo(currentPage + 1)} disabled={currentPage >= totalPages - 1} title="Go to the next page.">{t('table.next')}</button>
             <button type="button" onClick={() => goTo(totalPages - 1)} disabled={currentPage >= totalPages - 1} title="Jump to the last page.">{t('table.last')}</button>
           </div>
+          {onRefresh && (
+            <label className="auto-refresh-control" title="Automatically reload this table on the selected interval.">
+              <span className="auto-refresh-label">{t('table.autoRefresh', 'Auto-refresh')}</span>
+              <select value={autoRefreshSec} onChange={(e) => setAutoRefreshSec(Number(e.target.value))}
+                aria-label={t('table.autoRefresh', 'Auto-refresh')}>
+                {AUTO_REFRESH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
+          )}
           {onRefresh && (
             <button type="button" className="icon-button" onClick={onRefresh} title="Reload this table from the server." aria-label={t('common.refresh')} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={loading ? { animation: 'spin 1s linear infinite' } : undefined}>

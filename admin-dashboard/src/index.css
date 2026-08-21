@@ -277,6 +277,9 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .pagination-controls button { padding: 0.3rem 0.55rem; font-size: var(--font-size-xs); border: 1px solid var(--color-border); }
 .page-input { width: 48px; text-align: center; padding: 0.25rem; font-size: var(--font-size-xs); }
 .page-input-container { font-size: var(--font-size-xs); color: var(--color-text-secondary); display: inline-flex; align-items: center; gap: 0.3rem; }
+.auto-refresh-control { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; cursor: pointer; }
+.auto-refresh-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); white-space: nowrap; }
+.auto-refresh-control select { width: auto; padding: 0.3rem 0.4rem; font-size: var(--font-size-xs); }
 
 .table-scroll { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
@@ -349,7 +352,10 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .modal.modal-xl { max-width: 1040px; }
 /* 75% wider than modal-lg (780px), for log/timeline views that need horizontal room. */
 .modal.modal-wide { max-width: 1365px; }
+/* 66% wider than modal-lg (780px), for the feedback detail (side-by-side request/response). */
+.modal.modal-feedback { max-width: 1295px; }
 .modal.modal-sm { max-width: 420px; }
+.modal.modal-subject { max-width: 1295px; }
 /* Near-fullscreen modal (e.g. viewing a full source document). */
 .modal.modal-full { max-width: 95vw; width: 95vw; height: 95vh; max-height: 95vh; }
 .modal.modal-full .modal-body { flex: 1; }
@@ -372,6 +378,9 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   padding: var(--spacing-md) var(--spacing-lg); border-top: 1px solid var(--color-border);
 }
 .form-grid { display: flex; flex-direction: column; gap: var(--spacing-md); }
+.form-grid.form-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); align-items: start; }
+.form-grid.form-grid-2col .field-full { grid-column: 1 / -1; }
+@media (max-width: 720px) { .form-grid.form-grid-2col { grid-template-columns: 1fr; } }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); }
 .checkbox-field { display: flex; align-items: center; gap: var(--spacing-sm); }
 .checkbox-field input { width: auto; }
@@ -399,7 +408,7 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .chart-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
 .chart-header { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); flex-wrap: wrap; margin-bottom: var(--spacing-md); }
 .chart-header h2 { font-size: var(--font-size-lg); }
-.chart-controls { display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: wrap; }
+.chart-controls { display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: nowrap; }
 .segmented { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
 .segmented button { border: none; border-radius: 0; padding: 0.35rem 0.65rem; font-size: var(--font-size-xs); background: var(--color-background); }
 .segmented button.active { background: var(--color-primary); color: #fff; }
@@ -415,8 +424,13 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   border-radius: var(--radius-md); padding: var(--spacing-sm); font-size: var(--font-size-xs); z-index: 10; min-width: 130px;
 }
 .chart-legend { display: flex; gap: var(--spacing-lg); margin-top: var(--spacing-md); font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.chart-legend.chart-legend-wrap { flex-wrap: wrap; gap: 0.4rem 0.9rem; }
 .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
 .legend-color { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+/* Shared top-level range selector above the activity charts. */
+.chart-range-bar { display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); flex-wrap: wrap; }
+.chart-range-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.chart-subject-select { padding: 0.35rem 0.5rem; font-size: var(--font-size-xs); max-width: 16rem; }
 
 /* ============================================================= filter bar */
 .filter-bar { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; align-items: flex-end; margin-bottom: var(--spacing-md); }
@@ -736,3 +750,15 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
 .chat-stop { background: var(--color-danger, #dc2626); }
 .chat-disclaimer { text-align: center; font-size: 0.72rem; color: var(--color-text-secondary); margin: 0.5rem 0 0; }
+
+/* ============================================================= feedback detail */
+.feedback-detail { display: flex; flex-direction: column; gap: var(--spacing-lg); }
+.feedback-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; }
+.feedback-meta-item { display: flex; flex-direction: column; gap: 0.2rem; }
+.feedback-meta-label { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); font-weight: 600; }
+.feedback-meta-value { font-size: var(--font-size-sm); }
+.feedback-columns { display: flex; flex-direction: column; gap: var(--spacing-lg); }
+.feedback-section { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+.feedback-section-label { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); font-weight: 600; }
+.feedback-panel { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-alt); padding: var(--spacing-md); font-size: var(--font-size-sm); max-height: 420px; overflow: auto; word-break: break-word; }
+.feedback-panel-empty { color: var(--color-text-secondary); }

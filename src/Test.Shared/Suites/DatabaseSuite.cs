@@ -378,6 +378,7 @@ namespace Test.Shared.Suites
                                 TenantId = t.Id,
                                 DisplayName = "Ada Lovelace",
                                 UrlSlug = "ada-lovelace",
+                                Tagline = "Ask me about Ada.",
                                 ThinkingEnabled = true,
                                 SystemPrompt = "Be precise.",
                                 OntologyClassifyPrompt = "Classify people.",
@@ -388,6 +389,7 @@ namespace Test.Shared.Suites
 
                             Subject read = await db.Subjects.ReadAsync(t.Id, created.Id, ct) ?? throw new Exception("Subject vanished after create");
                             if (read.UrlSlug != "ada-lovelace") throw new Exception("UrlSlug did not round-trip");
+                            if (read.Tagline != "Ask me about Ada.") throw new Exception("Tagline did not round-trip");
                             if (!read.ThinkingEnabled) throw new Exception("ThinkingEnabled did not round-trip");
                             if (read.SystemPrompt != "Be precise.") throw new Exception("SystemPrompt did not round-trip");
                             if (read.OntologyClassifyPrompt != "Classify people.") throw new Exception("OntologyClassifyPrompt did not round-trip");

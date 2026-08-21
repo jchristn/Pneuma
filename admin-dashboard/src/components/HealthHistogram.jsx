@@ -124,7 +124,7 @@ export function HealthDetailModal({ title, health, loading, onClose }) {
           {lastError && <div className="health-error-box">{lastError}</div>}
 
           <div className="health-section-label">Health History</div>
-          <HealthHistogram history={history} height={36} maxBars={50} />
+          <HealthHistogram history={history} height={36} maxBars={60} />
 
           <div className="health-timestamps">
             <div><span>First check</span><strong>{formatDateTime(get(h, 'firstCheckUtc', 'FirstCheckUtc')) || '—'}</strong></div>

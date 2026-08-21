@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ResourceView from '../components/ResourceView';
-import CopyableId from '../components/CopyableId';
 import StatusPill from '../components/StatusPill';
 import { HealthHistogram, HealthDetailModal } from '../components/HealthHistogram';
 
@@ -84,10 +83,7 @@ function ModelRunnersView() {
     { key: 'endpoint', label: t('modelRunners.endpoint'), cellClass: 'wrap', sortable: false, render: (r) => r.endpoint || '—' },
     { key: 'apiFormat', label: t('modelRunners.apiFormat'), render: (r) => r.apiFormat || '—' },
     { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: 'Live reachability of the endpoint, polled periodically. Click a health cell for recent history.' },
-    { key: 'active', label: 'Active', tip: 'Whether this endpoint is currently in use.', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
-    { key: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), tip: 'Max simultaneous requests Partio sends to this endpoint.', render: (r) => (r.maxConcurrentRequests ?? 1) },
-    { key: 'contextSize', label: t('modelRunners.contextSize'), tip: 'Completion context window (tokens); drives automatic chat compaction. 0 = off.', render: (r) => (r.contextSize ? r.contextSize : '—') },
-    { key: 'id', label: 'ID', tip: 'The Partio endpoint id. Click to copy — used when submitting links and in the API.', render: (r) => <CopyableId value={r.id} truncateLen={12} /> }
+    { key: 'active', label: 'Active', tip: 'Whether this endpoint is currently in use.', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> }
   ];
 
   const formFields = [

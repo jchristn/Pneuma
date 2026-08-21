@@ -39,6 +39,7 @@ namespace Pneuma.Server.Mcp
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
                 case "pneuma_enumerate_jobs":
                 case "pneuma_get_job":
+                case "pneuma_ingestion_summary":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.IngestionJob, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
                 case "pneuma_search":
                 case "pneuma_get_node":

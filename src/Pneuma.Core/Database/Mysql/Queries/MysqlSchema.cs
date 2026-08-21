@@ -62,6 +62,17 @@ namespace Pneuma.Core.Database.Mysql.Queries
                         "KEY idx_chatfeedback_tenant_subject (tenantid, subjectid, createdutc), KEY idx_chatfeedback_turn (turnid)" +
                         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
                 }));
+                list.Add(new SchemaMigration(8, "Add subject id to ingestion job events", new List<string>
+                {
+                    "ALTER TABLE ingestionjobevents ADD COLUMN subjectid VARCHAR(64);",
+                    "UPDATE ingestionjobevents e JOIN ingestionjobs j ON j.id = e.jobid SET e.subjectid = j.subjectid;",
+                    "CREATE INDEX idx_jobevents_tenant_subject ON ingestionjobevents (tenantid, subjectid, createdutc);"
+                }));
+                list.Add(new SchemaMigration(9, "Add subject ask-page tagline", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN tagline TEXT;",
+                    "UPDATE subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
+                }));
                 return list;
             }
         }

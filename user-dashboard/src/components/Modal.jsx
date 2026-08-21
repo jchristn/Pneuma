@@ -10,13 +10,18 @@ import Icon from './Icon.jsx';
 export default function Modal({ open, onClose, title, subtitle = null, size = 'medium', footer = null, children }) {
   const { t } = useTranslation();
   const panelRef = useRef(null);
+  // Keep the latest onClose in a ref so the effect below depends only on `open`. Depending on onClose too
+  // re-runs the effect on every parent render (callers pass a fresh arrow each time), which re-focuses the
+  // panel on each keystroke and steals focus from inputs inside the modal.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     if (!open) return undefined;
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (event.key === 'Tab' && panelRef.current) {
@@ -48,7 +53,7 @@ export default function Modal({ open, onClose, title, subtitle = null, size = 'm
       document.body.style.overflow = previousOverflow;
       if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

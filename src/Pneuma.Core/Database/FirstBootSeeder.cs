@@ -197,15 +197,29 @@ namespace Pneuma.Core.Database
                 "Summarize the following content faithfully and concisely, preserving names, dates, places, and claims. " +
                 "Do not add information that is not present in the source.", token).ConfigureAwait(false);
 
-            await SeedPromptAsync(db, "user.answer", "User Answer",
-                "You are answering a fan's question about a subject using only the provided source excerpts from Pneuma's " +
-                "curated corpus. Ground every statement in the sources and cite them. If the corpus does not support an " +
-                "answer, say so plainly rather than guessing.", token).ConfigureAwait(false);
+            await SeedPromptAsync(db, "user.answer", "User Answer", DefaultUserAnswerPrompt, token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "assistant.system", "Assistant System Prompt", DefaultAssistantSystemPrompt, token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "assistant.compress", "Conversation Compression", DefaultConversationCompressionPrompt, token).ConfigureAwait(false);
+
+            // Self-heal the two answering prompts on existing deployments (e.g. the local docker Postgres volume,
+            // which is seeded once and never re-seeded): if an unedited default is still stored — recognized by its
+            // opening phrase and the absence of the internal-identifier rule — replace it with the current default so
+            // the "never expose internal identifiers" instruction lands without wiping data or clobbering admin edits.
+            await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, token).ConfigureAwait(false);
+            await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, token).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Default grounded-answer prompt for the user-facing "ask" path (Prompts key "user.answer").
+        /// </summary>
+        private const string DefaultUserAnswerPrompt =
+            "You are answering a fan's question about a subject using only the provided source excerpts from Pneuma's " +
+            "curated corpus. Ground every statement in the sources and cite them by their title or a short quotation. Never " +
+            "expose internal identifiers — do not print node ids, GUIDs, or other database keys (for example, never write " +
+            "\"(node e125fc8a-...)\"); they are internal plumbing and meaningless to the reader. If the corpus does not support " +
+            "an answer, say so plainly rather than guessing.";
 
         /// <summary>
         /// Default prompt for compacting a long chat conversation into a compact summary (Prompts key
@@ -257,9 +271,12 @@ namespace Pneuma.Core.Database
             "HOW TO ANSWER\n" +
             "1. Decide which tools are needed; prefer pneuma_search to locate nodes, then pneuma_get_node for detail. Use as few " +
             "calls as will answer the question well.\n" +
-            "2. Ground every claim in tool results. When you use a node, refer to it by name so the user can follow the source.\n" +
-            "3. If the corpus does not contain enough information, say so plainly rather than guessing.\n" +
-            "4. Format answers in Markdown (headings, lists, tables, and fenced code where helpful). Be concise and direct.";
+            "2. Ground every claim in tool results. Refer to a source by its name, title, or a short quotation so the user can follow it.\n" +
+            "3. Never expose internal identifiers in your answer. Do not print node ids, GUIDs, tool ids, collection ids, job ids, or " +
+            "other database keys (for example, never write things like \"(node e125fc8a-ebf7-4bbb-8123-ecdee2422ed1)\"). These are " +
+            "internal plumbing and are meaningless to the user; cite sources by their human-readable title or a quoted excerpt instead.\n" +
+            "4. If the corpus does not contain enough information, say so plainly rather than guessing.\n" +
+            "5. Format answers in Markdown (headings, lists, tables, and fenced code where helpful). Be concise and direct.";
 
         private static async Task SeedPromptAsync(DatabaseDriverBase db, string key, string name, string content, CancellationToken token)
         {
@@ -277,6 +294,26 @@ namespace Pneuma.Core.Database
                 Active = true
             };
             await db.Prompts.CreateAsync(prompt, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Update a still-default prompt in place to the current default content. A prompt is treated as an
+        /// unedited default when its content starts with <paramref name="expectedPrefix"/> and does not yet
+        /// contain the internal-identifier rule; admin-customized prompts (different opening) are left alone,
+        /// and the update is idempotent (once healed the rule is present, so it will not run again).
+        /// </summary>
+        private static async Task HealPromptAsync(DatabaseDriverBase db, string key, string expectedPrefix, string newContent, CancellationToken token)
+        {
+            Prompt? existing = await db.Prompts.ReadByKeyAsync(null, key, token).ConfigureAwait(false);
+            if (existing == null) return;
+            string content = existing.Content ?? String.Empty;
+            if (content == newContent) return;
+            if (!content.StartsWith(expectedPrefix, StringComparison.Ordinal)) return;
+            if (content.Contains("internal identifier", StringComparison.OrdinalIgnoreCase)) return;
+
+            existing.Content = newContent;
+            existing.Version += 1;
+            await db.Prompts.UpdateAsync(existing, token).ConfigureAwait(false);
         }
 
         #endregion

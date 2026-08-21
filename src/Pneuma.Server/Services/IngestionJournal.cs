@@ -54,6 +54,7 @@ namespace Pneuma.Server.Services
             {
                 TenantId = job.TenantId,
                 JobId = job.Id,
+                SubjectId = job.SubjectId,
                 Stage = stage,
                 Status = status,
                 Message = message,

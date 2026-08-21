@@ -10,6 +10,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
 
     /// <summary>PostgreSQL ingestion job event methods.</summary>
     internal class IngestionJobEventMethods : PostgresqlMethodsBase, IIngestionJobEventMethods
@@ -23,9 +25,9 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             jobEvent.CreatedUtc = DateTime.UtcNow;
 
             string sql =
-                "INSERT INTO ingestionjobevents (id, tenantid, jobid, stage, status, message, durationms, queuedurationms, createdutc) VALUES (" +
+                "INSERT INTO ingestionjobevents (id, tenantid, jobid, subjectid, stage, status, message, durationms, queuedurationms, createdutc) VALUES (" +
                 Sanitizer.Str(jobEvent.Id) + ", " + Sanitizer.Str(jobEvent.TenantId) + ", " +
-                Sanitizer.Str(jobEvent.JobId) + ", " + Sanitizer.Str(jobEvent.Stage.ToString()) + ", " +
+                Sanitizer.Str(jobEvent.JobId) + ", " + Sanitizer.Str(jobEvent.SubjectId) + ", " + Sanitizer.Str(jobEvent.Stage.ToString()) + ", " +
                 Sanitizer.Str(jobEvent.Status.ToString()) + ", " + Sanitizer.Str(jobEvent.Message) + ", " +
                 jobEvent.DurationMs.ToString(CultureInfo.InvariantCulture) + ", " + jobEvent.QueueDurationMs.ToString(CultureInfo.InvariantCulture) + ", " + Sanitizer.Ts(jobEvent.CreatedUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
@@ -71,6 +73,28 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             return "DELETE FROM ingestionjobevents WHERE tenantid = " + Sanitizer.Str(tenantId) + " AND jobid = " + Sanitizer.Str(jobId) + ";";
         }
 
+        /// <inheritdoc />
+        public async Task<IngestionActivitySummary> SummarizeAsync(IngestionActivityFilter filter, CancellationToken token = default)
+        {
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            DateTime toUtc = (filter.ToUtc ?? DateTime.UtcNow).ToUniversalTime();
+            DateTime fromUtc = (filter.FromUtc ?? toUtc.AddHours(-24)).ToUniversalTime();
+            DataTable table = await Query(
+                "SELECT createdutc, stage FROM ingestionjobevents" + BuildSummaryWhere(filter, fromUtc, toUtc) + ";",
+                token).ConfigureAwait(false);
+            return IngestionActivityAggregator.Aggregate(table, fromUtc, toUtc, filter.BucketMinutes);
+        }
+
+        private static string BuildSummaryWhere(IngestionActivityFilter filter, DateTime fromUtc, DateTime toUtc)
+        {
+            List<string> conditions = new List<string>();
+            if (filter.TenantId != null) conditions.Add("tenantid = " + Sanitizer.Str(filter.TenantId));
+            if (filter.SubjectId != null) conditions.Add("subjectid = " + Sanitizer.Str(filter.SubjectId));
+            conditions.Add("createdutc >= " + Sanitizer.Ts(fromUtc));
+            conditions.Add("createdutc <= " + Sanitizer.Ts(toUtc));
+            return " WHERE " + String.Join(" AND ", conditions);
+        }
+
         internal static IngestionJobEvent Map(DataRow row)
         {
             return new IngestionJobEvent
@@ -78,6 +102,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 Id = RowReader.GetString(row, "id"),
                 TenantId = RowReader.GetString(row, "tenantid"),
                 JobId = RowReader.GetString(row, "jobid"),
+                SubjectId = RowReader.GetNullableString(row, "subjectid"),
                 Stage = RowReader.GetEnum<IngestionStageEnum>(row, "stage", IngestionStageEnum.Pending),
                 Status = RowReader.GetEnum<IngestionStatusEnum>(row, "status", IngestionStatusEnum.Processing),
                 Message = RowReader.GetNullableString(row, "message"),

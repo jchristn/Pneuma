@@ -9,6 +9,7 @@ import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
+import Modal from '../components/Modal.jsx';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages.js';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
@@ -159,36 +160,66 @@ function collapseHistory(prev, summary) {
 }
 
 /** Clickable citations to the ingested source links the answer drew from, with a relevance percentage. */
-/** Thumbs up/down + optional comment for one answer, submitted against its persisted turn. */
+/** Thumbs up/down for one answer. Either rating opens a modal to collect the "why", then submits once. */
 function FeedbackBar({ turnId }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
-  const [rating, setRating] = useState(null);
+  const [pending, setPending] = useState(null); // 'Up' | 'Down' while the modal is open
   const [comment, setComment] = useState('');
-  const [showComment, setShowComment] = useState(false);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!turnId) return null;
 
-  const submit = async (r, c) => {
+  const open = (r) => { setComment(''); setPending(r); };
+  const close = () => { if (!busy) setPending(null); };
+  const submit = async () => {
     setBusy(true);
-    try { await apiClient.submitFeedback(turnId, r, c || null); setSent(true); }
+    try { await apiClient.submitFeedback(turnId, pending, comment.trim() || null); setSent(true); }
     catch { /* ignore */ }
     finally { setBusy(false); }
   };
-  const pick = (r) => { setRating(r); if (r === 'Down') setShowComment(true); else submit(r, ''); };
 
-  if (sent) return <div className="chat-feedback chat-feedback-done">{t('ask.feedbackThanks', 'Thanks for your feedback.')}</div>;
+  const verb = pending === 'Up' ? t('ask.feedbackLiked', 'liked') : t('ask.feedbackDisliked', 'disliked');
   return (
     <div className="chat-feedback">
-      <button type="button" className={`fb-btn ${rating === 'Up' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Up')} title={t('ask.thumbsUp', 'Helpful')} aria-label={t('ask.thumbsUp', 'Helpful')}>👍</button>
-      <button type="button" className={`fb-btn ${rating === 'Down' ? 'active' : ''}`} disabled={busy} onClick={() => pick('Down')} title={t('ask.thumbsDown', 'Not helpful')} aria-label={t('ask.thumbsDown', 'Not helpful')}>👎</button>
-      {showComment ? (
-        <span className="fb-comment">
-          <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('ask.feedbackComment', 'Add a comment (optional)')} />
-          <button type="button" className="btn btn-sm btn-secondary fb-send" disabled={busy} onClick={() => submit(rating || 'Down', comment)}>{t('common.send', 'Send')}</button>
-        </span>
-      ) : null}
+      {sent && !pending ? (
+        <span className="chat-feedback-done">{t('ask.feedbackThanks', 'Thanks for your feedback.')}</span>
+      ) : (
+        <>
+          <button type="button" className={`fb-btn ${pending === 'Up' ? 'active' : ''}`} disabled={busy || sent} onClick={() => open('Up')} title={t('ask.thumbsUp', 'Helpful')} aria-label={t('ask.thumbsUp', 'Helpful')}>👍</button>
+          <button type="button" className={`fb-btn ${pending === 'Down' ? 'active' : ''}`} disabled={busy || sent} onClick={() => open('Down')} title={t('ask.thumbsDown', 'Not helpful')} aria-label={t('ask.thumbsDown', 'Not helpful')}>👎</button>
+        </>
+      )}
+      <Modal
+        open={!!pending}
+        onClose={close}
+        title={t('ask.feedbackModalTitle', 'Share more feedback')}
+        size="small"
+        footer={sent ? (
+          <button type="button" className="button button-primary" onClick={close}>{t('common.close', 'Close')}</button>
+        ) : (
+          <>
+            <button type="button" className="button button-secondary" onClick={close} disabled={busy}>{t('common.cancel', 'Cancel')}</button>
+            <button type="button" className="button button-primary" onClick={submit} disabled={busy}>{busy ? t('common.loading', 'Sending…') : t('common.send', 'Send')}</button>
+          </>
+        )}
+      >
+        {sent ? (
+          <p style={{ margin: 0 }}>{t('ask.feedbackThankYou', 'Thank you for your feedback!')}</p>
+        ) : (
+          <>
+            <p style={{ marginBottom: '0.75rem' }}>{t('ask.feedbackPrompt', { verb, defaultValue: 'Tell me more about why you {{verb}} this response.' })}</p>
+            <textarea
+              style={{ width: '100%', resize: 'vertical' }}
+              rows={4}
+              value={comment}
+              autoFocus
+              onChange={(e) => setComment(e.target.value)}
+              placeholder={t('ask.feedbackComment', 'Add a comment (optional)')}
+            />
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -463,7 +494,7 @@ export default function AskView() {
       <div className="view ask-view">
         <section className="search-hero">
           <h1 className="hero-title">{subject ? subject.displayName : t('ask.heroTitle')}</h1>
-          <p className="hero-subtitle">{t('ask.heroSubtitle')}</p>
+          <p className="hero-subtitle">{subject?.tagline || t('ask.heroSubtitle')}</p>
           <SearchBox
             value={question}
             onChange={setQuestion}
@@ -486,7 +517,7 @@ export default function AskView() {
       <div className="chat-view-head">
         <div>
           <h1 className="page-title">{subject ? subject.displayName : t('nav.ask', 'Ask')}</h1>
-          <p className="page-subtitle">{t('ask.heroSubtitle')}</p>
+          <p className="page-subtitle">{subject?.tagline || t('ask.heroSubtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Link className="button button-secondary" to="/">{t('ask.backToSubjects', 'Subjects')}</Link>

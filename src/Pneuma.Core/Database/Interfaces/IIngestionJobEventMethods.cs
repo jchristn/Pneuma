@@ -4,6 +4,8 @@ namespace Pneuma.Core.Database.Interfaces
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
 
     /// <summary>
     /// Ingestion job event data access methods.
@@ -35,5 +37,14 @@ namespace Pneuma.Core.Database.Interfaces
         /// <param name="jobId">Job identifier.</param>
         /// <param name="token">Cancellation token.</param>
         Task DeleteByJobAsync(string tenantId, string jobId, CancellationToken token = default);
+
+        /// <summary>
+        /// Summarize ingestion activity into time buckets broken down by pipeline stage, scoped by the
+        /// supplied filter (tenant, subject, time range, bucket size).
+        /// </summary>
+        /// <param name="filter">Summary filter.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Time-bucketed, stage-stacked activity summary.</returns>
+        Task<IngestionActivitySummary> SummarizeAsync(IngestionActivityFilter filter, CancellationToken token = default);
     }
 }

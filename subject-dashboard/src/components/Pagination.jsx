@@ -1,7 +1,16 @@
-import { useId } from 'react';
+import { useId, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 250, 500, 1000];
+// Auto-refresh interval options (seconds); 0 = off.
+const AUTO_REFRESH_OPTIONS = [
+  { value: 0, label: 'None' },
+  { value: 15, label: '15 seconds' },
+  { value: 30, label: '30 seconds' },
+  { value: 60, label: '60 seconds' },
+  { value: 180, label: '180 seconds' },
+  { value: 300, label: '300 seconds' }
+];
 
 /**
  * Above-table pagination + control bar: total range, page size, first/prev/
@@ -21,6 +30,17 @@ function Pagination({
   const { t } = useTranslation();
   const jumpId = useId();
   const pages = Math.max(1, totalPages || 1);
+  const [autoRefreshSec, setAutoRefreshSec] = useState(0);
+
+  // Auto-refresh: re-run onRefresh on the chosen interval. A ref keeps the timer pointed at the latest
+  // callback without restarting on every render (only a changed interval resets the timer).
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => { onRefreshRef.current = onRefresh; }, [onRefresh]);
+  useEffect(() => {
+    if (!autoRefreshSec || !onRefresh) return undefined;
+    const timer = setInterval(() => { onRefreshRef.current?.(); }, autoRefreshSec * 1000);
+    return () => clearInterval(timer);
+  }, [autoRefreshSec, onRefresh]);
 
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
@@ -97,6 +117,15 @@ function Pagination({
           <label htmlFor={jumpId}>Go to:</label>
           <input id={jumpId} type="number" min="1" max={pages} placeholder="#" onKeyDown={handleJump} />
         </div>
+        {onRefresh && (
+          <label className="auto-refresh-control" title="Automatically reload this table on the selected interval.">
+            <span className="auto-refresh-label">{t('table.autoRefresh', 'Auto-refresh')}</span>
+            <select value={autoRefreshSec} onChange={(e) => setAutoRefreshSec(Number(e.target.value))}
+              aria-label={t('table.autoRefresh', 'Auto-refresh')}>
+              {AUTO_REFRESH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+        )}
         {onRefresh && (
           <button className="pagination-btn" onClick={onRefresh} title={t('common.refresh')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

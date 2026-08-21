@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
@@ -9,6 +12,16 @@ import { formatDateTime } from '../utils/format';
 function truncate(s, n) { const v = String(s || ''); return v.length > n ? v.slice(0, n) + '…' : v; }
 function listOf(resp) { return resp?.objects || resp?.items || []; }
 function ratingIcon(r) { return r === 'Up' ? '👍' : r === 'Down' ? '👎' : '💬'; }
+
+// A scrollable, markdown-rendered panel for the request/response text.
+function MarkdownPanel({ text, empty }) {
+  if (!text) return <div className="feedback-panel feedback-panel-empty">{empty}</div>;
+  return (
+    <div className="feedback-panel chat-markdown">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{text}</ReactMarkdown>
+    </div>
+  );
+}
 
 export default function FeedbackView() {
   const { t } = useTranslation();
@@ -57,17 +70,30 @@ export default function FeedbackView() {
         )}
         emptyTitle={t('feedback.title', 'Feedback')} emptyDescription={t('feedback.empty', 'No feedback yet.')} />
 
-      <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={t('feedback.detailTitle', 'Feedback')} size="large">
+      <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={`${ratingIcon(detail?._fb?.rating)} ${t('feedback.detailTitle', 'Feedback')}`} size="feedback">
         {detail && (
-          <div className="history-detail">
-            <div className="detail-grid">
-              <div className="detail-item"><span className="detail-label">{t('feedback.rating', 'Rating')}</span><span className="detail-value">{ratingIcon(detail._fb?.rating)} {detail._fb?.rating}</span></div>
-              <div className="detail-item"><span className="detail-label">{t('feedback.subject', 'Subject')}</span><span className="detail-value">{detail._fb?.subjectId ? subjectName(detail._fb.subjectId) : '—'}</span></div>
-              <div className="detail-item"><span className="detail-label">{t('feedback.created', 'Created')}</span><span className="detail-value">{formatDateTime(detail._fb?.createdUtc)}</span></div>
+          <div className="feedback-detail">
+            <div className="feedback-meta">
+              <div className="feedback-meta-item"><span className="feedback-meta-label">{t('feedback.rating', 'Rating')}</span><span className="feedback-meta-value">{ratingIcon(detail._fb?.rating)} {detail._fb?.rating}</span></div>
+              <div className="feedback-meta-item"><span className="feedback-meta-label">{t('feedback.subject', 'Subject')}</span><span className="feedback-meta-value">{detail._fb?.subjectId ? subjectName(detail._fb.subjectId) : '—'}</span></div>
+              <div className="feedback-meta-item"><span className="feedback-meta-label">{t('feedback.created', 'Created')}</span><span className="feedback-meta-value">{formatDateTime(detail._fb?.createdUtc)}</span></div>
             </div>
-            {detail._fb?.comment ? <div className="history-block"><span className="history-label">{t('feedback.comment', 'Comment')}</span><div className="history-text">{detail._fb.comment}</div></div> : null}
-            <div className="history-block"><span className="history-label">{t('feedback.question', 'Question')}</span><div className="history-text">{detail._turn?.question || '—'}</div></div>
-            <div className="history-block"><span className="history-label">{t('feedback.answer', 'Answer')}</span><div className="history-text">{detail._turn?.answer || (detail._turn ? '—' : t('feedback.turnPruned', 'The rated turn has been pruned.'))}</div></div>
+            {detail._fb?.comment ? (
+              <div className="feedback-section">
+                <span className="feedback-section-label">{t('feedback.comment', 'Comment')}</span>
+                <div className="feedback-panel">{detail._fb.comment}</div>
+              </div>
+            ) : null}
+            <div className="feedback-columns">
+              <div className="feedback-section">
+                <span className="feedback-section-label">{t('feedback.question', 'Question')}</span>
+                <MarkdownPanel text={detail._turn?.question} empty="—" />
+              </div>
+              <div className="feedback-section">
+                <span className="feedback-section-label">{t('feedback.answer', 'Answer')}</span>
+                <MarkdownPanel text={detail._turn?.answer} empty={detail._turn ? '—' : t('feedback.turnPruned', 'The rated turn has been pruned.')} />
+              </div>
+            </div>
           </div>
         )}
       </Modal>

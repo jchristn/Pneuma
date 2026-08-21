@@ -32,6 +32,13 @@ namespace Pneuma.Core.Models
             set { if (String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(JobId)); _JobId = value; }
         }
 
+        /// <summary>
+        /// Owning subject identifier, denormalized from the parent job so ingestion activity can be
+        /// aggregated (and filtered) by subject without a join. Null for historical rows whose parent
+        /// job could not be resolved during backfill.
+        /// </summary>
+        public string? SubjectId { get; set; } = null;
+
         /// <summary>Pipeline stage this event describes.</summary>
         public IngestionStageEnum Stage { get; set; } = IngestionStageEnum.Pending;
 

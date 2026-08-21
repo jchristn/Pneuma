@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -88,6 +88,7 @@ namespace Pneuma.Server.Mcp
                             displayName = new { type = "string", description = "The subject's display name (required)." },
                             type = new { type = "string", description = "Free-form kind (Person, Product, Topic…). Default Person." },
                             description = new { type = "string", description = "Optional description." },
+                            tagline = new { type = "string", description = "Subtitle shown under the subject's name on its ask page in the user dashboard. Defaults to the built-in ask-page label when omitted." },
                             urlSlug = new { type = "string", description = "URL-safe slug (unique per tenant). Auto-generated from displayName when omitted." },
                             thinkingEnabled = new { type = "boolean", description = "Whether model thinking is shown for this subject's chats." },
                             systemPrompt = new { type = "string", description = "Subject system prompt, appended after the global one." },
@@ -111,6 +112,7 @@ namespace Pneuma.Server.Mcp
                             displayName = new { type = "string", description = "New display name." },
                             type = new { type = "string", description = "New type." },
                             description = new { type = "string", description = "New description." },
+                            tagline = new { type = "string", description = "New ask-page subtitle shown in the user dashboard." },
                             urlSlug = new { type = "string", description = "New URL slug (must be unique per tenant)." },
                             thinkingEnabled = new { type = "boolean", description = "Whether model thinking is shown for this subject's chats." },
                             systemPrompt = new { type = "string", description = "Subject system prompt." },
@@ -146,6 +148,22 @@ namespace Pneuma.Server.Mcp
                         type = "object",
                         properties = new { id = new { type = "string", description = "Ingestion job id." } },
                         required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_ingestion_summary",
+                    description = "Summarize ingestion activity over time, broken down by pipeline stage (ContentRetrieval, TypeDetection, CellExtraction, Classification, Categorization, Hydration, GraphMerge, Summarization, Chunking, Embedding, Indexing, Done, …). Returns fixed-width time buckets, each with per-stage event counts, plus overall per-stage totals. Optionally scope by subjectId and a fromUtc/toUtc window; bucketMinutes sets the bucket width (default 15).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Optional subject id to scope the summary to a single subject." },
+                            fromUtc = new { type = "string", description = "Inclusive UTC lower bound (ISO 8601). Defaults to 24h before toUtc." },
+                            toUtc = new { type = "string", description = "Inclusive UTC upper bound (ISO 8601). Defaults to now." },
+                            bucketMinutes = new { type = "integer", description = "Bucket width in minutes, clamped 1..1440. Default 15." }
+                        }
                     }
                 },
                 new
@@ -275,6 +293,16 @@ namespace Pneuma.Server.Mcp
             tools.Add(ToolDefinition.Function("pneuma_get_job",
                 "Fetch a single full ingestion job by id, including its stage, status, and error.",
                 ObjectSchema(new Dictionary<string, object> { ["id"] = StringProp("Ingestion job id.") }, new[] { "id" })));
+
+            tools.Add(ToolDefinition.Function("pneuma_ingestion_summary",
+                "Summarize ingestion activity over time, broken down by pipeline stage. Returns fixed-width time buckets with per-stage event counts plus overall per-stage totals. Optional subjectId and fromUtc/toUtc window; bucketMinutes sets bucket width (default 15).",
+                ObjectSchema(new Dictionary<string, object>
+                {
+                    ["subjectId"] = StringProp("Optional subject id to scope the summary."),
+                    ["fromUtc"] = StringProp("Inclusive UTC lower bound (ISO 8601). Defaults to 24h before toUtc."),
+                    ["toUtc"] = StringProp("Inclusive UTC upper bound (ISO 8601). Defaults to now."),
+                    ["bucketMinutes"] = IntProp("Bucket width in minutes, clamped 1..1440. Default 15.")
+                }, null)));
 
             tools.Add(ToolDefinition.Function("pneuma_enumerate_links",
                 "Enumerate content links (ingestion sources) as small summaries, paged. Same paging protocol. Use pneuma_get_link for the full record.",
