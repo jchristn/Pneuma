@@ -7,6 +7,9 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Chat slash commands.** All three dashboards' chat composers handle `/help`, `/clear` / `/new` (start a
+  new conversation), `/context` (context usage), and `/compact` (informational) client-side without sending
+  them to the model.
 - **RAG evaluation harness.** Ground-truth facts per subject (`evalfacts`), LLM-judged runs (`evalruns`) that
   answer each fact through the real grounded pipeline and grade the result against the expected answer with a
   seeded `eval.judge` prompt, and per-fact results (`evalresults`) with verdict (Pass/Partial/Fail), 0–10

@@ -338,7 +338,13 @@ verdicts, category/failure-mode filtering, SSE live progress, and an Eval dashbo
 
 ---
 
-## Phase 6 — #10 Chat slash commands  ⬜
+## Phase 6 — #10 Chat slash commands  ✅
+
+> **Status note:** all three Ask views intercept `/` commands client-side (never sent to the model):
+> `/help` (`/?`), `/clear` / `/new` (start a new conversation — resets the thread), `/context` (context
+> usage from the last turn), and `/compact` (informational; compaction is automatic). Unknown commands show
+> help. The user dashboard exposes the safe subset. `/filter` is deferred with the Phase 2 Ask-composer
+> filter builder.
 
 **Goal:** in-composer slash commands across all three Ask views. Frontend-only (reuses existing endpoints).
 
@@ -472,6 +478,6 @@ comply" gate.
 | 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading; switcher deferred) | ✅ | 🟨 |
 | 4 | #5 Analytics | ✅ | n/a | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 5 | #4 Eval harness | ✅ (sync) | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
-| 6 | #10 Slash commands | ⬜ | n/a | n/a | ⬜ | ⬜ (fe) | ⬜ | ⬜ |
+| 6 | #10 Slash commands | n/a | n/a | n/a | ✅ | ✅ (all 3 Ask views) | n/a | 🟨 |
 | 7 | #11 MCP surface | ⬜ | n/a | ⬜ | ⬜ | n/a | ⬜ | ⬜ |
 | 7.5 | Telemetry & Grafana | ⬜ (instrument) | n/a | n/a | ⬜ (TELEMETRY.md) | ⬜ (Grafana) | ⬜ | ⬜ |

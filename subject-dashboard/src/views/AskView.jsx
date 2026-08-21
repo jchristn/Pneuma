@@ -377,6 +377,27 @@ function AskView() {
     const term = input.trim();
     if (!term || streaming || !subjectId) return;
 
+    // Slash commands are handled client-side and never sent to the model.
+    if (term.startsWith('/')) {
+      const cmd = term.slice(1).split(/\s+/)[0].toLowerCase();
+      setInput('');
+      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setMessages([]); setError(null); return; }
+      let info;
+      if (cmd === 'help' || cmd === '?') {
+        info = 'Commands: /help — this list · /clear or /new — start a new conversation · /context — show context usage · /compact — note (compaction is automatic).';
+      } else if (cmd === 'context') {
+        const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.stats);
+        const s = last && last.stats;
+        info = s ? `Context: ${(s.totalTokens || 0).toLocaleString()} tokens used${s.contextSize ? ` of ${s.contextSize.toLocaleString()} (${Math.round(((s.totalTokens || 0) / s.contextSize) * 100)}%)` : ''}; model ${s.model || 'unknown'}.` : 'No context usage yet — ask a question first.';
+      } else if (cmd === 'compact') {
+        info = 'Conversation compaction happens automatically as the context window fills.';
+      } else {
+        info = `Unknown command "/${cmd}". Try /help.`;
+      }
+      setMessages((prev) => ([...prev, { role: 'assistant', content: info, streaming: false, tools: [], stats: null, system: true }]));
+      return;
+    }
+
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     history.push({ role: 'user', content: term });
 
