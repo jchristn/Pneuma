@@ -84,6 +84,19 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "UPDATE dbo.subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
                     "UPDATE dbo.subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
                 }));
+                list.Add(new SchemaMigration(11, "Add chat-turn performance telemetry", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.chatturns', 'performancejson') IS NULL ALTER TABLE dbo.chatturns ADD performancejson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.chatturns', 'performanceschemaversion') IS NULL ALTER TABLE dbo.chatturns ADD performanceschemaversion INT NOT NULL DEFAULT 0;",
+                    "IF OBJECT_ID(N'dbo.chatturnperfevents', N'U') IS NULL CREATE TABLE dbo.chatturnperfevents (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, turnid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), " +
+                        "stage NVARCHAR(128), kind NVARCHAR(64), provider NVARCHAR(128), model NVARCHAR(512), " +
+                        "durationms FLOAT, timetofirsttokenms FLOAT, " +
+                        "prompttokens INT NOT NULL DEFAULT 0, completiontokens INT NOT NULL DEFAULT 0, " +
+                        "success BIT NOT NULL DEFAULT 1, createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_perfevents_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatturnperfevents')) CREATE INDEX idx_perfevents_tenant_subject ON dbo.chatturnperfevents (tenantid, subjectid, createdutc);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_perfevents_turn' AND object_id = OBJECT_ID(N'dbo.chatturnperfevents')) CREATE INDEX idx_perfevents_turn ON dbo.chatturnperfevents (turnid);"
+                }));
                 return list;
             }
         }

@@ -135,9 +135,16 @@ namespace Pneuma.Server.Services
             {
                 if (!String.Equals(turns[i].Role, "assistant", StringComparison.OrdinalIgnoreCase)) { lastUserIndex = i; break; }
             }
+            // Per-stage performance telemetry for this turn (rewrite, compaction, tool calls, final inference).
+            List<TurnPerformanceStage> perfStages = new List<TurnPerformanceStage>();
+            long rewriteStart = System.Diagnostics.Stopwatch.GetTimestamp();
             string? rewrittenLastTurn = lastUserIndex >= 0
                 ? await _Query.RewriteQuestionAsync(tenantId, subject, turns[lastUserIndex].Content ?? String.Empty, token).ConfigureAwait(false)
                 : null;
+            if (subject != null && !String.IsNullOrWhiteSpace(subject.PromptRewriteModel))
+            {
+                perfStages.Add(new TurnPerformanceStage { Name = "prompt_rewrite", Kind = "inference", DurationMs = ElapsedMs(rewriteStart) });
+            }
 
             List<ChatMessage> messages = new List<ChatMessage>();
             messages.Add(ChatMessage.System(systemPrompt));
@@ -160,7 +167,9 @@ namespace Pneuma.Server.Services
                 if (EstimateTokens(messages) > budget)
                 {
                     await emit(new { type = "compacting" }, false, token).ConfigureAwait(false);
+                    long compactStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     compactedSummary = await CompactAsync(tenantId, client, turns, token).ConfigureAwait(false);
+                    perfStages.Add(new TurnPerformanceStage { Name = "compaction", Kind = "inference", DurationMs = ElapsedMs(compactStart) });
                     if (!String.IsNullOrWhiteSpace(compactedSummary))
                     {
                         messages = new List<ChatMessage>
@@ -278,6 +287,7 @@ namespace Pneuma.Server.Services
                         messages.Add(ChatMessage.ToolResult(call.Id ?? String.Empty, call.Name ?? String.Empty, resultJson));
 
                         toolTrace.Add(new { name = call.Name, ok = result.Success });
+                        perfStages.Add(new TurnPerformanceStage { Name = "tool:" + (call.Name ?? "unknown"), Kind = "tool", DurationMs = toolDurationMs, Success = result.Success });
                         // The result payload is echoed to the caller (truncated) so the UI can show the tool's
                         // response alongside its query and runtime when a tool row is expanded.
                         await emit(new
@@ -324,6 +334,22 @@ namespace Pneuma.Server.Services
 
             List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkScores, token).ConfigureAwait(false);
 
+            // The final inference stage carries the accumulated generation timing and tokens for this turn.
+            perfStages.Add(new TurnPerformanceStage
+            {
+                Name = "final_inference",
+                Kind = "inference",
+                Provider = runner.Provider.ToString(),
+                Model = model,
+                DurationMs = generationMs,
+                TimeToFirstTokenMs = timeToFirstTokenMs < 0 ? 0 : timeToFirstTokenMs,
+                PromptTokens = (int)promptTokens,
+                CompletionTokens = (int)completionTokens
+            });
+            double wallMs = 0;
+            foreach (TurnPerformanceStage stage in perfStages) wallMs += stage.DurationMs;
+            TurnPerformance performance = new TurnPerformance { SchemaVersion = 1, WallTimeMs = wallMs, Stages = perfStages };
+
             // Build the turn record up front so its id can be handed to the caller (for feedback) in the
             // complete event; it is persisted immediately after.
             ChatTurnRecord record = new ChatTurnRecord
@@ -342,7 +368,9 @@ namespace Pneuma.Server.Services
                 GenerationMs = generationMs,
                 ThinkingMs = thinkParser.ThinkingMs,
                 ContextSize = runner.ContextSize,
-                CitationsJson = citations.Count > 0 ? Json.Serialize(citations) : null
+                CitationsJson = citations.Count > 0 ? Json.Serialize(citations) : null,
+                PerformanceJson = Json.Serialize(performance),
+                PerformanceSchemaVersion = performance.SchemaVersion
             };
 
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;
@@ -374,10 +402,32 @@ namespace Pneuma.Server.Services
             {
                 await _Db.ChatTurns.CreateAsync(record, token).ConfigureAwait(false);
 
+                List<ChatTurnPerfEvent> perfEvents = new List<ChatTurnPerfEvent>();
+                foreach (TurnPerformanceStage stage in perfStages)
+                {
+                    perfEvents.Add(new ChatTurnPerfEvent
+                    {
+                        TenantId = tenantId,
+                        TurnId = record.Id,
+                        SubjectId = record.SubjectId,
+                        Stage = stage.Name,
+                        Kind = stage.Kind,
+                        Provider = stage.Provider,
+                        Model = stage.Model,
+                        DurationMs = stage.DurationMs,
+                        TimeToFirstTokenMs = stage.TimeToFirstTokenMs,
+                        PromptTokens = stage.PromptTokens,
+                        CompletionTokens = stage.CompletionTokens,
+                        Success = stage.Success
+                    });
+                }
+                await _Db.ChatTurnPerfEvents.CreateManyAsync(perfEvents, token).ConfigureAwait(false);
+
                 if (subject != null && subject.HistoryRetentionDays > 0)
                 {
                     DateTime cutoff = DateTime.UtcNow.AddDays(-subject.HistoryRetentionDays);
                     await _Db.ChatTurns.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
+                    await _Db.ChatTurnPerfEvents.DeleteOlderThanAsync(tenantId, subject.Id, cutoff, token).ConfigureAwait(false);
                 }
             }
             catch (Exception persistError)
@@ -440,6 +490,14 @@ namespace Pneuma.Server.Services
             }
 
             return citations;
+        }
+
+        /// <summary>Elapsed milliseconds since a <see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> reading.</summary>
+        /// <param name="startTimestamp">A prior high-resolution timestamp.</param>
+        /// <returns>Elapsed milliseconds.</returns>
+        private static double ElapsedMs(long startTimestamp)
+        {
+            return (System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         }
 
         /// <summary>Rough token estimate for the running conversation (≈4 characters per token).</summary>

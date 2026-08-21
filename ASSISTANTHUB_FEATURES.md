@@ -77,7 +77,12 @@ style.
 
 ---
 
-## Phase 1 — #1 Structured per-stage performance telemetry  ⬜
+## Phase 1 — #1 Structured per-stage performance telemetry  ✅
+
+> **Status note:** backend, migration v11 (all four providers), data layer, `AgenticChatService`
+> instrumentation, retention/cascade pruning, both History detail stage tables, tests (92 pass), and docs are
+> done. The MCP `pneuma_get_history_turn` tool is folded into **Phase 7** (MCP broadening) so all history/
+> telemetry MCP tools land together.
 
 **Goal:** capture, persist, and surface ordered per-stage timing/token telemetry for every answered turn
 (grounded `/v1.0/query` and agentic `/v1.0/chat/stream`), so the reworked history modal shows a stage table
@@ -381,7 +386,7 @@ comply" gate.
 
 | Phase | Feature | Backend | Data/migration | MCP | REST/SDK/Postman/docs | Dashboards | Tests | Validated |
 |---|---|---|---|---|---|---|---|---|
-| 1 | #1 Telemetry | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 1 | #1 Telemetry | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 2 | #2 Facet filters | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 3 | #6 Threads + tool trace | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 4 | #5 Analytics | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |

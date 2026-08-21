@@ -427,11 +427,13 @@ namespace Test.Shared.Suites
                             {
                                 TenantId = t.Id, SubjectId = s.Id, Question = "Who?", Answer = "Ada.",
                                 Model = "gemma3:4b", PromptTokens = 10, CompletionTokens = 5, TotalTokens = 15,
-                                GenerationMs = 1200, ThinkingMs = 300, ContextSize = 8192
+                                GenerationMs = 1200, ThinkingMs = 300, ContextSize = 8192,
+                                PerformanceJson = "{\"schemaVersion\":1,\"stages\":[]}", PerformanceSchemaVersion = 1
                             }, ct);
 
                             ChatTurnRecord read = await db.ChatTurns.ReadAsync(t.Id, turn.Id, ct) ?? throw new Exception("Turn vanished after create");
                             if (read.Answer != "Ada." || read.TotalTokens != 15) throw new Exception("Turn fields did not round-trip");
+                            if (read.PerformanceSchemaVersion != 1 || String.IsNullOrEmpty(read.PerformanceJson)) throw new Exception("Performance telemetry did not round-trip");
 
                             List<ChatTurnRecord> forSubject = await db.ChatTurns.EnumerateAsync(t.Id, s.Id, ct);
                             if (forSubject.Count != 1) throw new Exception("Expected 1 turn for the subject, got " + forSubject.Count);
@@ -458,6 +460,34 @@ namespace Test.Shared.Suites
 
                             await db.ChatFeedback.DeleteBySubjectAsync(t.Id, s.Id, ct);
                             if ((await db.ChatFeedback.EnumerateAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("DeleteBySubject must remove the subject's feedback");
+                        }),
+
+                    new TestCaseDescriptor("Database", "ChatTurnPerfEvent_Crud_And_Cascade", "Performance events persist, enumerate by turn/subject, prune by cutoff, and delete by subject",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Perf" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+                            ChatTurnRecord turn = await db.ChatTurns.CreateAsync(new ChatTurnRecord { TenantId = t.Id, SubjectId = s.Id, Question = "q", Answer = "a" }, ct);
+
+                            await db.ChatTurnPerfEvents.CreateManyAsync(new List<ChatTurnPerfEvent>
+                            {
+                                new ChatTurnPerfEvent { TenantId = t.Id, TurnId = turn.Id, SubjectId = s.Id, Stage = "prompt_rewrite", Kind = "inference", DurationMs = 12.5, Success = true },
+                                new ChatTurnPerfEvent { TenantId = t.Id, TurnId = turn.Id, SubjectId = s.Id, Stage = "final_inference", Kind = "inference", Provider = "Ollama", Model = "gemma3:4b", DurationMs = 900, TimeToFirstTokenMs = 120, PromptTokens = 40, CompletionTokens = 60, Success = true }
+                            }, ct);
+
+                            List<ChatTurnPerfEvent> byTurn = await db.ChatTurnPerfEvents.EnumerateByTurnAsync(t.Id, turn.Id, ct);
+                            if (byTurn.Count != 2) throw new Exception("Expected 2 perf events for the turn, got " + byTurn.Count);
+                            ChatTurnPerfEvent final = byTurn.Find(e => e.Stage == "final_inference") ?? throw new Exception("final_inference stage missing");
+                            if (final.Model != "gemma3:4b" || final.PromptTokens != 40 || final.CompletionTokens != 60 || final.TimeToFirstTokenMs != 120) throw new Exception("Perf-event fields did not round-trip");
+
+                            List<ChatTurnPerfEvent> bySubject = await db.ChatTurnPerfEvents.EnumerateBySubjectAsync(t.Id, s.Id, DateTime.UtcNow.AddDays(-1), ct);
+                            if (bySubject.Count != 2) throw new Exception("Expected 2 perf events for the subject since yesterday, got " + bySubject.Count);
+
+                            await db.ChatTurnPerfEvents.DeleteOlderThanAsync(t.Id, s.Id, DateTime.UtcNow.AddDays(-1), ct);
+                            if ((await db.ChatTurnPerfEvents.EnumerateByTurnAsync(t.Id, turn.Id, ct)).Count != 2) throw new Exception("A past cutoff must not prune fresh perf events");
+                            await db.ChatTurnPerfEvents.DeleteBySubjectAsync(t.Id, s.Id, ct);
+                            if ((await db.ChatTurnPerfEvents.EnumerateByTurnAsync(t.Id, turn.Id, ct)).Count != 0) throw new Exception("DeleteBySubject must remove the subject's perf events");
                         }),
 
                     new TestCaseDescriptor("Database", "Subject_PendingDeletion_Enumeration", "EnumeratePendingDeletion returns only Pending/Deleting subjects, across tenants",

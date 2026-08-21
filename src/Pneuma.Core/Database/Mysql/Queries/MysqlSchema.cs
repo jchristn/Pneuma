@@ -85,6 +85,19 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "UPDATE subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
                     "UPDATE subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
                 }));
+                list.Add(new SchemaMigration(11, "Add chat-turn performance telemetry", new List<string>
+                {
+                    "ALTER TABLE chatturns ADD COLUMN performancejson TEXT;",
+                    "ALTER TABLE chatturns ADD COLUMN performanceschemaversion INT NOT NULL DEFAULT 0;",
+                    "CREATE TABLE IF NOT EXISTS chatturnperfevents (" +
+                        "id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, turnid VARCHAR(64) NOT NULL, subjectid VARCHAR(64), " +
+                        "stage VARCHAR(128), kind VARCHAR(64), provider VARCHAR(128), model VARCHAR(512), " +
+                        "durationms DOUBLE, timetofirsttokenms DOUBLE, " +
+                        "prompttokens INT NOT NULL DEFAULT 0, completiontokens INT NOT NULL DEFAULT 0, " +
+                        "success TINYINT NOT NULL DEFAULT 1, createdutc VARCHAR(32) NOT NULL, " +
+                        "KEY idx_perfevents_tenant_subject (tenantid, subjectid, createdutc), " +
+                        "KEY idx_perfevents_turn (turnid));"
+                }));
                 return list;
             }
         }

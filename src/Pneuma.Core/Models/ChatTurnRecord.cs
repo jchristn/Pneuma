@@ -68,6 +68,15 @@ namespace Pneuma.Core.Models
         /// <summary>Citations drawn on for the answer, serialized as a JSON array (schemaless shape).</summary>
         public string? CitationsJson { get; set; } = null;
 
+        /// <summary>
+        /// Structured per-stage performance telemetry (a serialized <see cref="TurnPerformance"/>), or null for
+        /// turns recorded before telemetry capture. Schemaless payload column.
+        /// </summary>
+        public string? PerformanceJson { get; set; } = null;
+
+        /// <summary>Schema version of <see cref="PerformanceJson"/> (0 when absent).</summary>
+        public int PerformanceSchemaVersion { get; set; } = 0;
+
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

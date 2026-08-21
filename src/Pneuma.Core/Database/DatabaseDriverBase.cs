@@ -85,6 +85,9 @@ namespace Pneuma.Core.Database
         /// <summary>Chat feedback methods.</summary>
         public IChatFeedbackMethods ChatFeedback { get; protected set; } = null!;
 
+        /// <summary>Chat-turn performance-event methods.</summary>
+        public IChatTurnPerfEventMethods ChatTurnPerfEvents { get; protected set; } = null!;
+
         #endregion
 
         #region Public-Methods

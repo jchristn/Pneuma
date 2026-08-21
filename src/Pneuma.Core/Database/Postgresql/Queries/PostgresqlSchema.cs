@@ -84,6 +84,19 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "UPDATE subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
                     "UPDATE subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
                 }));
+                list.Add(new SchemaMigration(11, "Add chat-turn performance telemetry", new List<string>
+                {
+                    "ALTER TABLE chatturns ADD COLUMN IF NOT EXISTS performancejson TEXT;",
+                    "ALTER TABLE chatturns ADD COLUMN IF NOT EXISTS performanceschemaversion INTEGER NOT NULL DEFAULT 0;",
+                    "CREATE TABLE IF NOT EXISTS chatturnperfevents (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, turnid TEXT NOT NULL, subjectid TEXT, " +
+                        "stage TEXT, kind TEXT, provider TEXT, model TEXT, " +
+                        "durationms DOUBLE PRECISION, timetofirsttokenms DOUBLE PRECISION, " +
+                        "prompttokens INTEGER NOT NULL DEFAULT 0, completiontokens INTEGER NOT NULL DEFAULT 0, " +
+                        "success INTEGER NOT NULL DEFAULT 1, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_perfevents_tenant_subject ON chatturnperfevents (tenantid, subjectid, createdutc);",
+                    "CREATE INDEX IF NOT EXISTS idx_perfevents_turn ON chatturnperfevents (turnid);"
+                }));
                 return list;
             }
         }

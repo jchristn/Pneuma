@@ -76,6 +76,13 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
     catch { return []; }
   }, [turn]);
 
+  const stages = useMemo(() => {
+    try {
+      const p = turn?.performanceJson ? JSON.parse(turn.performanceJson) : null;
+      return p && Array.isArray(p.stages) ? p.stages : [];
+    } catch { return []; }
+  }, [turn]);
+
   if (!turn) return null;
 
   const total = turn.totalTokens || ((turn.promptTokens || 0) + (turn.completionTokens || 0));
@@ -115,6 +122,39 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
               <TimingBar label={t('history.ttft', 'Time to first token')} durationMs={turn.timeToFirstTokenMs} maxMs={maxPhase} color="#4dabf7" hint="Prompt sent → first token." />
               <TimingBar label={t('history.thinkingTime', 'Thinking')} durationMs={turn.thinkingMs} maxMs={maxPhase} color="#845ef7" hint="Reasoning phase before the answer." />
               <TimingBar label={t('history.gen', 'Generation')} durationMs={turn.generationMs} maxMs={maxPhase} color="#ff6b6b" hint="First token → last token." />
+            </div>
+          </div>
+        )}
+
+        {/* Per-stage details */}
+        {stages.length > 0 && (
+          <div className="hd-section">
+            <div className="hd-section-title">{t('history.stages', 'Stage details')}</div>
+            <div className="hd-table-wrap">
+              <table className="hd-table">
+                <thead>
+                  <tr>
+                    <th>{t('history.stage', 'Stage')}</th>
+                    <th>{t('history.stageKind', 'Kind')}</th>
+                    <th>{t('history.stageModel', 'Model')}</th>
+                    <th>{t('history.stageDuration', 'Duration')}</th>
+                    <th>{t('history.stageTtft', 'First token')}</th>
+                    <th>{t('history.stageTokens', 'Tokens (in / out)')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stages.map((s, i) => (
+                    <tr key={`${s.name || 'stage'}-${i}`}>
+                      <td>{s.name || '—'}</td>
+                      <td className="hd-muted">{s.kind || '—'}</td>
+                      <td>{s.model || '—'}</td>
+                      <td>{fmtMs(s.durationMs)}</td>
+                      <td>{s.timeToFirstTokenMs > 0 ? fmtMs(s.timeToFirstTokenMs) : '—'}</td>
+                      <td>{(s.promptTokens || s.completionTokens) ? `${fmtNum(s.promptTokens)} / ${fmtNum(s.completionTokens)}` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

@@ -26,6 +26,7 @@ BACKEND_ALLOWLIST=(
   "src/Pneuma.Server/Services/GroundedQueryService.cs"
   # A single test suite: many independent TestCaseDescriptors in one static class.
   "src/Test.Shared/Suites/ApiSuite.cs"
+  "src/Test.Shared/Suites/DatabaseSuite.cs"
 )
 
 # Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the

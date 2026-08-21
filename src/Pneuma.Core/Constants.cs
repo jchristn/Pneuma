@@ -70,6 +70,9 @@ namespace Pneuma.Core
         /// <summary>Chat feedback identifier prefix.</summary>
         public const string ChatFeedbackPrefix = "fbk_";
 
+        /// <summary>Chat-turn performance-event identifier prefix.</summary>
+        public const string PerfEventPrefix = "perf_";
+
         #endregion
 
         #region General

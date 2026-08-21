@@ -6,6 +6,15 @@ between releases, and the project will adopt semantic versioning at its stable 1
 
 ## [Unreleased]
 
+### Added
+- **Per-stage chat telemetry.** Every answered agentic turn now records structured, provider-agnostic
+  performance telemetry (schema v11): a serialized `TurnPerformance` on the turn's `performanceJson` (ordered
+  stages — prompt rewrite, compaction, each tool call, final inference — with duration, time-to-first-token,
+  tokens, provider/model) **and** one queryable `chatturnperfevents` row per stage for analytics. Surfaced on
+  `GET /v1.0/history/{id}`; the admin and creator History detail modals render a stage-details table and drive
+  their timing bars from real per-stage data. Perf events are pruned with their subject's retention window and
+  removed on subject cascade.
+
 ### Changed
 - **Cells are the graph's unit of source content; chunks live only in RecallDB.** Ingestion no longer
   creates a `Chunk` node per chunk. Instead the graph-merge stage materializes a `Cell` node per extracted

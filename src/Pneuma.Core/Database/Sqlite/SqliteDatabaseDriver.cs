@@ -74,6 +74,7 @@ namespace Pneuma.Core.Database.Sqlite
             Prompts = new PromptMethods(this);
             ChatTurns = new ChatTurnMethods(this);
             ChatFeedback = new ChatFeedbackMethods(this);
+            ChatTurnPerfEvents = new ChatTurnPerfEventMethods(this);
         }
 
         #endregion

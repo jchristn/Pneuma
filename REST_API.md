@@ -105,8 +105,8 @@ Response envelope:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/v1.0/history` | List persisted chat turns (newest first), optionally `?subjectId=`. Paginated `EnumerationResult`. Each turn carries the question, answer, `thinking`, `model`, token counts, timing (`timeToFirstTokenMs`, `generationMs`, `thinkingMs`), `contextSize`, and `citationsJson` |
-| GET | `/v1.0/history/{id}` | A single turn with its feedback: `{ turn, feedback: [...] }` |
+| GET | `/v1.0/history` | List persisted chat turns (newest first), optionally `?subjectId=`. Paginated `EnumerationResult`. Each turn carries the question, answer, `thinking`, `model`, token counts, timing (`timeToFirstTokenMs`, `generationMs`, `thinkingMs`), `contextSize`, `citationsJson`, and structured per-stage telemetry in `performanceJson` (a serialized `{ schemaVersion, wallTimeMs, stages[] }`; each stage has `name`, `kind`, `provider`, `model`, `durationMs`, `timeToFirstTokenMs`, `promptTokens`, `completionTokens`, `success`) |
+| GET | `/v1.0/history/{id}` | A single turn with its feedback: `{ turn, feedback: [...] }`. The turn's `performanceJson` drives the dashboard History detail stage table and timing bars |
 | GET | `/v1.0/feedback` | List feedback (newest first), optionally `?subjectId=`. Each item is `{ feedback, turn }` (the rated turn is enriched inline). Paginated `EnumerationResult` |
 | POST | `/v1.0/feedback` | Submit feedback on a turn: `{ turnId, rating: "Up"\|"Down"\|"None", comment? }`. Requires a rating and/or comment; unknown `turnId` → 404 |
 

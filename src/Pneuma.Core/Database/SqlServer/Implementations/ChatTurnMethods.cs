@@ -21,7 +21,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             turn.CreatedUtc = DateTime.UtcNow;
 
             string sql =
-                "INSERT INTO chatturns (id, tenantid, subjectid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, createdutc) VALUES (" +
+                "INSERT INTO chatturns (id, tenantid, subjectid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, performancejson, performanceschemaversion, createdutc) VALUES (" +
                 Sanitizer.Str(turn.Id) + ", " + Sanitizer.Str(turn.TenantId) + ", " +
                 Sanitizer.Str(turn.SubjectId) + ", " + Sanitizer.Str(turn.UserId) + ", " +
                 Sanitizer.Str(turn.Question) + ", " + Sanitizer.Str(turn.Answer) + ", " +
@@ -30,6 +30,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Num(turn.TotalTokens) + ", " + Sanitizer.Num(turn.TimeToFirstTokenMs) + ", " +
                 Sanitizer.Num(turn.GenerationMs) + ", " + Sanitizer.Num(turn.ThinkingMs) + ", " +
                 Sanitizer.Num(turn.ContextSize) + ", " + Sanitizer.Str(turn.CitationsJson) + ", " +
+                Sanitizer.Str(turn.PerformanceJson) + ", " + Sanitizer.Num(turn.PerformanceSchemaVersion) + ", " +
                 Sanitizer.Ts(turn.CreatedUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return turn;
@@ -96,6 +97,8 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ThinkingMs = RowReader.GetDouble(row, "thinkingms"),
                 ContextSize = RowReader.GetInt(row, "contextsize"),
                 CitationsJson = RowReader.GetNullableString(row, "citationsjson"),
+                PerformanceJson = RowReader.GetNullableString(row, "performancejson"),
+                PerformanceSchemaVersion = RowReader.GetInt(row, "performanceschemaversion"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc")
             };
         }

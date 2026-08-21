@@ -77,6 +77,7 @@ namespace Pneuma.Core.Database.Mysql
             Prompts = new PromptMethods(this);
             ChatTurns = new ChatTurnMethods(this);
             ChatFeedback = new ChatFeedbackMethods(this);
+            ChatTurnPerfEvents = new ChatTurnPerfEventMethods(this);
         }
 
         #endregion
