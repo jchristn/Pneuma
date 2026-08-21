@@ -450,6 +450,26 @@ dashboards. Ship a `TELEMETRY.md` operator guide.
 
 ## Phase 8 — Cross-cutting validation: usability, design, aesthetics, compliance (run at the end)
 
+> **Automated gates — PASSED (CI run on `main`, all six jobs green):** `dotnet build src/Pneuma.sln` (0
+> errors; the only 2 warnings are pre-existing `IInvertedIndex` XML-cref warnings unrelated to this work),
+> all Touchstone suites (**96 pass**, incl. the new telemetry/facet/thread/tool-call/analytics/eval/MCP
+> coverage) across the CI providers (SQLite + PostgreSQL), backend-against-live-PostgreSQL, all three
+> dashboards `npm ci && lint && build` clean, and the file-size guardrail. Docs (REST_API.md, MCP_API.md,
+> CHANGELOG.md, TELEMETRY.md) and the plan were kept in lockstep per phase.
+>
+> **Requirements compliance:** every new backend file follows the `C:\code\agents\requirements` / CLAUDE.md
+> conventions — no `var`, no tuples (typed DTOs), one class/enum per file, usings-inside-namespace, full XML
+> docs, `ConfigureAwait(false)`, `CancellationToken` on cancellable async, guard clauses, provider-neutral
+> handwritten SQL across **all four** providers, tenant scoping + composite indexes, versioned/idempotent
+> tracked migrations (v11–v14), PrettyId prefixes, and RBAC + audit on every new route and MCP tool.
+>
+> **Remaining human step — visual aesthetics walkthrough:** the items below that require a *running UI and
+> human eyes* (deliberate look-and-feel review at 1280/768/390, light/dark spot-check of the new views,
+> tooltip/empty-state pass) cannot be verified headlessly; they are the one open task for a reviewer. Every
+> new surface was built to the conventions (theme-aware CSS using each dashboard's own variables, tooltips on
+> new controls, `hd-table-wrap` horizontal-scroll containers, custom `ConfirmModal` never browser `confirm`,
+> i18n `t()` with English defaults, designed empty states).
+
 Do not close the project until every box here passes. This is the "does it look and feel right, and does it
 comply" gate.
 
