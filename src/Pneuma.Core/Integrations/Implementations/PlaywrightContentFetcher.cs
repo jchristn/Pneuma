@@ -33,12 +33,12 @@ namespace Pneuma.Core.Integrations.Implementations
         /// <summary>Instantiate a headless-browser content fetcher.</summary>
         /// <param name="fallback">Fetcher used when the browser is unavailable or navigation fails. May be null.</param>
         /// <param name="navigationTimeoutMs">Navigation timeout in milliseconds (minimum 1000).</param>
-        /// <param name="userAgent">User-Agent header presented by the browser.</param>
-        public PlaywrightContentFetcher(IContentFetcher? fallback = null, int navigationTimeoutMs = 60000, string userAgent = "Pneuma-Ingestion/0.1")
+        /// <param name="userAgent">User-Agent header presented by the browser; falls back to <see cref="HttpContentFetcher.DefaultUserAgent"/> when null or empty.</param>
+        public PlaywrightContentFetcher(IContentFetcher? fallback = null, int navigationTimeoutMs = 60000, string? userAgent = null)
         {
             _Fallback = fallback;
             _NavigationTimeoutMs = navigationTimeoutMs < 1000 ? 60000 : navigationTimeoutMs;
-            _UserAgent = String.IsNullOrWhiteSpace(userAgent) ? "Pneuma-Ingestion/0.1" : userAgent;
+            _UserAgent = String.IsNullOrWhiteSpace(userAgent) ? HttpContentFetcher.DefaultUserAgent : userAgent!;
         }
 
         #endregion

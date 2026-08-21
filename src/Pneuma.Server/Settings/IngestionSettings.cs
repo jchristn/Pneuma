@@ -1,6 +1,7 @@
 namespace Pneuma.Server.Settings
 {
     using System;
+    using Pneuma.Core.Integrations.Implementations;
 
     /// <summary>
     /// Ingestion worker settings.
@@ -51,6 +52,17 @@ namespace Pneuma.Server.Settings
         }
 
         /// <summary>
+        /// User-Agent header presented when retrieving source content (both the HTTP and headless-browser
+        /// fetchers). Defaults to a realistic modern desktop-browser string so bot-protected or
+        /// User-Agent-gated sites serve their full content; setting it to null or empty restores the default.
+        /// </summary>
+        public string UserAgent
+        {
+            get { return _UserAgent; }
+            set { _UserAgent = String.IsNullOrWhiteSpace(value) ? HttpContentFetcher.DefaultUserAgent : value; }
+        }
+
+        /// <summary>
         /// Per-stage concurrency caps. Bound how many jobs may run a given pipeline step at once (independent
         /// of <see cref="MaxConcurrentTasks"/>), so a large enqueue cannot overwhelm the model runners.
         /// </summary>
@@ -65,6 +77,7 @@ namespace Pneuma.Server.Settings
         private int _MaxAttempts = 3;
         private int _StageTimeoutSeconds = 300;
         private int _BrowserNavigationTimeoutMs = 60000;
+        private string _UserAgent = HttpContentFetcher.DefaultUserAgent;
 
         #endregion
     }

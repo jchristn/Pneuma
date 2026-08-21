@@ -17,7 +17,7 @@ This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that o
 ```
 Subject link → ingestion job → worker pool:
   DocumentAtom (type detect + cell extract) → PolyPrompt (classify to ontology)
-  → LiteGraph (merge subgraph) → Partio (chunk/embed/summarize) → RecallDB (store chunks + vectors)
+  → LiteGraph (merge subgraph + cell nodes) → Partio (chunk/embed/summarize) → RecallDB (store chunks + vectors)
 User search (RecallDB) → representative graph nodes → node explorer with provenance
 ```
 

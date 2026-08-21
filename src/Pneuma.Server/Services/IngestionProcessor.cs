@@ -242,19 +242,19 @@ namespace Pneuma.Server.Services
                 0, token).ConfigureAwait(false);
 
             MergeResult merge = await RunStageAsync(job, IngestionStageEnum.GraphMerge,
-                stageToken => _Stages.MergeAsync(job, categorization.Subgraph, stageToken),
-                result => "Knowledge-graph insertion complete — inserted/linked " + result.NodeIds.Count + " node(s) and " + result.EdgeIds.Count + " edge(s).",
+                stageToken => _Stages.MergeAsync(job, categorization.Subgraph, categorization.Cells, stageToken),
+                result => "Knowledge-graph insertion complete — inserted/linked " + result.NodeIds.Count + " node(s) and " + result.EdgeIds.Count + " edge(s), including a cell node per extracted cell.",
                 token).ConfigureAwait(false);
             job.GraphNodeIds = merge.NodeIds;
 
             // Summarization, chunking, and embedding run as three discrete, independently-timed stages.
-            List<string> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
-                stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, stageToken),
+            List<CellSummary> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
+                stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, merge.CellNodeIds, stageToken),
                 result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
                 token).ConfigureAwait(false);
 
             List<PartioChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
-                stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, summaries, stageToken),
+                stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, merge.CellNodeIds, summaries, stageToken),
                 result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
                 token).ConfigureAwait(false);
 

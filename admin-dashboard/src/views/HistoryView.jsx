@@ -4,74 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
-import Modal from '../components/Modal';
 import ErrorBanner from '../components/ErrorBanner';
-import CopyableId from '../components/CopyableId';
-import CopyButton from '../components/CopyButton';
+import HistoryDetailModal from '../components/HistoryDetailModal';
 import { formatDateTime } from '../i18n/formatters';
 
 function truncate(s, n) {
   const v = String(s || '');
   return v.length > n ? v.slice(0, n) + '…' : v;
-}
-
-function ms(v) {
-  if (v == null) return '—';
-  const n = Number(v);
-  return n < 1000 ? `${Math.round(n)} ms` : `${(n / 1000).toFixed(1)} s`;
-}
-
-/** A row of the turn-detail key/value grid. */
-function Row({ label, children }) {
-  return (<><dt>{label}</dt><dd>{children}</dd></>);
-}
-
-function TurnDetail({ turn }) {
-  const { t } = useTranslation();
-  if (!turn) return null;
-  let citations = [];
-  try { citations = turn.citationsJson ? JSON.parse(turn.citationsJson) : []; } catch { citations = []; }
-  const total = turn.totalTokens || ((turn.promptTokens || 0) + (turn.completionTokens || 0));
-  return (
-    <div className="history-detail">
-      <div className="history-block">
-        <span className="history-label">{t('history.question', 'Question')}</span>
-        <div className="history-text">{turn.question}</div>
-      </div>
-      <div className="history-block">
-        <span className="history-label">{t('history.answer', 'Answer')}</span>
-        <div className="history-text">{turn.answer}</div>
-      </div>
-      {turn.thinking ? (
-        <details className="history-block">
-          <summary className="history-label">{t('history.thinking', 'Thinking')}</summary>
-          <div className="history-text" style={{ whiteSpace: 'pre-wrap' }}>{turn.thinking}</div>
-        </details>
-      ) : null}
-      <dl className="kv-grid">
-        <Row label={t('history.id', 'Turn ID')}><CopyableId value={turn.id} /></Row>
-        <Row label={t('history.subject', 'Subject')}>{turn.subjectId ? <CopyableId value={turn.subjectId} truncateLen={12} /> : '—'}</Row>
-        <Row label={t('history.user', 'User')}>{turn.userId ? <CopyableId value={turn.userId} truncateLen={12} /> : '—'}</Row>
-        <Row label={t('history.model', 'Model')}>{turn.model || '—'}</Row>
-        <Row label={t('history.tokens', 'Tokens')}>{`${turn.promptTokens || 0} prompt / ${turn.completionTokens || 0} completion / ${total} total`}</Row>
-        <Row label={t('history.ttft', 'Time to first token')}>{ms(turn.timeToFirstTokenMs)}</Row>
-        <Row label={t('history.gen', 'Generation time')}>{ms(turn.generationMs)}</Row>
-        <Row label={t('history.thinkingTime', 'Thinking time')}>{ms(turn.thinkingMs)}</Row>
-        <Row label={t('history.context', 'Context window')}>{turn.contextSize ? `${turn.contextSize.toLocaleString()} tokens` : '—'}</Row>
-        <Row label={t('history.created', 'Created')}>{formatDateTime(turn.createdUtc)}</Row>
-      </dl>
-      {citations.length > 0 ? (
-        <div className="history-block">
-          <span className="history-label">{t('history.citations', 'Citations')}</span>
-          <ol className="history-citations">
-            {citations.map((c, i) => (
-              <li key={c.linkId || i}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.title || c.url}</a></li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function HistoryView() {
@@ -104,8 +43,8 @@ function HistoryView() {
   const openDetail = useCallback(async (row) => {
     try {
       const full = await apiClient.getHistoryTurn(row.id);
-      setDetail(full?.turn || row);
-    } catch { setDetail(row); }
+      setDetail(full?.turn ? full : { turn: row });
+    } catch { setDetail({ turn: row }); }
   }, [apiClient]);
 
   const subjectName = (id) => subjects.find((s) => s.id === id)?.displayName || '—';
@@ -134,14 +73,7 @@ function HistoryView() {
       <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openDetail}
         emptyMessage={t('history.empty', 'No chat history yet.')} />
 
-      {detail && (
-        <Modal title={t('history.detailTitle', 'Chat turn')} size="lg"
-          headerExtra={<CopyButton value={String(detail.id)} label="ID" />}
-          onClose={() => setDetail(null)}
-          footer={<button type="button" className="button-secondary" onClick={() => setDetail(null)}>{t('common.close')}</button>}>
-          <TurnDetail turn={detail} />
-        </Modal>
-      )}
+      {detail && <HistoryDetailModal detail={detail} subjectName={subjectName} onClose={() => setDetail(null)} />}
     </div>
   );
 }

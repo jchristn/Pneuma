@@ -21,9 +21,10 @@ namespace Pneuma.Server.Services
 
     /// <summary>
     /// The work each ingestion stage performs, factored out of the orchestrating processor: ontology
-    /// classification into a candidate subgraph, graph merge, embedding, search indexing (with chunk nodes
-    /// and vectors), per-stage artifact persistence, and prompt-provenance recording. The processor wraps
-    /// each of these in stage timing, telemetry, and event logging; this class holds only the "what."
+    /// classification into a candidate subgraph, graph merge (source + Cell nodes), summarization, chunking,
+    /// embedding, search indexing (chunks stored only in RecallDB, pointing back at their Cell node),
+    /// per-stage artifact persistence, and prompt-provenance recording. The processor wraps each of these in
+    /// stage timing, telemetry, and event logging; this class holds only the "what."
     /// </summary>
     public class IngestionStages
     {
@@ -123,12 +124,19 @@ namespace Pneuma.Server.Services
             return await _Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
         }
 
-        /// <summary>Merge a candidate subgraph into the knowledge graph, creating and linking the source node.</summary>
+        /// <summary>
+        /// Merge a candidate subgraph into the knowledge graph, creating and linking the source node and a Cell
+        /// node per extracted cell. Cells are the graph's unit of source content: each non-empty cell becomes a
+        /// Cell node linked to the source, and the returned <see cref="MergeResult.CellNodeIds"/> is aligned
+        /// one-to-one with <paramref name="cells"/> so downstream chunks (which live only in RecallDB) can carry
+        /// their originating cell's node id.
+        /// </summary>
         /// <param name="job">The job.</param>
         /// <param name="subgraph">The candidate subgraph to merge.</param>
+        /// <param name="cells">The extracted cells to materialize as Cell nodes.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The merge result (created/linked node and edge ids).</returns>
-        public async Task<MergeResult> MergeAsync(IngestionJob job, CandidateSubgraph subgraph, CancellationToken token)
+        /// <returns>The merge result (created/linked node and edge ids, plus per-cell node ids).</returns>
+        public async Task<MergeResult> MergeAsync(IngestionJob job, CandidateSubgraph subgraph, List<ExtractedCell> cells, CancellationToken token)
         {
             IGraphRepository graph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
             await graph.EnsureGraphAsync(token).ConfigureAwait(false);
@@ -148,26 +156,56 @@ namespace Pneuma.Server.Services
 
             MergeResult merge = await new SubgraphMerger(graph).MergeAsync(subgraph, job.TenantId, job.SubjectId, createdSource.Id, job.Id, token).ConfigureAwait(false);
             if (!merge.NodeIds.Contains(createdSource.Id)) merge.NodeIds.Insert(0, createdSource.Id);
+
+            // Materialize each cell as a Cell node linked to the source. The list is aligned one-to-one with the
+            // input cells (empty string for a cell with no text) so summarization/chunking can look a chunk's
+            // originating cell node up by index.
+            List<string> cellNodeIds = new List<string>(cells != null ? cells.Count : 0);
+            if (cells != null)
+            {
+                foreach (ExtractedCell cell in cells)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (String.IsNullOrWhiteSpace(cell.Text))
+                    {
+                        cellNodeIds.Add(String.Empty);
+                        continue;
+                    }
+                    string cellNodeId = await CreateCellNodeAsync(job, graph, createdSource.Id, cell.Text, token).ConfigureAwait(false);
+                    cellNodeIds.Add(cellNodeId);
+                    if (!String.IsNullOrEmpty(cellNodeId)) merge.NodeIds.Add(cellNodeId);
+                }
+            }
+            merge.CellNodeIds = cellNodeIds;
             return merge;
         }
 
         /// <summary>Summarize each cell via Partio (one discrete pipeline step). Returns the produced summaries.</summary>
         /// <param name="job">The job.</param>
         /// <param name="cells">Extracted semantic cells.</param>
+        /// <param name="cellNodeIds">Cell node ids aligned one-to-one with <paramref name="cells"/> (from the merge stage).</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The non-empty summaries produced, one entry per summarized cell.</returns>
-        public async Task<List<string>> SummarizeCellsAsync(IngestionJob job, List<ExtractedCell> cells, CancellationToken token)
+        /// <returns>The non-empty summaries produced, each paired with its originating cell node id.</returns>
+        public async Task<List<CellSummary>> SummarizeCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> cellNodeIds, CancellationToken token)
         {
             Prompt? summarizePrompt = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "cell.summarize", token).ConfigureAwait(false);
             string? summarizationPrompt = summarizePrompt?.Content;
 
-            List<string> summaries = new List<string>();
-            foreach (ExtractedCell cell in cells)
+            List<CellSummary> summaries = new List<CellSummary>();
+            for (int i = 0; i < cells.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
+                ExtractedCell cell = cells[i];
                 if (String.IsNullOrWhiteSpace(cell.Text)) continue;
                 string summary = await _Partio.SummarizeAsync(cell.Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
-                if (!String.IsNullOrWhiteSpace(summary)) summaries.Add(summary);
+                if (!String.IsNullOrWhiteSpace(summary))
+                {
+                    summaries.Add(new CellSummary
+                    {
+                        CellNodeId = (cellNodeIds != null && i < cellNodeIds.Count) ? cellNodeIds[i] : String.Empty,
+                        Text = summary
+                    });
+                }
             }
             return summaries;
         }
@@ -175,36 +213,43 @@ namespace Pneuma.Server.Services
         /// <summary>Chunk each cell (and each summary) via Partio (one discrete pipeline step); no embeddings yet.</summary>
         /// <param name="job">The job.</param>
         /// <param name="cells">Extracted semantic cells.</param>
-        /// <param name="summaries">Summaries produced by the summarization step.</param>
+        /// <param name="cellNodeIds">Cell node ids aligned one-to-one with <paramref name="cells"/> (from the merge stage).</param>
+        /// <param name="summaries">Summaries produced by the summarization step, each carrying its cell node id.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The produced chunks (text only).</returns>
-        public async Task<List<PartioChunk>> ChunkCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> summaries, CancellationToken token)
+        /// <returns>The produced chunks (text only), each stamped with its originating cell node id.</returns>
+        public async Task<List<PartioChunk>> ChunkCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> cellNodeIds, List<CellSummary> summaries, CancellationToken token)
         {
             List<PartioChunk> all = new List<PartioChunk>();
 
-            foreach (ExtractedCell cell in cells)
+            for (int i = 0; i < cells.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
+                ExtractedCell cell = cells[i];
                 if (String.IsNullOrWhiteSpace(cell.Text)) continue;
+                string cellNodeId = (cellNodeIds != null && i < cellNodeIds.Count) ? cellNodeIds[i] : String.Empty;
                 List<PartioChunk> chunks = await _Partio.ChunkAsync(cell.Text, token).ConfigureAwait(false);
                 if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = cell.Text });
                 foreach (PartioChunk chunk in chunks)
                 {
-                    if (!String.IsNullOrWhiteSpace(chunk.Text)) all.Add(chunk);
+                    if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
+                    chunk.CellNodeId = cellNodeId;
+                    all.Add(chunk);
                 }
             }
 
             if (summaries != null)
             {
-                foreach (string summary in summaries)
+                foreach (CellSummary summary in summaries)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (String.IsNullOrWhiteSpace(summary)) continue;
-                    List<PartioChunk> chunks = await _Partio.ChunkAsync(summary, token).ConfigureAwait(false);
-                    if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = summary });
+                    if (String.IsNullOrWhiteSpace(summary.Text)) continue;
+                    List<PartioChunk> chunks = await _Partio.ChunkAsync(summary.Text, token).ConfigureAwait(false);
+                    if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = summary.Text });
                     foreach (PartioChunk chunk in chunks)
                     {
-                        if (!String.IsNullOrWhiteSpace(chunk.Text)) all.Add(chunk);
+                        if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
+                        chunk.CellNodeId = summary.CellNodeId;
+                        all.Add(chunk);
                     }
                 }
             }
@@ -242,11 +287,12 @@ namespace Pneuma.Server.Services
 
         /// <summary>
         /// Store each chunk as a RecallDB document (content + embedding + provenance tags) in the job's
-        /// collection, creating a first-class Chunk node per chunk in the graph so retrieval hits resolve to
-        /// chunk-level content. The chunk node holds structure and text only; its vector lives exclusively in
-        /// RecallDB (tagged <c>litegraphNodeId</c>) — vectors are no longer stored on graph nodes. Both the
-        /// vector and full-text search paths operate over these same per-chunk documents. Chunks with no text
-        /// or no embedding are skipped (RecallDB requires an embedding matching the collection dimensionality).
+        /// collection. Chunks are the retrieval store's responsibility and are <b>not</b> stored in the graph;
+        /// each document's <c>litegraphNodeId</c> tag points at the chunk's originating Cell node (created in
+        /// the merge stage), falling back to the Source node, so a retrieval hit still resolves to a graph node
+        /// for structure and neighbor expansion. Both the vector and full-text search paths operate over these
+        /// same per-chunk documents. Chunks with no text or no embedding are skipped (RecallDB requires an
+        /// embedding matching the collection dimensionality).
         /// </summary>
         /// <param name="job">The job; its <see cref="IngestionJob.CollectionId"/> selects the target collection.</param>
         /// <param name="merge">The graph merge result (its first node id is the source).</param>
@@ -267,10 +313,9 @@ namespace Pneuma.Server.Services
                 if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
                 if (chunk.Embeddings == null || chunk.Embeddings.Count == 0) continue;
 
-                // Each chunk becomes a first-class Chunk node linked to its source so retrieval resolves to
-                // chunk-level content. Falls back to the source node if chunk-node creation fails.
-                string chunkNodeId = await CreateChunkNodeAsync(job, sourceNodeId, chunk.Text, token).ConfigureAwait(false);
-                string targetNodeId = String.IsNullOrEmpty(chunkNodeId) ? sourceNodeId : chunkNodeId;
+                // The chunk lives only in RecallDB. Its litegraphNodeId resolves to the Cell node it was derived
+                // from (created during merge), falling back to the Source node when the cell has no node.
+                string targetNodeId = String.IsNullOrEmpty(chunk.CellNodeId) ? sourceNodeId : chunk.CellNodeId!;
 
                 // Provenance tags round-trip on search hits: litegraphNodeId resolves the hit to a graph node,
                 // jobId scopes cascade deletion, and linkId/tenantId/subjectId scope search filters.
@@ -387,34 +432,34 @@ namespace Pneuma.Server.Services
             return ModelRunnerProviderEnum.Ollama;
         }
 
-        private async Task<string> CreateChunkNodeAsync(IngestionJob job, string sourceNodeId, string text, CancellationToken token)
+        private async Task<string> CreateCellNodeAsync(IngestionJob job, IGraphRepository graph, string sourceNodeId, string text, CancellationToken token)
         {
             try
             {
-                // The chunk node is a structural anchor only: it links a source to its RecallDB chunk (via the
-                // shared litegraphNodeId) and carries provenance tags. The chunk text itself is the retrieval
-                // store's responsibility, so it is not duplicated onto the node — only a short display label.
-                GraphNode chunkNode = new GraphNode
+                // A Cell node is the graph's unit of source content: it holds the cell's extracted text and links
+                // to its source. Its finer-grained chunks are not graph nodes — they live only in RecallDB and
+                // point back here via litegraphNodeId.
+                GraphNode cellNode = new GraphNode
                 {
-                    NodeType = Ontology.NodeChunk,
+                    NodeType = Ontology.NodeCell,
                     Name = text.Length > 80 ? text.Substring(0, 80) : text,
-                    Labels = new List<string> { Ontology.NodeChunk }
+                    Content = text,
+                    Labels = new List<string> { Ontology.NodeCell }
                 };
-                chunkNode.Tags[Ontology.TagTenantId] = job.TenantId;
-                chunkNode.Tags[Ontology.TagSubjectId] = job.SubjectId;
-                chunkNode.Tags[Ontology.TagNodeType] = Ontology.NodeChunk;
-                chunkNode.Tags[Ontology.TagAssertedByJob] = job.Id;
-                if (!String.IsNullOrEmpty(sourceNodeId)) chunkNode.Tags[Ontology.TagSourceId] = sourceNodeId;
+                cellNode.Tags[Ontology.TagTenantId] = job.TenantId;
+                cellNode.Tags[Ontology.TagSubjectId] = job.SubjectId;
+                cellNode.Tags[Ontology.TagNodeType] = Ontology.NodeCell;
+                cellNode.Tags[Ontology.TagAssertedByJob] = job.Id;
+                if (!String.IsNullOrEmpty(sourceNodeId)) cellNode.Tags[Ontology.TagSourceId] = sourceNodeId;
 
-                IGraphRepository graph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
-                GraphNode created = await graph.CreateNodeAsync(chunkNode, token).ConfigureAwait(false);
+                GraphNode created = await graph.CreateNodeAsync(cellNode, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(created.Id) && !String.IsNullOrEmpty(sourceNodeId))
                 {
                     GraphEdge edge = new GraphEdge
                     {
                         FromNodeId = sourceNodeId,
                         ToNodeId = created.Id,
-                        EdgeType = Ontology.EdgeHasChunk
+                        EdgeType = Ontology.EdgeHasCell
                     };
                     edge.Tags[Ontology.TagAssertedByJob] = job.Id;
                     await graph.CreateEdgeAsync(edge, token).ConfigureAwait(false);
@@ -423,7 +468,7 @@ namespace Pneuma.Server.Services
             }
             catch (Exception exception)
             {
-                _Logging.Warn("[IngestionStages] chunk node creation failed: " + exception.Message);
+                _Logging.Warn("[IngestionStages] cell node creation failed: " + exception.Message);
                 return String.Empty;
             }
         }

@@ -36,7 +36,11 @@ namespace Pneuma.Core.Graph
         /// <summary>A provenance anchor: the artifact a claim came from.</summary>
         public const string NodeSource = "Source";
 
-        /// <summary>A chunk of a source document, carrying its text and (when embedded) its vector.</summary>
+        /// <summary>A semantic cell of a source document, carrying its extracted text. Cells are the
+        /// graph's unit of source content; their finer-grained chunks live only in RecallDB.</summary>
+        public const string NodeCell = "Cell";
+        /// <summary>A chunk of a source document. Legacy node type — chunks are no longer stored in the
+        /// graph (they live only in RecallDB); retained so any pre-existing chunk nodes still resolve.</summary>
         public const string NodeChunk = "Chunk";
         /// <summary>A retrievable media asset.</summary>
         public const string NodeMedia = "Media";
@@ -76,7 +80,9 @@ namespace Pneuma.Core.Graph
         /// <summary>Derived from a provenance source.</summary>
         public const string EdgeDerivedFromSource = "DERIVED_FROM_SOURCE";
 
-        /// <summary>Links a source node to one of its chunk nodes.</summary>
+        /// <summary>Links a source node to one of its cell nodes.</summary>
+        public const string EdgeHasCell = "HAS_CELL";
+        /// <summary>Links a source node to one of its chunk nodes. Legacy — chunks are no longer graph nodes.</summary>
         public const string EdgeHasChunk = "HAS_CHUNK";
         /// <summary>Has an associated media asset.</summary>
         public const string EdgeHasMedia = "HAS_MEDIA";

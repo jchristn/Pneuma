@@ -7,6 +7,14 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Changed
+- **Cells are the graph's unit of source content; chunks live only in RecallDB.** Ingestion no longer
+  creates a `Chunk` node per chunk. Instead the graph-merge stage materializes a `Cell` node per extracted
+  semantic cell (carrying its text, linked to its `Source` via `HAS_CELL`), and each chunk is stored only as
+  a RecallDB document whose `litegraphNodeId` points back at its originating cell node (falling back to the
+  source). Retrieval hits still resolve to a graph node for structure and neighbor expansion, but the graph
+  is no longer inflated with one node per chunk. Legacy `Chunk`/`HAS_CHUNK` types are retained so any
+  pre-existing chunk nodes still resolve; cascade deletion removes cell nodes by the job's `assertedByJob`
+  tag as before.
 - **Retrieval store migrated from Verbex to RecallDB.** Verbex is removed entirely. RecallDB (Postgres +
   pgvector, `:8600`) is now the retrieval store for both vector and full-text search, hidden behind the
   same `IVectorRepository` / `IInvertedIndex` interfaces plus a new `ICollectionStore`. Vectors are no

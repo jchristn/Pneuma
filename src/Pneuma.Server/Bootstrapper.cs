@@ -145,8 +145,8 @@ namespace Pneuma.Server
             }
 
             IContentFetcher fetcher = settings.Ingestion.UseHeadlessBrowser
-                ? new PlaywrightContentFetcher(new HttpContentFetcher(), settings.Ingestion.BrowserNavigationTimeoutMs)
-                : new HttpContentFetcher();
+                ? new PlaywrightContentFetcher(new HttpContentFetcher(settings.Ingestion.UserAgent), settings.Ingestion.BrowserNavigationTimeoutMs, settings.Ingestion.UserAgent)
+                : new HttpContentFetcher(settings.Ingestion.UserAgent);
             IngestionProcessor processor = new IngestionProcessor(
                 database, clients.DocumentAtom, clients.Partio, graphFactory, clients.Vectors, clients.Blobs,
                 artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, logging, telemetry);
