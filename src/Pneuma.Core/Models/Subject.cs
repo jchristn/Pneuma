@@ -85,6 +85,54 @@ namespace Pneuma.Core.Models
         public string? OntologyDefinitionPrompt { get; set; } = null;
 
         /// <summary>
+        /// Partio embedding endpoint id used to vectorize this subject's content at ingestion and to embed
+        /// queries when answering about it. Required before links can be ingested or questions answered.
+        /// </summary>
+        public string? EmbeddingModel { get; set; } = null;
+
+        /// <summary>
+        /// Partio completion endpoint id used for this subject's inference (ingestion classification/
+        /// summarization and answer generation). Required before links can be ingested or questions answered.
+        /// </summary>
+        public string? InferenceModel { get; set; } = null;
+
+        /// <summary>
+        /// Optional Partio completion endpoint id used to re-rank retrieved passages by relevance before
+        /// answering. Null disables the reranking step.
+        /// </summary>
+        public string? RerankingModel { get; set; } = null;
+
+        /// <summary>
+        /// Optional Partio completion endpoint id used to rewrite the user's question into a retrieval query
+        /// before searching. Null disables the prompt-rewrite step.
+        /// </summary>
+        public string? PromptRewriteModel { get; set; } = null;
+
+        /// <summary>
+        /// RecallDB collection id where this subject's ingested chunks are stored and searched. Its
+        /// dimensionality must match <see cref="EmbeddingModel"/>. Required before links can be ingested.
+        /// </summary>
+        public string? Collection { get; set; } = null;
+
+        /// <summary>Default <see cref="RerankingPrompt"/>, applied at creation when none is supplied.</summary>
+        public const string DefaultRerankingPrompt = "Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.";
+
+        /// <summary>
+        /// Optional subject-specific reranking prompt. Appended after the global <c>reranking</c> prompt when a
+        /// reranking model is configured. Defaults to <see cref="DefaultRerankingPrompt"/> at creation.
+        /// </summary>
+        public string? RerankingPrompt { get; set; } = null;
+
+        /// <summary>Default <see cref="PromptRewritePrompt"/>, applied at creation when none is supplied.</summary>
+        public const string DefaultPromptRewritePrompt = "Rewrite the question into a single, self-contained search query for this subject's archive: resolve references, expand abbreviations, and keep it concise.";
+
+        /// <summary>
+        /// Optional subject-specific prompt-rewrite prompt. Appended after the global <c>prompt.rewrite</c>
+        /// prompt when a prompt-rewrite model is configured. Defaults to <see cref="DefaultPromptRewritePrompt"/>.
+        /// </summary>
+        public string? PromptRewritePrompt { get; set; } = null;
+
+        /// <summary>
         /// Number of days chat-turn history is retained for this subject before pruning. Clamped to a minimum
         /// of 1. Default 90.
         /// </summary>

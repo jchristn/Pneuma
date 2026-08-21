@@ -36,17 +36,13 @@ function LinksView() {
   const [error, setError] = useState('');
   const [autoRefreshMs, setAutoRefreshMs] = useState(0);
 
-  const [embeddingEndpoints, setEmbeddingEndpoints] = useState([]);
-  const [completionEndpoints, setCompletionEndpoints] = useState([]);
-  const [collections, setCollections] = useState([]);
-
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [form, setForm] = useState({ subjectId: '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: '' });
+  const [form, setForm] = useState({ subjectId: '', url: '', title: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: '' });
+  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '' });
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [notice, setNotice] = useState('');
@@ -70,20 +66,13 @@ function LinksView() {
       if (showSpinner) setLoading(true);
       setError('');
       try {
-        const [l, c, e, col] = await Promise.allSettled([
+        const [l, c] = await Promise.allSettled([
           apiClient.getLinks({ maxResults: 1000 }),
-          apiClient.getSubjects({ maxResults: 1000 }),
-          apiClient.listIngestionEndpoints(),
-          apiClient.listCollections()
+          apiClient.getSubjects({ maxResults: 1000 })
         ]);
         if (l.status === 'fulfilled') setLinks(asArray(l.value, 'links'));
         else setError(l.reason?.message || 'Failed to load links');
         if (c.status === 'fulfilled') setSubjects(asArray(c.value, 'subjects'));
-        if (e.status === 'fulfilled') {
-          setEmbeddingEndpoints(asArray(e.value?.embedding).filter((x) => x.active !== false));
-          setCompletionEndpoints(asArray(e.value?.completion).filter((x) => x.active !== false));
-        }
-        if (col.status === 'fulfilled') setCollections(asArray(col.value).filter((x) => (x.active ?? x.Active) !== false));
       } finally {
         if (showSpinner) setLoading(false);
       }
@@ -104,10 +93,8 @@ function LinksView() {
     return () => window.clearInterval(id);
   }, [autoRefreshMs]);
 
-  const hasEndpoints = embeddingEndpoints.length > 0 && completionEndpoints.length > 0 && collections.length > 0;
-
   const openSubmit = () => {
-    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: collections.length === 1 ? (collections[0].id ?? collections[0].Id) : '' });
+    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '' });
     setFormError('');
     setNotice('');
     setSubmitOpen(true);
@@ -123,23 +110,12 @@ function LinksView() {
       setFormError('URL is required.');
       return;
     }
-    if (!form.embeddingEndpointId || !form.completionEndpointId) {
-      setFormError(t('links.selectModelsRequired'));
-      return;
-    }
-    if (!form.collectionId) {
-      setFormError(t('links.selectCollectionRequired'));
-      return;
-    }
     setSubmitting(true);
     setFormError('');
     try {
       await apiClient.submitLink(form.subjectId, {
         url: form.url.trim(),
-        title: form.title.trim(),
-        embeddingEndpointId: form.embeddingEndpointId,
-        completionEndpointId: form.completionEndpointId,
-        collectionId: form.collectionId
+        title: form.title.trim()
       });
       setSubmitOpen(false);
       await load(false);
@@ -151,7 +127,7 @@ function LinksView() {
   };
 
   const openBulk = () => {
-    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '', embeddingEndpointId: '', completionEndpointId: '', collectionId: collections.length === 1 ? (collections[0].id ?? collections[0].Id) : '' });
+    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '' });
     setBulkError('');
     setNotice('');
     setBulkOpen(true);
@@ -171,23 +147,10 @@ function LinksView() {
       setBulkError(t('links.urlsRequired'));
       return;
     }
-    if (!bulkForm.embeddingEndpointId || !bulkForm.completionEndpointId) {
-      setBulkError(t('links.selectModelsRequired'));
-      return;
-    }
-    if (!bulkForm.collectionId) {
-      setBulkError(t('links.selectCollectionRequired'));
-      return;
-    }
     setBulkSubmitting(true);
     setBulkError('');
     try {
-      const result = await apiClient.bulkSubmitLinks(bulkForm.subjectId, {
-        urls,
-        embeddingEndpointId: bulkForm.embeddingEndpointId,
-        completionEndpointId: bulkForm.completionEndpointId,
-        collectionId: bulkForm.collectionId
-      });
+      const result = await apiClient.bulkSubmitLinks(bulkForm.subjectId, { urls });
       const created = typeof result?.created === 'number' ? result.created : asArray(result, 'links').length;
       setBulkOpen(false);
       setNotice(t('links.bulkCreated', { count: created }));
@@ -362,10 +325,6 @@ function LinksView() {
         isOpen={submitOpen}
         onClose={() => setSubmitOpen(false)}
         subjects={subjects}
-        embeddingEndpoints={embeddingEndpoints}
-        completionEndpoints={completionEndpoints}
-        collections={collections}
-        hasEndpoints={hasEndpoints}
         form={form}
         setForm={setForm}
         formError={formError}
@@ -377,10 +336,6 @@ function LinksView() {
         isOpen={bulkOpen}
         onClose={() => setBulkOpen(false)}
         subjects={subjects}
-        embeddingEndpoints={embeddingEndpoints}
-        completionEndpoints={completionEndpoints}
-        collections={collections}
-        hasEndpoints={hasEndpoints}
         bulkForm={bulkForm}
         setBulkForm={setBulkForm}
         bulkError={bulkError}

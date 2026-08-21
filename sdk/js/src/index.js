@@ -404,9 +404,11 @@ export class PneumaClient {
     // ==================== Content Links & Ingestion ====================
 
     /**
-     * Submit a link for a subject, enqueuing an ingestion job.
+     * Submit a link for a subject, enqueuing an ingestion job. The embedding/inference models and collection
+     * used for ingestion are taken from the subject, so only the URL (and optional title) are supplied here.
+     * The subject must have those configured or the request fails with 400.
      * @param {string} subjectId
-     * @param {{ url: string, title?: string, embeddingEndpointId: string, completionEndpointId: string }} link
+     * @param {{ url: string, title?: string }} link
      * @returns {Promise<object>}
      */
     submitLink(subjectId, link) {
@@ -414,9 +416,10 @@ export class PneumaClient {
     }
 
     /**
-     * Submit multiple links for a subject in a single call, enqueuing one ingestion job per URL.
+     * Submit multiple links for a subject in a single call, enqueuing one ingestion job per URL. The models and
+     * collection are taken from the subject.
      * @param {string} subjectId
-     * @param {{ urls: string[], embeddingEndpointId: string, completionEndpointId: string }} body
+     * @param {{ urls: string[] }} body
      * @returns {Promise<{ created: number, links: object[] }>}
      */
     submitLinks(subjectId, body) {

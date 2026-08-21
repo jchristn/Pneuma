@@ -10,13 +10,8 @@ namespace Pneuma.Sdk.Requests
         /// <summary>The content URL to ingest.</summary>
         public string Url { get; set; } = string.Empty;
 
-        /// <summary>Optional operator-facing title.</summary>
+        /// <summary>Optional operator-facing title. The models and collection used for ingestion are taken from
+        /// the subject, so no model selection is supplied here.</summary>
         public string? Title { get; set; } = null;
-
-        /// <summary>Identifier of the Partio embedding endpoint to use for ingestion (prefix "eep_").</summary>
-        public string? EmbeddingEndpointId { get; set; } = null;
-
-        /// <summary>Identifier of the Partio completion endpoint to use for ingestion (prefix "cep_").</summary>
-        public string? CompletionEndpointId { get; set; } = null;
     }
 }

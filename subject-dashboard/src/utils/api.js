@@ -179,18 +179,15 @@ class ApiClient {
   }
   // Submitting a link enqueues an ingestion job server-side. The backend requires an embedding
   // endpoint, a completion endpoint, and a target collection.
-  async submitLink(subjectId, { url, title, embeddingEndpointId, completionEndpointId, collectionId }) {
+  // The subject owns its embedding/inference models and collection, so submission carries only url/title.
+  async submitLink(subjectId, { url, title }) {
     const body = { url };
     if (title) body.title = title;
-    if (embeddingEndpointId) body.embeddingEndpointId = embeddingEndpointId;
-    if (completionEndpointId) body.completionEndpointId = completionEndpointId;
-    if (collectionId) body.collectionId = collectionId;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, { body });
   }
   // Bulk submit multiple links for a subject in a single request.
-  async bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId, collectionId }) {
-    const body = { urls, embeddingEndpointId, completionEndpointId, collectionId };
-    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
+  async bulkSubmitLinks(subjectId, { urls }) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body: { urls } });
   }
 
   // Ingestion jobs

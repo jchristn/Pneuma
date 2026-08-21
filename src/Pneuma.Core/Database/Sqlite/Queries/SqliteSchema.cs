@@ -72,6 +72,18 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "ALTER TABLE subjects ADD COLUMN tagline TEXT;",
                     "UPDATE subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
                 }));
+                list.Add(new SchemaMigration(10, "Add subject models, collection, and rerank/rewrite prompts", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN embeddingmodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN inferencemodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN rerankingmodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN promptrewritemodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN collection TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN rerankingprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN promptrewriteprompt TEXT;",
+                    "UPDATE subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
+                    "UPDATE subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
+                }));
                 return list;
             }
         }

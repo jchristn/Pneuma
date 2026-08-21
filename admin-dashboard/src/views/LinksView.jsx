@@ -18,23 +18,6 @@ function isLinkFailed(link) {
   return String(link?.status || '').toLowerCase() === 'failed';
 }
 
-// Build { value, label } option lists from an ingestion-endpoint entry.
-function endpointOptions(list) {
-  return (Array.isArray(list) ? list : []).map((e) => ({
-    value: e.id ?? e.Id,
-    label: e.name || e.model || e.id || e.Id
-  }));
-}
-
-// Build { value, label } option lists from a vector-collection entry (name + dimensionality).
-function collectionSelectOptions(list) {
-  return (Array.isArray(list) ? list : []).map((c) => {
-    const dims = c.dimensionality ?? c.Dimensionality;
-    const name = c.name || c.Name || c.id || c.Id;
-    return { value: c.id ?? c.Id, label: dims ? `${name} (${dims}d)` : name };
-  });
-}
-
 function LinksView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
@@ -42,9 +25,6 @@ function LinksView() {
   const [logLink, setLogLink] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState(searchParams.get('subjectId') || '');
-  const [embeddingOptions, setEmbeddingOptions] = useState([]);
-  const [completionOptions, setCompletionOptions] = useState([]);
-  const [collectionOptions, setCollectionOptions] = useState([]);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkCreated, setBulkCreated] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -62,32 +42,6 @@ function LinksView() {
     apiClient.list('subjects', { maxResults: 1000 })
       .then((resp) => { if (!cancelled) setSubjects(normalizeList(resp).items); })
       .catch(() => { if (!cancelled) setSubjects([]); });
-    return () => { cancelled = true; };
-  }, [apiClient]);
-
-  // Load available embedding/completion model endpoints for the create + bulk forms.
-  useEffect(() => {
-    let cancelled = false;
-    apiClient.listIngestionEndpoints()
-      .then((resp) => {
-        if (cancelled) return;
-        setEmbeddingOptions(endpointOptions(resp?.embedding || resp?.Embedding));
-        setCompletionOptions(endpointOptions(resp?.completion || resp?.Completion));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setEmbeddingOptions([]);
-        setCompletionOptions([]);
-      });
-    return () => { cancelled = true; };
-  }, [apiClient]);
-
-  // Load the vector collections operators have defined, for the create + bulk forms.
-  useEffect(() => {
-    let cancelled = false;
-    apiClient.listCollections()
-      .then((resp) => { if (!cancelled) setCollectionOptions(collectionSelectOptions(normalizeList(resp).items)); })
-      .catch(() => { if (!cancelled) setCollectionOptions([]); });
     return () => { cancelled = true; };
   }, [apiClient]);
 
@@ -116,26 +70,18 @@ function LinksView() {
 
   const subjectOptions = subjects.map((c) => ({ value: c.id, label: c.displayName || c.name || c.id }));
 
-  const noEndpoints = embeddingOptions.length === 0 || completionOptions.length === 0 || collectionOptions.length === 0;
-  const noCollections = collectionOptions.length === 0;
-
   const formFields = [
-    { name: 'subjectId', label: t('links.subject'), type: 'select', required: true, placeholder: t('links.selectSubject'), default: selectedSubjectId || '', options: subjectOptions, tip: 'Which subject this source belongs to. Its extracted content and answers are scoped to that subject.' },
-    { name: 'url', label: 'URL', required: true, placeholder: 'https://...', tip: 'The web page or document URL to ingest. Pneuma crawls it, extracts entities and text, embeds it, and indexes it.' },
-    { name: 'title', label: t('links.title'), tip: 'Optional friendly name for this source. Defaults to the page title when left blank.' },
-    { name: 'embeddingEndpointId', label: t('links.embeddingModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: embeddingOptions, default: embeddingOptions.length === 1 ? embeddingOptions[0].value : undefined, tip: 'The embedding endpoint used to vectorize this source. Must produce vectors matching the target collection’s dimensionality.' },
-    { name: 'completionEndpointId', label: t('links.completionModel'), type: 'select', required: true, placeholder: t('links.selectModel'), options: completionOptions, default: completionOptions.length === 1 ? completionOptions[0].value : undefined, tip: 'The completion endpoint used during ingestion to extract the knowledge-graph (entities and relationships) from this source.' },
-    { name: 'collectionId', label: t('links.collection'), type: 'select', required: true, placeholder: t('links.selectCollection'), options: collectionOptions, default: collectionOptions.length === 1 ? collectionOptions[0].value : undefined, tip: 'The RecallDB collection this source’s chunks are indexed into. Choose one whose dimensionality matches the embedding model.' }
+    { name: 'subjectId', label: t('links.subject'), type: 'select', required: true, placeholder: t('links.selectSubject'), default: selectedSubjectId || '', options: subjectOptions, tip: 'Which subject this source belongs to. Its extracted content and answers are scoped to that subject, and the subject’s configured models and collection are used to ingest it.' },
+    { name: 'url', label: 'URL', required: true, placeholder: 'https://...', tip: 'The web page or document URL to ingest. Pneuma crawls it, extracts entities and text, embeds it, and indexes it using the subject’s configured models.' },
+    { name: 'title', label: t('links.title'), tip: 'Optional friendly name for this source. Defaults to the page title when left blank.' }
   ];
 
-  // Links are created via /v1.0/subjects/{subjectId}/links which enqueues ingestion.
+  // Links are created via /v1.0/subjects/{subjectId}/links which enqueues ingestion. The subject owns the
+  // embedding/inference models and collection, so the submission carries only the URL and title.
   const subject = (client, body) =>
     client.create(`subjects/${encodeURIComponent(body.subjectId)}/links`, {
       url: body.url,
-      title: body.title,
-      embeddingEndpointId: body.embeddingEndpointId,
-      completionEndpointId: body.completionEndpointId,
-      collectionId: body.collectionId
+      title: body.title
     });
 
   // Server-side filtering via the subject's links endpoint when a subject is chosen.
@@ -269,8 +215,6 @@ function LinksView() {
             {t('links.addMultiple')}
           </button>
         )}
-        createDisabled={noEndpoints}
-        createNotice={noEndpoints ? (noCollections ? t('links.noCollections') : t('links.noEndpoints')) : null}
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
         bulkActions={linkBulkActions}
@@ -316,9 +260,6 @@ function LinksView() {
       {showBulk && (
         <BulkAddLinksModal
           subjectOptions={subjectOptions}
-          embeddingOptions={embeddingOptions}
-          completionOptions={completionOptions}
-          collectionOptions={collectionOptions}
           onClose={() => setShowBulk(false)}
           onCreated={(created) => {
             setShowBulk(false);

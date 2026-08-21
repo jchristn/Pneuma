@@ -102,6 +102,30 @@ namespace Pneuma.Server.Routes
             return false;
         }
 
+        /// <summary>
+        /// Ensure the subject owns the configuration ingestion needs (embedding + inference models and an
+        /// existing collection). Sends a 400 describing what to set and returns false when it is not configured.
+        /// </summary>
+        private async Task<bool> RequireSubjectConfiguredAsync(HttpContextBase ctx, string tenantId, Subject subject)
+        {
+            if (String.IsNullOrWhiteSpace(subject.EmbeddingModel) || String.IsNullOrWhiteSpace(subject.InferenceModel))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "This subject has no embedding and inference model configured. Set them on the subject before submitting links.").ConfigureAwait(false);
+                return false;
+            }
+            if (String.IsNullOrWhiteSpace(subject.Collection))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "This subject has no collection configured. Set it on the subject before submitting links.").ConfigureAwait(false);
+                return false;
+            }
+            if (!await _Collections.CollectionExistsAsync(tenantId, subject.Collection!, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "This subject's configured collection no longer exists. Update the subject's collection.").ConfigureAwait(false);
+                return false;
+            }
+            return true;
+        }
+
         private async Task SubmitAsync(HttpContextBase ctx)
         {
             RequestContext rc = RouteHelper.Context(ctx);
@@ -129,22 +153,8 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            if (String.IsNullOrWhiteSpace(request.EmbeddingEndpointId) || String.IsNullOrWhiteSpace(request.CompletionEndpointId))
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "An embedding endpoint and completion endpoint are required.").ConfigureAwait(false);
-                return;
-            }
-
-            if (String.IsNullOrWhiteSpace(request.CollectionId))
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A collection is required.").ConfigureAwait(false);
-                return;
-            }
-            if (!await _Collections.CollectionExistsAsync(tenantId, request.CollectionId!, ctx.Token).ConfigureAwait(false))
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "The specified collection does not exist.").ConfigureAwait(false);
-                return;
-            }
+            // Models and collection are owned by the subject; the link body carries only the URL/title.
+            if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
 
             SubjectLink link = new SubjectLink
             {
@@ -163,9 +173,9 @@ namespace Pneuma.Server.Routes
                 SourceUrl = link.Url,
                 Status = IngestionStatusEnum.Queued,
                 Stage = IngestionStageEnum.Pending,
-                EmbeddingEndpointId = request.EmbeddingEndpointId,
-                CompletionEndpointId = request.CompletionEndpointId,
-                CollectionId = request.CollectionId
+                EmbeddingEndpointId = subject.EmbeddingModel,
+                CompletionEndpointId = subject.InferenceModel,
+                CollectionId = subject.Collection
             };
             SubjectLink createdLink = await _Db.SubjectLinks.CreateWithJobAsync(link, job, ctx.Token).ConfigureAwait(false);
 
@@ -193,22 +203,14 @@ namespace Pneuma.Server.Routes
             }
 
             BulkSubmitLinkRequest? request = RouteHelper.ReadBody<BulkSubmitLinkRequest>(ctx);
-            if (request == null || String.IsNullOrWhiteSpace(request.EmbeddingEndpointId) || String.IsNullOrWhiteSpace(request.CompletionEndpointId))
+            if (request == null)
             {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "An embedding endpoint and completion endpoint are required.").ConfigureAwait(false);
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A request body with URLs is required.").ConfigureAwait(false);
                 return;
             }
 
-            if (String.IsNullOrWhiteSpace(request.CollectionId))
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A collection is required.").ConfigureAwait(false);
-                return;
-            }
-            if (!await _Collections.CollectionExistsAsync(tenantId, request.CollectionId!, ctx.Token).ConfigureAwait(false))
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "The specified collection does not exist.").ConfigureAwait(false);
-                return;
-            }
+            // Models and collection are owned by the subject; the bulk body carries only URLs.
+            if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
 
             List<string> urls = new List<string>();
             if (request.Urls != null)
@@ -244,9 +246,9 @@ namespace Pneuma.Server.Routes
                     SourceUrl = link.Url,
                     Status = IngestionStatusEnum.Queued,
                     Stage = IngestionStageEnum.Pending,
-                    EmbeddingEndpointId = request.EmbeddingEndpointId,
-                    CompletionEndpointId = request.CompletionEndpointId,
-                    CollectionId = request.CollectionId
+                    EmbeddingEndpointId = subject.EmbeddingModel,
+                    CompletionEndpointId = subject.InferenceModel,
+                    CollectionId = subject.Collection
                 };
                 SubjectLink createdLink = await _Db.SubjectLinks.CreateWithJobAsync(link, job, ctx.Token).ConfigureAwait(false);
 

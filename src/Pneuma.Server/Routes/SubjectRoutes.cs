@@ -110,6 +110,8 @@ namespace Pneuma.Server.Routes
             subject.TenantId = rc.TenantId;
             if (String.IsNullOrWhiteSpace(subject.GraphRootNodeId)) subject.GraphRootNodeId = SlugHelper.Slugify(subject.DisplayName);
             if (String.IsNullOrWhiteSpace(subject.Tagline)) subject.Tagline = Subject.DefaultTagline;
+            if (String.IsNullOrWhiteSpace(subject.RerankingPrompt)) subject.RerankingPrompt = Subject.DefaultRerankingPrompt;
+            if (String.IsNullOrWhiteSpace(subject.PromptRewritePrompt)) subject.PromptRewritePrompt = Subject.DefaultPromptRewritePrompt;
 
             // Resolve the URL slug: an explicit, already-taken slug is a conflict; an auto-generated one is
             // de-duplicated by appending a numeric suffix so subject creation never fails on a name clash.
@@ -213,6 +215,13 @@ namespace Pneuma.Server.Routes
             existing.SystemPrompt = update.SystemPrompt;
             existing.OntologyClassifyPrompt = update.OntologyClassifyPrompt;
             existing.OntologyDefinitionPrompt = update.OntologyDefinitionPrompt;
+            existing.EmbeddingModel = update.EmbeddingModel;
+            existing.InferenceModel = update.InferenceModel;
+            existing.RerankingModel = update.RerankingModel;
+            existing.PromptRewriteModel = update.PromptRewriteModel;
+            existing.Collection = update.Collection;
+            existing.RerankingPrompt = update.RerankingPrompt;
+            existing.PromptRewritePrompt = update.PromptRewritePrompt;
             existing.HistoryRetentionDays = update.HistoryRetentionDays;
 
             // A changed slug must stay unique within the tenant; an explicit clash with another subject is a conflict.

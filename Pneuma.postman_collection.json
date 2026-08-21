@@ -367,7 +367,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\"\n}"
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects"
           }
@@ -406,7 +406,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}"
+              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\"\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links"
           }
@@ -423,7 +423,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"embeddingEndpointId\": \"default\",\n  \"completionEndpointId\": \"default\",\n  \"collectionId\": \"{{collectionId}}\"\n}"
+              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ]\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links/bulk"
           }
@@ -540,7 +540,7 @@
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\"\n}"
+              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\"\n}"
             }
           }
         },

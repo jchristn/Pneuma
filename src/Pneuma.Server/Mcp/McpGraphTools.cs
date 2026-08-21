@@ -88,6 +88,10 @@ namespace Pneuma.Server.Mcp
                 : new Dictionary<string, string> { { "subjectId", subjectId } };
             List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, token).ConfigureAwait(false);
 
+            // Optional reranking: when the subject has a reranking model configured, reorder the hits by
+            // relevance to the query (by snippet) before they are surfaced to the assistant.
+            hits = await _Query.RerankAsync(tenantId, subjectId, query, hits, h => h.Snippet ?? String.Empty, token).ConfigureAwait(false);
+
             IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (SearchHit hit in hits)

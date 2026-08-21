@@ -74,14 +74,16 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\"}", ct);
+                            // Models + collection are owned by the subject; create the collection first, then a
+                            // subject configured with it, then submit a link carrying only the URL.
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
                             string subjectBody = await subjectResp.Content.ReadAsStringAsync(ct);
                             string subjectId = ExtractString(subjectBody, "id");
                             if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
 
-                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
-
-                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/a\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"" + collectionId + "\"}", ct);
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/a\"}", ct);
                             if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
 
                             HttpResponseMessage jobsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs", token, null, ct);
@@ -176,10 +178,10 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Stop Test\",\"type\":\"Person\"}", ct);
-                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
                             string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
-                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/stop\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"" + collectionId + "\"}", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Stop Test\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/stop\"}", ct);
                             if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
 
                             HttpResponseMessage jobsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs?status=Queued", token, null, ct);

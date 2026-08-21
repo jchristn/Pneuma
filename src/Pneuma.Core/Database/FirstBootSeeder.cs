@@ -203,6 +203,11 @@ namespace Pneuma.Core.Database
 
             await SeedPromptAsync(db, "assistant.compress", "Conversation Compression", DefaultConversationCompressionPrompt, token).ConfigureAwait(false);
 
+            // Retrieval-quality prompts. Applied only when a subject has the corresponding model configured;
+            // the subject may append its own override after this global base (same merge as the system prompt).
+            await SeedPromptAsync(db, "prompt.rewrite", "Prompt Rewrite", DefaultPromptRewritePrompt, token).ConfigureAwait(false);
+            await SeedPromptAsync(db, "reranking", "Reranking", DefaultRerankingPrompt, token).ConfigureAwait(false);
+
             // Self-heal the two answering prompts on existing deployments (e.g. the local docker Postgres volume,
             // which is seeded once and never re-seeded): if an unedited default is still stored — recognized by its
             // opening phrase and the absence of the internal-identifier rule — replace it with the current default so
@@ -220,6 +225,28 @@ namespace Pneuma.Core.Database
             "expose internal identifiers — do not print node ids, GUIDs, or other database keys (for example, never write " +
             "\"(node e125fc8a-...)\"); they are internal plumbing and meaningless to the reader. If the corpus does not support " +
             "an answer, say so plainly rather than guessing.";
+
+        /// <summary>
+        /// Default global prompt-rewrite prompt (Prompts key "prompt.rewrite"). Used only when a subject has a
+        /// prompt-rewrite model configured; the subject may append its own guidance after this base.
+        /// </summary>
+        private const string DefaultPromptRewritePrompt =
+            "You rewrite a user's question into a single, self-contained search query for retrieving relevant " +
+            "passages from a knowledge archive about one subject. Resolve pronouns and references using the " +
+            "conversation so far, expand abbreviations, and keep it concise and focused on the information need. " +
+            "Respond with ONLY the rewritten query text — no preamble, quotes, or explanation. If the question is " +
+            "already a good standalone query, return it unchanged.";
+
+        /// <summary>
+        /// Default global reranking prompt (Prompts key "reranking"). Used only when a subject has a reranking
+        /// model configured; the subject may append its own guidance after this base.
+        /// </summary>
+        private const string DefaultRerankingPrompt =
+            "You are a passage re-ranker for a knowledge archive. You will be given a question and a numbered list " +
+            "of candidate passages. Order the passages from most to least relevant to answering the question, " +
+            "judging only relevance to the question (ignore length, style, or position). Respond with ONLY the " +
+            "passage numbers in ranked order, most relevant first, separated by commas (for example: 3,1,2). Do not " +
+            "include any other text, explanation, or numbers that are not in the list.";
 
         /// <summary>
         /// Default prompt for compacting a long chat conversation into a compact summary (Prompts key

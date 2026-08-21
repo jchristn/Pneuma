@@ -72,6 +72,18 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS tagline TEXT;",
                     "UPDATE subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
                 }));
+                list.Add(new SchemaMigration(10, "Add subject models, collection, and rerank/rewrite prompts", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS embeddingmodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS inferencemodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS rerankingmodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS promptrewritemodel TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS collection TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS rerankingprompt TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS promptrewriteprompt TEXT;",
+                    "UPDATE subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
+                    "UPDATE subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
+                }));
                 return list;
             }
         }

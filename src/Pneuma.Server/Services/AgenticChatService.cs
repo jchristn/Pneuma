@@ -103,7 +103,13 @@ namespace Pneuma.Server.Services
 
             string tenantId = rc.TenantId ?? String.Empty;
 
-            ModelRunner? runner = await _Query.ResolveAnswerRunnerAsync(tenantId, token).ConfigureAwait(false);
+            // Subject context drives the per-subject system prompt (global base + subject appended), the answer
+            // model, whether model thinking is surfaced, and the optional prompt-rewrite / rerank steps.
+            Subject? subject = String.IsNullOrWhiteSpace(subjectId)
+                ? null
+                : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+
+            ModelRunner? runner = await _Query.ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
             if (runner == null)
             {
                 await emit(new { type = "complete", answer = "No answering model is configured. Ask an administrator to add a model runner.", model = (string?)null }, true, token).ConfigureAwait(false);
@@ -112,12 +118,6 @@ namespace Pneuma.Server.Services
 
             Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.system", token).ConfigureAwait(false);
             string systemPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackSystemPrompt : prompt!.Content;
-
-            // Subject context drives the per-subject system prompt (global base + subject appended) and whether
-            // model thinking is surfaced to the caller. Thinking is always captured; the flag only gates display.
-            Subject? subject = String.IsNullOrWhiteSpace(subjectId)
-                ? null
-                : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
             if (subject != null && !String.IsNullOrWhiteSpace(subject.SystemPrompt))
             {
                 systemPrompt = systemPrompt + "\n\n" + subject.SystemPrompt!.Trim();
@@ -128,13 +128,25 @@ namespace Pneuma.Server.Services
             CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
             List<ToolDefinition> tools = McpToolCatalog.BuildAssistantToolDefinitions();
 
+            // Optional prompt-rewrite of the latest user turn: the model then reasons and forms its tool queries
+            // over the rewritten question. The original turn is unchanged in the caller's transcript.
+            int lastUserIndex = -1;
+            for (int i = turns.Count - 1; i >= 0; i--)
+            {
+                if (!String.Equals(turns[i].Role, "assistant", StringComparison.OrdinalIgnoreCase)) { lastUserIndex = i; break; }
+            }
+            string? rewrittenLastTurn = lastUserIndex >= 0
+                ? await _Query.RewriteQuestionAsync(tenantId, subject, turns[lastUserIndex].Content ?? String.Empty, token).ConfigureAwait(false)
+                : null;
+
             List<ChatMessage> messages = new List<ChatMessage>();
             messages.Add(ChatMessage.System(systemPrompt));
-            foreach (ChatTurn turn in turns)
+            for (int i = 0; i < turns.Count; i++)
             {
+                ChatTurn turn = turns[i];
                 string content = turn.Content ?? String.Empty;
                 if (String.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase)) messages.Add(ChatMessage.Assistant(content));
-                else messages.Add(ChatMessage.User(content));
+                else messages.Add(ChatMessage.User(i == lastUserIndex && rewrittenLastTurn != null ? rewrittenLastTurn : content));
             }
 
             // Automatic conversation compaction: when the running history approaches the answering model's

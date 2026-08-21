@@ -14,6 +14,17 @@ const AUTO_REFRESH_OPTIONS = [
   { value: 300, label: '300 seconds' }
 ];
 
+// Persist the auto-refresh choice per route so a table keeps its interval between page visits.
+const AUTO_REFRESH_STORAGE_PREFIX = 'pneuma.autoRefreshSec:';
+function readStoredAutoRefresh() {
+  try {
+    const val = Number(window.localStorage.getItem(AUTO_REFRESH_STORAGE_PREFIX + window.location.pathname));
+    return AUTO_REFRESH_OPTIONS.some((o) => o.value === val) ? val : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Reusable data table with above-table pagination.
  * Client mode (default): pass `data`, sorting/paging handled internally.
@@ -38,7 +49,13 @@ function DataTable({
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [sort, setSort] = useState({ key: null, dir: 'asc' });
   const [pageInput, setPageInput] = useState('1');
-  const [autoRefreshSec, setAutoRefreshSec] = useState(0);
+  const [autoRefreshSec, setAutoRefreshSec] = useState(readStoredAutoRefresh);
+
+  const handleAutoRefreshChange = (e) => {
+    const val = Number(e.target.value);
+    setAutoRefreshSec(val);
+    try { window.localStorage.setItem(AUTO_REFRESH_STORAGE_PREFIX + window.location.pathname, String(val)); } catch { /* ignore */ }
+  };
 
   // Auto-refresh: re-run onRefresh on the chosen interval. A ref keeps the timer pointed at the latest
   // callback without restarting on every render (only a changed interval resets the timer).
@@ -168,7 +185,7 @@ function DataTable({
           {onRefresh && (
             <label className="auto-refresh-control" title="Automatically reload this table on the selected interval.">
               <span className="auto-refresh-label">{t('table.autoRefresh', 'Auto-refresh')}</span>
-              <select value={autoRefreshSec} onChange={(e) => setAutoRefreshSec(Number(e.target.value))}
+              <select value={autoRefreshSec} onChange={handleAutoRefreshChange}
                 aria-label={t('table.autoRefresh', 'Auto-refresh')}>
                 {AUTO_REFRESH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>

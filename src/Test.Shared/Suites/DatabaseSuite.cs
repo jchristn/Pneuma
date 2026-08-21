@@ -383,6 +383,13 @@ namespace Test.Shared.Suites
                                 SystemPrompt = "Be precise.",
                                 OntologyClassifyPrompt = "Classify people.",
                                 OntologyDefinitionPrompt = "People and works.",
+                                EmbeddingModel = "eep_ada",
+                                InferenceModel = "cep_ada",
+                                RerankingModel = "cep_rerank",
+                                PromptRewriteModel = "cep_rewrite",
+                                Collection = "col_ada",
+                                RerankingPrompt = "Rank by relevance.",
+                                PromptRewritePrompt = "Rewrite tersely.",
                                 HistoryRetentionDays = 0 // must clamp to >= 1
                             }, ct);
                             if (created.HistoryRetentionDays != 1) throw new Exception("HistoryRetentionDays must clamp to a minimum of 1, got " + created.HistoryRetentionDays);
@@ -394,6 +401,13 @@ namespace Test.Shared.Suites
                             if (read.SystemPrompt != "Be precise.") throw new Exception("SystemPrompt did not round-trip");
                             if (read.OntologyClassifyPrompt != "Classify people.") throw new Exception("OntologyClassifyPrompt did not round-trip");
                             if (read.OntologyDefinitionPrompt != "People and works.") throw new Exception("OntologyDefinitionPrompt did not round-trip");
+                            if (read.EmbeddingModel != "eep_ada") throw new Exception("EmbeddingModel did not round-trip");
+                            if (read.InferenceModel != "cep_ada") throw new Exception("InferenceModel did not round-trip");
+                            if (read.RerankingModel != "cep_rerank") throw new Exception("RerankingModel did not round-trip");
+                            if (read.PromptRewriteModel != "cep_rewrite") throw new Exception("PromptRewriteModel did not round-trip");
+                            if (read.Collection != "col_ada") throw new Exception("Collection did not round-trip");
+                            if (read.RerankingPrompt != "Rank by relevance.") throw new Exception("RerankingPrompt did not round-trip");
+                            if (read.PromptRewritePrompt != "Rewrite tersely.") throw new Exception("PromptRewritePrompt did not round-trip");
                             if (read.DeletionStatus != SubjectDeletionStatusEnum.None) throw new Exception("New subject must have DeletionStatus None");
 
                             Subject bySlug = await db.Subjects.ReadBySlugAsync(t.Id, "ada-lovelace", ct) ?? throw new Exception("ReadBySlug failed to resolve the slug");

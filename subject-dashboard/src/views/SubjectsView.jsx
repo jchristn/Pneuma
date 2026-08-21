@@ -23,14 +23,27 @@ const DEFAULT_ONTOLOGY_DEFINITION =
   + 'Relationships: created, contributed-to, participated-in, located-in, part-of, influenced, associated-with.';
 // Default ask-page subtitle, mirroring the backend Subject.DefaultTagline and the user dashboard's built-in label.
 const DEFAULT_TAGLINE = 'Get an answer grounded in the archive, with the sources that support it.';
+// Default subject-level rerank/rewrite prompts, mirroring the backend Subject defaults.
+const DEFAULT_RERANKING_PROMPT = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.';
+const DEFAULT_PROMPT_REWRITE = 'Rewrite the question into a single, self-contained search query for this subject’s archive: resolve references, expand abbreviations, and keep it concise.';
 
 const EMPTY_FORM = {
   displayName: '', type: 'Subject', description: '', tagline: DEFAULT_TAGLINE, urlSlug: '',
   thinkingEnabled: false, historyRetentionDays: 90,
+  embeddingModel: '', inferenceModel: '', collection: '', rerankingModel: '', promptRewriteModel: '',
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   ontologyClassifyPrompt: DEFAULT_ONTOLOGY_CLASSIFY,
-  ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION
+  ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION,
+  rerankingPrompt: DEFAULT_RERANKING_PROMPT,
+  promptRewritePrompt: DEFAULT_PROMPT_REWRITE
 };
+
+function endpointLabel(ep) { return ep.name || ep.model || ep.id; }
+function collectionLabel(c) {
+  const name = c.name || c.Name || c.id || c.Id;
+  const dims = c.dimensionality ?? c.Dimensionality;
+  return dims ? `${name} (${dims}d)` : name;
+}
 
 // Slug: lowercase, collapse non-alphanumeric runs to single dashes, trim dashes.
 function slugify(value) {
@@ -44,6 +57,10 @@ function SubjectsView() {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [embeddingEndpoints, setEmbeddingEndpoints] = useState([]);
+  const [completionEndpoints, setCompletionEndpoints] = useState([]);
+  const [collections, setCollections] = useState([]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -73,9 +90,28 @@ function SubjectsView() {
     load();
   }, [load]);
 
+  // Load available models + collections for the subject's model pickers.
+  useEffect(() => {
+    if (!apiClient) return undefined;
+    let cancelled = false;
+    (async () => {
+      const [e, col] = await Promise.allSettled([apiClient.listIngestionEndpoints(), apiClient.listCollections()]);
+      if (cancelled) return;
+      if (e.status === 'fulfilled') {
+        setEmbeddingEndpoints(asArray(e.value?.embedding).filter((x) => x.active !== false));
+        setCompletionEndpoints(asArray(e.value?.completion).filter((x) => x.active !== false));
+      }
+      if (col.status === 'fulfilled') setCollections(asArray(col.value).filter((x) => (x.active ?? x.Active) !== false));
+    })();
+    return () => { cancelled = true; };
+  }, [apiClient]);
+
+  const soleId = (list) => (list.length === 1 ? (list[0].id ?? list[0].Id) : '');
+
   const openCreate = () => {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    // Pre-select the sole available model/collection so a subject is usable out of the box.
+    setForm({ ...EMPTY_FORM, embeddingModel: soleId(embeddingEndpoints), inferenceModel: soleId(completionEndpoints), collection: soleId(collections) });
     setFormError('');
     setFormOpen(true);
   };
@@ -90,9 +126,16 @@ function SubjectsView() {
       urlSlug: subject.urlSlug || '',
       thinkingEnabled: !!subject.thinkingEnabled,
       historyRetentionDays: subject.historyRetentionDays || 90,
+      embeddingModel: subject.embeddingModel || '',
+      inferenceModel: subject.inferenceModel || '',
+      collection: subject.collection || '',
+      rerankingModel: subject.rerankingModel || '',
+      promptRewriteModel: subject.promptRewriteModel || '',
       systemPrompt: subject.systemPrompt || '',
       ontologyClassifyPrompt: subject.ontologyClassifyPrompt || '',
-      ontologyDefinitionPrompt: subject.ontologyDefinitionPrompt || ''
+      ontologyDefinitionPrompt: subject.ontologyDefinitionPrompt || '',
+      rerankingPrompt: subject.rerankingPrompt != null ? subject.rerankingPrompt : DEFAULT_RERANKING_PROMPT,
+      promptRewritePrompt: subject.promptRewritePrompt != null ? subject.promptRewritePrompt : DEFAULT_PROMPT_REWRITE
     });
     setFormError('');
     setFormOpen(true);
@@ -102,6 +145,10 @@ function SubjectsView() {
     e.preventDefault();
     if (!form.displayName.trim()) {
       setFormError('Display name is required.');
+      return;
+    }
+    if (!form.embeddingModel || !form.inferenceModel || !form.collection) {
+      setFormError(t('subjects.modelsRequired', 'An embedding model, inference model, and collection are required before this subject can ingest links or answer questions.'));
       return;
     }
     setSaving(true);
@@ -279,7 +326,7 @@ function SubjectsView() {
             <label htmlFor="cd-thinking" style={{ margin: 0 }} title={t('subjects.thinkingEnabledTip', "When on, the model's reasoning is shown in a collapsible section (with a thinking-time statistic) for chats about this subject. Off hides it.")}>{t('subjects.thinkingEnabled', 'Show model thinking in chat')}</label>
           </div>
           <div className="form-group" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>
-            <label htmlFor="cd-retention" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>{t('subjects.historyRetentionDays', 'History Retention (days)')}</label>
+            <label htmlFor="cd-retention" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>{t('subjects.historyRetentionDays', 'Chat History Retention (days)')}</label>
             <input
               id="cd-retention"
               type="number"
@@ -288,6 +335,46 @@ function SubjectsView() {
               onChange={(e) => setForm({ ...form, historyRetentionDays: e.target.value })}
               title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}
             />
+          </div>
+          <div className="form-group" title={t('subjects.embeddingModelTip', 'The embedding endpoint used to vectorize this subject’s content at ingestion and to embed queries when answering. Must match the collection’s dimensionality. Required to ingest links.')}>
+            <label htmlFor="cd-embedding" title={t('subjects.embeddingModelTip', 'The embedding endpoint used to vectorize this subject’s content and queries. Required.')}>{t('subjects.embeddingModel', 'Embedding Model')} <span className="required-mark">*</span></label>
+            <select id="cd-embedding" value={form.embeddingModel} required onChange={(e) => setForm({ ...form, embeddingModel: e.target.value })}
+              title={t('subjects.embeddingModelTip', 'The embedding endpoint used to vectorize this subject’s content and queries. Required.')}>
+              <option value="" disabled>{t('subjects.selectModel', 'Select a model')}</option>
+              {embeddingEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.inferenceModelTip', 'The completion endpoint used for this subject’s ingestion inference and answer generation. Required to ingest links or answer questions.')}>
+            <label htmlFor="cd-inference" title={t('subjects.inferenceModelTip', 'The completion endpoint used for this subject’s ingestion inference and answers. Required.')}>{t('subjects.inferenceModel', 'Inference Model')} <span className="required-mark">*</span></label>
+            <select id="cd-inference" value={form.inferenceModel} required onChange={(e) => setForm({ ...form, inferenceModel: e.target.value })}
+              title={t('subjects.inferenceModelTip', 'The completion endpoint used for this subject’s ingestion inference and answers. Required.')}>
+              <option value="" disabled>{t('subjects.selectModel', 'Select a model')}</option>
+              {completionEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.collectionTip', 'The RecallDB collection where this subject’s chunks are stored and searched. Choose one whose dimensionality matches the embedding model. Required to ingest links.')}>
+            <label htmlFor="cd-collection" title={t('subjects.collectionTip', 'The RecallDB collection where this subject’s chunks are stored and searched. Required.')}>{t('subjects.collection', 'Collection')} <span className="required-mark">*</span></label>
+            <select id="cd-collection" value={form.collection} required onChange={(e) => setForm({ ...form, collection: e.target.value })}
+              title={t('subjects.collectionTip', 'The RecallDB collection where this subject’s chunks are stored and searched. Required.')}>
+              <option value="" disabled>{t('subjects.selectCollection', 'Select a collection')}</option>
+              {collections.map((c) => <option key={c.id ?? c.Id} value={c.id ?? c.Id}>{collectionLabel(c)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages by relevance before answering. Leave as None to skip reranking.')}>
+            <label htmlFor="cd-rerankmodel" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages before answering. None skips reranking.')}>{t('subjects.rerankingModel', 'Reranking Model (optional)')}</label>
+            <select id="cd-rerankmodel" value={form.rerankingModel} onChange={(e) => setForm({ ...form, rerankingModel: e.target.value })}
+              title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages before answering. None skips reranking.')}>
+              <option value="">{t('subjects.none', 'None')}</option>
+              {completionEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.promptRewriteModelTip', 'Optional completion endpoint used to rewrite the user’s question into a retrieval query before searching. Leave as None to skip prompt rewriting.')}>
+            <label htmlFor="cd-rewritemodel" title={t('subjects.promptRewriteModelTip', 'Optional completion endpoint used to rewrite the question into a retrieval query. None skips prompt rewriting.')}>{t('subjects.promptRewriteModel', 'Prompt Rewrite Model (optional)')}</label>
+            <select id="cd-rewritemodel" value={form.promptRewriteModel} onChange={(e) => setForm({ ...form, promptRewriteModel: e.target.value })}
+              title={t('subjects.promptRewriteModelTip', 'Optional completion endpoint used to rewrite the question into a retrieval query. None skips prompt rewriting.')}>
+              <option value="">{t('subjects.none', 'None')}</option>
+              {completionEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
+            </select>
           </div>
           <div className="form-group" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>
             <label htmlFor="cd-sysprompt" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.systemPrompt', 'System Prompt')}</label>
@@ -298,6 +385,26 @@ function SubjectsView() {
               placeholder={t('subjects.systemPromptHint', 'Appended after the global system prompt for chats about this subject.')}
               onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
               title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}
+            />
+          </div>
+          <div className="form-group" title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt to guide how passages are ordered by relevance.')}>
+            <label htmlFor="cd-rerankprompt" title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt.')}>{t('subjects.rerankingPrompt', 'Reranking Prompt')}</label>
+            <textarea
+              id="cd-rerankprompt"
+              rows={3}
+              value={form.rerankingPrompt}
+              onChange={(e) => setForm({ ...form, rerankingPrompt: e.target.value })}
+              title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt.')}
+            />
+          </div>
+          <div className="form-group" title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt to guide how the question is rewritten into a retrieval query.')}>
+            <label htmlFor="cd-rewriteprompt" title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt.')}>{t('subjects.promptRewritePrompt', 'Prompt Rewrite Prompt')}</label>
+            <textarea
+              id="cd-rewriteprompt"
+              rows={3}
+              value={form.promptRewritePrompt}
+              onChange={(e) => setForm({ ...form, promptRewritePrompt: e.target.value })}
+              title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt.')}
             />
           </div>
           <div className="form-group" title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}>

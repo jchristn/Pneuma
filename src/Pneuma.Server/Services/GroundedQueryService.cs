@@ -3,6 +3,7 @@ namespace Pneuma.Server.Services
     using System;
     using System.Collections.Generic;
     using System.Text;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
@@ -99,7 +100,13 @@ namespace Pneuma.Server.Services
         /// <returns>The grounded answer.</returns>
         public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token = default)
         {
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, question, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+
+            // Optional prompt-rewrite: the rewritten form drives retrieval + reranking; the answer still addresses
+            // the user's original question.
+            string retrievalQuestion = await RewriteQuestionAsync(tenantId, subject, question, token).ConfigureAwait(false);
+
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, retrievalQuestion, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -110,7 +117,10 @@ namespace Pneuma.Server.Services
                 };
             }
 
-            ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, token).ConfigureAwait(false);
+            // Optional reranking: reorder the retrieved sources by relevance to the (rewritten) question.
+            sources = await RerankAsync(tenantId, subject, retrievalQuestion, sources, NodeText, token).ConfigureAwait(false);
+
+            ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
             if (runner == null)
             {
                 return new GroundedAnswer
@@ -147,10 +157,15 @@ namespace Pneuma.Server.Services
             Dictionary<string, double> scoreByNode = new Dictionary<string, double>(StringComparer.Ordinal);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
 
-            // Both retrieval paths (full-text and vector) operate over the same RecallDB collection; resolve it
-            // once within the tenant. With no collection provisioned there is nothing to retrieve.
-            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
+            // A subject owns its retrieval configuration: its collection is where its chunks live, and its
+            // embedding model is used to embed the query so it matches the stored vectors. Fall back to the
+            // tenant default collection / server-side embedding when no subject is in scope.
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            string? collectionId = !String.IsNullOrWhiteSpace(subject?.Collection)
+                ? subject!.Collection
+                : await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(collectionId)) return primary;
+            string? embeddingEndpointId = subject?.EmbeddingModel;
 
             // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
             // exact-match subjectId tag every ingested chunk carries.
@@ -193,7 +208,7 @@ namespace Pneuma.Server.Services
 
             try
             {
-                List<float>? queryEmbedding = await EmbedQueryAsync(question, token).ConfigureAwait(false);
+                List<float>? queryEmbedding = await EmbedQueryAsync(question, embeddingEndpointId, token).ConfigureAwait(false);
                 if (queryEmbedding != null && queryEmbedding.Count > 0)
                 {
                     List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, token).ConfigureAwait(false);
@@ -274,6 +289,182 @@ namespace Pneuma.Server.Services
             }
 
             return await ResolvePartioCompletionRunnerAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolve the answering runner for a subject: prefer the subject's configured inference model (a Partio
+        /// completion endpoint), falling back to the tenant-global resolution when the subject has none.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subject">Subject in scope, or null for a general (non-subject) chat.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>An answering runner, or null when none is configured.</returns>
+        public async Task<ModelRunner?> ResolveAnswerRunnerAsync(string tenantId, Subject? subject, CancellationToken token = default)
+        {
+            if (subject != null && !String.IsNullOrWhiteSpace(subject.InferenceModel))
+            {
+                ModelRunner? resolved = await ResolveCompletionRunnerByIdAsync(subject.InferenceModel!, token).ConfigureAwait(false);
+                if (resolved != null) return resolved;
+            }
+            return await ResolveAnswerRunnerAsync(tenantId, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolve a specific Partio completion endpoint id into a transient <see cref="ModelRunner"/> (used for a
+        /// subject's inference, reranking, and prompt-rewrite models). Returns null when the endpoint is unknown.
+        /// </summary>
+        /// <param name="endpointId">Partio completion endpoint id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A transient runner, or null.</returns>
+        public async Task<ModelRunner?> ResolveCompletionRunnerByIdAsync(string endpointId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(endpointId)) return null;
+            PartioEndpoint? endpoint;
+            try
+            {
+                endpoint = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _Logging.Warn("[GroundedQueryService] could not read completion endpoint '" + endpointId + "': " + exception.Message);
+                return null;
+            }
+            if (endpoint == null) return null;
+
+            ModelRunner runner = new ModelRunner
+            {
+                Name = String.IsNullOrWhiteSpace(endpoint.Name) ? "partio-completion" : endpoint.Name!,
+                Provider = MapProvider(endpoint.ApiFormat),
+                BaseUrl = endpoint.Endpoint ?? String.Empty,
+                DefaultModel = endpoint.Model ?? String.Empty,
+                Usage = ModelRunnerUsageEnum.Both,
+                Active = true,
+                ContextSize = endpoint.ContextSize
+            };
+            if (!String.IsNullOrEmpty(endpoint.ApiKey))
+            {
+                try { runner.AuthMaterialEncrypted = _Cipher.Encrypt(endpoint.ApiKey); }
+                catch (Exception) { runner.AuthMaterialEncrypted = null; }
+            }
+            return runner;
+        }
+
+        /// <summary>
+        /// Rewrite a question into a retrieval query using the subject's prompt-rewrite model, when configured.
+        /// Returns the original question unchanged when no rewrite model is set or the call fails.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subject">Subject in scope (may be null).</param>
+        /// <param name="question">The user's question.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The rewritten query, or the original question.</returns>
+        public async Task<string> RewriteQuestionAsync(string tenantId, Subject? subject, string question, CancellationToken token = default)
+        {
+            if (subject == null || String.IsNullOrWhiteSpace(subject.PromptRewriteModel) || String.IsNullOrWhiteSpace(question)) return question;
+            ModelRunner? runner = await ResolveCompletionRunnerByIdAsync(subject.PromptRewriteModel!, token).ConfigureAwait(false);
+            if (runner == null) return question;
+            string systemPrompt = await MergePromptAsync(tenantId, "prompt.rewrite", subject.PromptRewritePrompt, token).ConfigureAwait(false);
+            string? rewritten = await CompleteTextAsync(runner, systemPrompt, question, 256, token).ConfigureAwait(false);
+            return String.IsNullOrWhiteSpace(rewritten) ? question : rewritten!;
+        }
+
+        /// <summary>
+        /// Re-rank candidate passages by relevance to the question using the subject's reranking model, when
+        /// configured. Returns the candidates in their original order when no reranking model is set, there is
+        /// nothing to reorder, or the model output cannot be parsed into a complete ordering.
+        /// </summary>
+        /// <typeparam name="T">Candidate type.</typeparam>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subject">Subject in scope (may be null).</param>
+        /// <param name="question">The (possibly rewritten) question.</param>
+        /// <param name="candidates">Candidates to reorder.</param>
+        /// <param name="textOf">Extracts the text used to judge a candidate's relevance.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The reordered candidates (or the original list).</returns>
+        public async Task<List<T>> RerankAsync<T>(string tenantId, Subject? subject, string question, List<T> candidates, Func<T, string> textOf, CancellationToken token = default)
+        {
+            if (subject == null || String.IsNullOrWhiteSpace(subject.RerankingModel) || candidates == null || candidates.Count <= 1) return candidates ?? new List<T>();
+            ModelRunner? runner = await ResolveCompletionRunnerByIdAsync(subject.RerankingModel!, token).ConfigureAwait(false);
+            if (runner == null) return candidates;
+            string systemPrompt = await MergePromptAsync(tenantId, "reranking", subject.RerankingPrompt, token).ConfigureAwait(false);
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("Question: " + question);
+            sb.AppendLine();
+            sb.AppendLine("Passages:");
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string text = textOf(candidates[i]) ?? String.Empty;
+                if (text.Length > 500) text = text.Substring(0, 500);
+                sb.AppendLine("[" + (i + 1) + "] " + text.Replace("\r", " ").Replace("\n", " "));
+            }
+
+            string? ranked = await CompleteTextAsync(runner, systemPrompt, sb.ToString(), 128, token).ConfigureAwait(false);
+            if (String.IsNullOrWhiteSpace(ranked)) return candidates;
+
+            List<T> ordered = new List<T>(candidates.Count);
+            HashSet<int> used = new HashSet<int>();
+            foreach (Match match in Regex.Matches(ranked, "\\d+"))
+            {
+                if (Int32.TryParse(match.Value, out int n) && n >= 1 && n <= candidates.Count && used.Add(n)) ordered.Add(candidates[n - 1]);
+            }
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (!used.Contains(i + 1)) ordered.Add(candidates[i]);
+            }
+            return ordered.Count == candidates.Count ? ordered : candidates;
+        }
+
+        /// <summary>
+        /// Convenience overload that loads the subject by id and reranks (for callers that hold a subject id but
+        /// not the subject, e.g. the agentic search tool).
+        /// </summary>
+        public async Task<List<T>> RerankAsync<T>(string tenantId, string? subjectId, string question, List<T> candidates, Func<T, string> textOf, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(subjectId)) return candidates ?? new List<T>();
+            Subject? subject = await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            return await RerankAsync(tenantId, subject, question, candidates, textOf, token).ConfigureAwait(false);
+        }
+
+        /// <summary>Read a global prompt by key and append the subject's override (global base + subject appended).</summary>
+        private async Task<string> MergePromptAsync(string tenantId, string key, string? subjectOverride, CancellationToken token)
+        {
+            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, key, token).ConfigureAwait(false);
+            string baseText = prompt?.Content ?? String.Empty;
+            if (!String.IsNullOrWhiteSpace(subjectOverride))
+            {
+                baseText = String.IsNullOrWhiteSpace(baseText) ? subjectOverride!.Trim() : baseText + "\n\n" + subjectOverride!.Trim();
+            }
+            return baseText;
+        }
+
+        /// <summary>Run a single text completion against a runner and return the trimmed text, or null on failure.</summary>
+        private async Task<string?> CompleteTextAsync(ModelRunner runner, string systemPrompt, string userText, int maxTokens, CancellationToken token)
+        {
+            string? apiKey = null;
+            if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
+            {
+                try { apiKey = _Cipher.Decrypt(runner.AuthMaterialEncrypted); }
+                catch (Exception) { apiKey = null; }
+            }
+            try
+            {
+                CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
+                ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.1, MaxTokens = maxTokens, SystemPrompt = systemPrompt };
+                ChatResponse response = await client.ChatAsync(userText, options, token).ConfigureAwait(false);
+                if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text)) return response.Text.Trim();
+            }
+            catch (Exception exception)
+            {
+                _Logging.Warn("[GroundedQueryService] augmentation completion failed: " + exception.Message);
+            }
+            return null;
+        }
+
+        /// <summary>The text used to judge a graph node's relevance during reranking (chunk content, else name).</summary>
+        private static string NodeText(GraphNode node)
+        {
+            return String.IsNullOrWhiteSpace(node.Content) ? (node.Name ?? String.Empty) : node.Content!;
         }
 
         /// <summary>Generate a cited answer from the given sources.</summary>
@@ -477,11 +668,11 @@ namespace Pneuma.Server.Services
             return ModelRunnerProviderEnum.Ollama;
         }
 
-        private async Task<List<float>?> EmbedQueryAsync(string question, CancellationToken token)
+        private async Task<List<float>?> EmbedQueryAsync(string question, string? embeddingEndpointId, CancellationToken token)
         {
             try
             {
-                PartioProcessResult processed = await _Partio.ProcessAsync(question, false, null, null, null, token).ConfigureAwait(false);
+                PartioProcessResult processed = await _Partio.ProcessAsync(question, false, null, embeddingEndpointId, null, token).ConfigureAwait(false);
                 foreach (PartioChunk chunk in processed.Chunks)
                 {
                     if (chunk.Embeddings != null && chunk.Embeddings.Count > 0) return chunk.Embeddings;

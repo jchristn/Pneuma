@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { asArray } from '../utils/api';
@@ -30,6 +30,19 @@ const STATUS_FILTERS = ['', 'Queued', 'Processing', 'Running', 'Completed', 'Fai
 function isFailed(status) {
   const s = (status || '').toLowerCase();
   return s === 'failed' || s === 'error';
+}
+
+// Default table ordering: jobs that need attention or are in flight (anything NOT completed or queued)
+// sort to the top; completed and queued jobs sink to the bottom. Lower rank sorts first.
+function jobStateRank(status) {
+  const s = (status || '').toLowerCase();
+  if (s === 'completed') return 90;
+  if (s === 'queued') return 80;
+  if (s === 'failed' || s === 'error') return 0;
+  if (s === 'processing') return 10;
+  if (s === 'running') return 11;
+  if (s === 'cancelled' || s === 'canceled') return 20;
+  return 15; // any other in-flight/unknown state still sorts above queued/completed
 }
 
 function readEventStage(ev) {
@@ -113,6 +126,17 @@ function IngestionView() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Sort by state (attention/in-flight first), then most-recently-updated within a state group.
+  const sortedJobs = useMemo(() => {
+    return [...jobs].sort((a, b) => {
+      const r = jobStateRank(a.status) - jobStateRank(b.status);
+      if (r !== 0) return r;
+      const at = a.updatedUtc || a.lastUpdatedUtc || a.createdUtc || '';
+      const bt = b.updatedUtc || b.lastUpdatedUtc || b.createdUtc || '';
+      return bt.localeCompare(at);
+    });
+  }, [jobs]);
 
   const openDetail = async (job) => {
     setDetailOpen(true);
@@ -256,7 +280,7 @@ function IngestionView() {
 
       <DataTable
         columns={columns}
-        data={jobs}
+        data={sortedJobs}
         loading={loading}
         onRefresh={load}
         toolbar={toolbar}

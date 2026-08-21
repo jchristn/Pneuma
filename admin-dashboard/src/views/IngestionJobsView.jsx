@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
@@ -20,6 +20,19 @@ const STATUS_OPTIONS = ['', 'Queued', 'Processing', 'Completed', 'Failed', 'Canc
 function isStoppable(job) {
   const s = String(job?.status || '').toLowerCase();
   return s === 'queued' || s === 'processing';
+}
+
+// Default table ordering: jobs that need attention or are in flight (anything NOT completed or queued)
+// sort to the top; completed and queued jobs sink to the bottom. Lower rank sorts first.
+function jobStateRank(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 90;
+  if (s === 'queued') return 80;
+  if (s === 'failed' || s === 'error') return 0;
+  if (s === 'processing') return 10;
+  if (s === 'running') return 11;
+  if (s === 'cancelled' || s === 'canceled') return 20;
+  return 15; // any other in-flight/unknown state still sorts above queued/completed
 }
 
 function IngestionJobsView() {
@@ -53,6 +66,17 @@ function IngestionJobsView() {
   useEffect(() => {
     apiClient.list('subjects').then((r) => setSubjects(normalizeList(r).items)).catch(() => {});
   }, [apiClient]);
+
+  // Sort by state (attention/in-flight first), then most-recently-updated within a state group.
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const r = jobStateRank(a.status) - jobStateRank(b.status);
+      if (r !== 0) return r;
+      const at = a.lastUpdateUtc || a.updatedUtc || a.completedUtc || a.createdUtc || '';
+      const bt = b.lastUpdateUtc || b.updatedUtc || b.completedUtc || b.createdUtc || '';
+      return String(bt).localeCompare(String(at));
+    });
+  }, [rows]);
 
   const { selectedItems, clear, selection } = useTableSelection(rows);
   const stoppableSelected = selectedItems.filter(isStoppable);
@@ -142,7 +166,7 @@ function IngestionJobsView() {
         </div>
       </div>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
-      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load}
+      <DataTable columns={columns} data={sortedRows} loading={loading} onRefresh={load}
         onRowClick={(job) => setModal({ type: 'follow', item: job })}
         selection={selection} bulkBar={bulkBar} />
 

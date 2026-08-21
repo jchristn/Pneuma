@@ -13,22 +13,18 @@ function parseUrls(text) {
 
 /**
  * Modal for enqueuing ingestion of many URLs at once for a single subject.
- * Requires a subject, at least one URL, and both model endpoints.
+ * The subject owns the embedding/inference models and collection, so this needs only a subject and URLs.
  */
-function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions, collectionOptions = [], onClose, onCreated }) {
+function BulkAddLinksModal({ subjectOptions, onClose, onCreated }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
   const [subjectId, setSubjectId] = useState('');
   const [urlsText, setUrlsText] = useState('');
-  // Auto-select the sole model endpoint / collection when only one is available.
-  const [embeddingEndpointId, setEmbeddingEndpointId] = useState(embeddingOptions.length === 1 ? embeddingOptions[0].value : '');
-  const [completionEndpointId, setCompletionEndpointId] = useState(completionOptions.length === 1 ? completionOptions[0].value : '');
-  const [collectionId, setCollectionId] = useState(collectionOptions.length === 1 ? collectionOptions[0].value : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const urls = useMemo(() => parseUrls(urlsText), [urlsText]);
-  const canSubmit = !!subjectId && urls.length > 0 && !!embeddingEndpointId && !!completionEndpointId && !!collectionId && !busy;
+  const canSubmit = !!subjectId && urls.length > 0 && !busy;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -36,7 +32,7 @@ function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions
     setBusy(true);
     setError('');
     try {
-      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId, collectionId });
+      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls });
       const created = resp?.created ?? resp?.Created ?? (resp?.links || resp?.Links || []).length;
       onCreated(created);
     } catch (err) {
@@ -64,36 +60,12 @@ function BulkAddLinksModal({ subjectOptions, embeddingOptions, completionOptions
           </div>
           <div className="field">
             <label htmlFor="bulk-urls">{t('links.urls')}</label>
-            <textarea id="bulk-urls" rows={8} value={urlsText} required
+            <textarea id="bulk-urls" rows={10} value={urlsText} required
               placeholder={t('links.urlsPlaceholder')}
               onChange={(e) => setUrlsText(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="bulk-embedding">{t('links.embeddingModel')}</label>
-            <select id="bulk-embedding" value={embeddingEndpointId} required onChange={(e) => setEmbeddingEndpointId(e.target.value)}>
-              <option value="">{t('links.selectModel')}</option>
-              {embeddingOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="bulk-completion">{t('links.completionModel')}</label>
-            <select id="bulk-completion" value={completionEndpointId} required onChange={(e) => setCompletionEndpointId(e.target.value)}>
-              <option value="">{t('links.selectModel')}</option>
-              {completionOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="bulk-collection">{t('links.collection')}</label>
-            <select id="bulk-collection" value={collectionId} required onChange={(e) => setCollectionId(e.target.value)}>
-              <option value="">{t('links.selectCollection')}</option>
-              {collectionOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <div className="field-hint" style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+              {t('links.subjectModelsHint', 'These links are ingested with the subject’s configured embedding and inference models and its collection.')}
+            </div>
           </div>
         </div>
         {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}

@@ -50,20 +50,23 @@ namespace Test.Shared.Suites
                             HttpResponseMessage readResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/collections/" + collectionId, token, null, ct);
                             if (readResp.StatusCode != HttpStatusCode.OK) throw new Exception("collection read not 200: " + (int)readResp.StatusCode);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Coll Test\",\"type\":\"Person\"}", ct);
+                            // The collection is owned by the subject: a subject with models but no collection cannot ingest.
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Coll Test\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\"}", ct);
                             string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
 
-                            // Negative: submitting a link without a collection is rejected.
-                            HttpResponseMessage noColl = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\"}", ct);
-                            if (noColl.StatusCode != HttpStatusCode.BadRequest) throw new Exception("link submit without a collection should be 400, got " + (int)noColl.StatusCode);
+                            // Negative: the subject has no collection configured, so a link submission is rejected.
+                            HttpResponseMessage noColl = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\"}", ct);
+                            if (noColl.StatusCode != HttpStatusCode.BadRequest) throw new Exception("link submit for a subject without a collection should be 400, got " + (int)noColl.StatusCode);
 
-                            // Negative: a non-existent collection is rejected.
-                            HttpResponseMessage badColl = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"col_does_not_exist\"}", ct);
-                            if (badColl.StatusCode != HttpStatusCode.BadRequest) throw new Exception("link submit with an unknown collection should be 400, got " + (int)badColl.StatusCode);
+                            // Negative: the subject points at a non-existent collection.
+                            await Send(HttpMethod.Put, server.BaseUrl + "/v1.0/subjects/" + subjectId, token, "{\"displayName\":\"Coll Test\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"col_does_not_exist\"}", ct);
+                            HttpResponseMessage badColl = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\"}", ct);
+                            if (badColl.StatusCode != HttpStatusCode.BadRequest) throw new Exception("link submit for a subject whose collection does not exist should be 400, got " + (int)badColl.StatusCode);
 
-                            // Positive: a valid collection is accepted.
-                            HttpResponseMessage ok = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\",\"embeddingEndpointId\":\"default\",\"completionEndpointId\":\"default\",\"collectionId\":\"" + collectionId + "\"}", ct);
-                            if (ok.StatusCode != HttpStatusCode.Created) throw new Exception("link submit with a valid collection should be 201, got " + (int)ok.StatusCode);
+                            // Positive: with a valid collection set on the subject, a link submission is accepted.
+                            await Send(HttpMethod.Put, server.BaseUrl + "/v1.0/subjects/" + subjectId, token, "{\"displayName\":\"Coll Test\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            HttpResponseMessage ok = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/x\"}", ct);
+                            if (ok.StatusCode != HttpStatusCode.Created) throw new Exception("link submit for a fully-configured subject should be 201, got " + (int)ok.StatusCode);
 
                             // Delete the collection.
                             HttpResponseMessage delResp = await Send(HttpMethod.Delete, server.BaseUrl + "/v1.0/collections/" + collectionId, token, null, ct);

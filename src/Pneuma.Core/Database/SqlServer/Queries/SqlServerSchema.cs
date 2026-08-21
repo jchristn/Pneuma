@@ -72,6 +72,18 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF COL_LENGTH('dbo.subjects', 'tagline') IS NULL ALTER TABLE dbo.subjects ADD tagline NVARCHAR(MAX);",
                     "UPDATE dbo.subjects SET tagline = 'Get an answer grounded in the archive, with the sources that support it.' WHERE tagline IS NULL;"
                 }));
+                list.Add(new SchemaMigration(10, "Add subject models, collection, and rerank/rewrite prompts", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'embeddingmodel') IS NULL ALTER TABLE dbo.subjects ADD embeddingmodel NVARCHAR(64);",
+                    "IF COL_LENGTH('dbo.subjects', 'inferencemodel') IS NULL ALTER TABLE dbo.subjects ADD inferencemodel NVARCHAR(64);",
+                    "IF COL_LENGTH('dbo.subjects', 'rerankingmodel') IS NULL ALTER TABLE dbo.subjects ADD rerankingmodel NVARCHAR(64);",
+                    "IF COL_LENGTH('dbo.subjects', 'promptrewritemodel') IS NULL ALTER TABLE dbo.subjects ADD promptrewritemodel NVARCHAR(64);",
+                    "IF COL_LENGTH('dbo.subjects', 'collection') IS NULL ALTER TABLE dbo.subjects ADD collection NVARCHAR(64);",
+                    "IF COL_LENGTH('dbo.subjects', 'rerankingprompt') IS NULL ALTER TABLE dbo.subjects ADD rerankingprompt NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.subjects', 'promptrewriteprompt') IS NULL ALTER TABLE dbo.subjects ADD promptrewriteprompt NVARCHAR(MAX);",
+                    "UPDATE dbo.subjects SET rerankingprompt = 'Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.' WHERE rerankingprompt IS NULL;",
+                    "UPDATE dbo.subjects SET promptrewriteprompt = 'Rewrite the question into a single, self-contained search query for this subject''s archive: resolve references, expand abbreviations, and keep it concise.' WHERE promptrewriteprompt IS NULL;"
+                }));
                 return list;
             }
         }
