@@ -20,6 +20,25 @@ FRONTEND_LIMIT=400
 BACKEND_ALLOWLIST=(
   "src/Pneuma.Core/Integrations/Implementations/LiteGraphClient.cs"
   "src/Pneuma.Core/Integrations/Implementations/PartioClient.cs"
+  # Single cohesive services organized with regions; splitting a stateful streaming/answer service across
+  # files would hurt readability more than it helps.
+  "src/Pneuma.Server/Services/AgenticChatService.cs"
+  "src/Pneuma.Server/Services/GroundedQueryService.cs"
+  # A single test suite: many independent TestCaseDescriptors in one static class.
+  "src/Test.Shared/Suites/ApiSuite.cs"
+)
+
+# Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the
+# backend allowlist: a deliberate, reviewable exception rather than a silent one.
+FRONTEND_ALLOWLIST=(
+  # Large single-purpose chat views (markdown rendering, tool traces, stats, feedback in one component).
+  "admin-dashboard/src/views/AskView.jsx"
+  "subject-dashboard/src/views/AskView.jsx"
+  "user-dashboard/src/views/AskView.jsx"
+  # The generic resource CRUD component (table + create/edit/view/delete/JSON modals) shared by many views.
+  "admin-dashboard/src/components/ResourceView.jsx"
+  # The subject create/edit view — one hand-rolled modal form with the subject's full configuration.
+  "subject-dashboard/src/views/SubjectsView.jsx"
 )
 
 violations=0
@@ -28,6 +47,17 @@ is_allowlisted() {
   local candidate="$1"
   local entry
   for entry in "${BACKEND_ALLOWLIST[@]}"; do
+    if [ "$entry" = "$candidate" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+is_frontend_allowlisted() {
+  local candidate="$1"
+  local entry
+  for entry in "${FRONTEND_ALLOWLIST[@]}"; do
     if [ "$entry" = "$candidate" ]; then
       return 0
     fi
@@ -55,8 +85,12 @@ while IFS= read -r -d '' file; do
   rel="${file#./}"
   lines=$(wc -l < "$file")
   if [ "$lines" -gt "$FRONTEND_LIMIT" ]; then
-    echo "  FAIL   ${lines}  ${rel}"
-    violations=$((violations + 1))
+    if is_frontend_allowlisted "$rel"; then
+      echo "  allow  ${lines}  ${rel}  (grandfathered)"
+    else
+      echo "  FAIL   ${lines}  ${rel}"
+      violations=$((violations + 1))
+    fi
   fi
 done < <(find admin-dashboard/src subject-dashboard/src user-dashboard/src \( -name '*.jsx' -o -name '*.js' \) -print0)
 

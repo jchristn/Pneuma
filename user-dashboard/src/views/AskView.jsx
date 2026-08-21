@@ -454,7 +454,7 @@ export default function AskView() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiClient, messages, patchLast, streaming, t]);
+  }, [apiClient, messages, patchLast, streaming, t, subject?.id]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
