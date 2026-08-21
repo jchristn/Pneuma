@@ -1172,3 +1172,6 @@ select {
 .hd-rating { font-size: 1.3rem; line-height: 1.2; }
 .hd-feedback-body { flex: 1; font-size: 0.86rem; color: var(--text-primary); }
 .hd-feedback-meta { margin-top: 6px; font-size: 0.72rem; color: var(--text-secondary); }
+.hd-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.hd-filter-chip { display: inline-block; padding: 3px 8px; font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); }
+.hd-filter-exc { color: var(--color-danger); border-color: var(--color-danger); text-decoration: line-through; }

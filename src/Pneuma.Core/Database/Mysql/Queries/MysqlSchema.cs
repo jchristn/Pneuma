@@ -98,6 +98,11 @@ namespace Pneuma.Core.Database.Mysql.Queries
                         "KEY idx_perfevents_tenant_subject (tenantid, subjectid, createdutc), " +
                         "KEY idx_perfevents_turn (turnid));"
                 }));
+                list.Add(new SchemaMigration(12, "Add subject and chat-turn retrieval facet filters", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN retrievalfilterjson TEXT;",
+                    "ALTER TABLE chatturns ADD COLUMN retrievalfilterjson TEXT;"
+                }));
                 return list;
             }
         }

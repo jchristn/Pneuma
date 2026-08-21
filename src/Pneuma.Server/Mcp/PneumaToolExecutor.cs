@@ -191,7 +191,7 @@ namespace Pneuma.Server.Mcp
                 max = Math.Clamp(parsed, 1, 20);
             }
 
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkScores, token: token).ConfigureAwait(false);
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
             {

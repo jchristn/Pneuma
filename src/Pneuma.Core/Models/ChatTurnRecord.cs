@@ -77,6 +77,12 @@ namespace Pneuma.Core.Models
         /// <summary>Schema version of <see cref="PerformanceJson"/> (0 when absent).</summary>
         public int PerformanceSchemaVersion { get; set; } = 0;
 
+        /// <summary>
+        /// The effective retrieval facet filter applied to this turn (a serialized <see cref="Requests.RetrievalFilter"/>),
+        /// or null when none was applied. Recorded for history/audit.
+        /// </summary>
+        public string? RetrievalFilterJson { get; set; } = null;
+
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

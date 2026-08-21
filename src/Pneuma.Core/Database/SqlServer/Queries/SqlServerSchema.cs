@@ -97,6 +97,11 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_perfevents_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chatturnperfevents')) CREATE INDEX idx_perfevents_tenant_subject ON dbo.chatturnperfevents (tenantid, subjectid, createdutc);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_perfevents_turn' AND object_id = OBJECT_ID(N'dbo.chatturnperfevents')) CREATE INDEX idx_perfevents_turn ON dbo.chatturnperfevents (turnid);"
                 }));
+                list.Add(new SchemaMigration(12, "Add subject and chat-turn retrieval facet filters", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'retrievalfilterjson') IS NULL ALTER TABLE dbo.subjects ADD retrievalfilterjson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.chatturns', 'retrievalfilterjson') IS NULL ALTER TABLE dbo.chatturns ADD retrievalfilterjson NVARCHAR(MAX);"
+                }));
                 return list;
             }
         }

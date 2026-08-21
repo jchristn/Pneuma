@@ -12,6 +12,7 @@ namespace Pneuma.Core.Integrations.Implementations
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Observability;
+    using Pneuma.Core.Requests;
 
     /// <summary>
     /// HTTP client for RecallDB — the retrieval store that replaces both the lexical index and the
@@ -167,7 +168,7 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, CancellationToken token = default)
+        public async Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required = null, IReadOnlyList<RetrievalTagCondition>? excluded = null, CancellationToken token = default)
         {
             List<VectorSearchHit> hits = new List<VectorSearchHit>();
             if (String.IsNullOrWhiteSpace(collectionId) || embedding == null || embedding.Count == 0) return hits;
@@ -181,7 +182,7 @@ namespace Pneuma.Core.Integrations.Implementations
                     MinimumScore = minimumScore > 0 ? (double?)minimumScore : null
                 },
                 MaxResults = Math.Max(1, topK),
-                TagFilter = BuildTagFilter(tags)
+                TagFilter = BuildTagFilter(tags, required, excluded)
             };
 
             string responseBody = await PostJsonAsync(SearchUrl(tenantId, collectionId), JsonSerializer.Serialize(query, _RequestJson), token).ConfigureAwait(false);
@@ -195,7 +196,7 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<List<SearchHit>> SearchAsync(string tenantId, string collectionId, string query, int maxResults, IReadOnlyDictionary<string, string>? tags, CancellationToken token = default)
+        public async Task<List<SearchHit>> SearchAsync(string tenantId, string collectionId, string query, int maxResults, IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required = null, IReadOnlyList<RetrievalTagCondition>? excluded = null, CancellationToken token = default)
         {
             List<SearchHit> hits = new List<SearchHit>();
             if (String.IsNullOrWhiteSpace(collectionId) || String.IsNullOrWhiteSpace(query)) return hits;
@@ -209,7 +210,7 @@ namespace Pneuma.Core.Integrations.Implementations
                     Language = "english"
                 },
                 MaxResults = Math.Max(1, maxResults),
-                TagFilter = BuildTagFilter(tags)
+                TagFilter = BuildTagFilter(tags, required, excluded)
             };
 
             string responseBody = await PostJsonAsync(SearchUrl(tenantId, collectionId), JsonSerializer.Serialize(searchQuery, _RequestJson), token).ConfigureAwait(false);
@@ -278,15 +279,37 @@ namespace Pneuma.Core.Integrations.Implementations
         private string DocumentsUrl(string tenantId, string collectionId) => CollectionsUrl(tenantId) + "/" + collectionId + "/documents";
         private string SearchUrl(string tenantId, string collectionId) => CollectionsUrl(tenantId) + "/" + collectionId + "/search";
 
-        private static object? BuildTagFilter(IReadOnlyDictionary<string, string>? tags)
+        private static object? BuildTagFilter(IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required, IReadOnlyList<RetrievalTagCondition>? excluded)
         {
-            if (tags == null || tags.Count == 0) return null;
-            List<object> required = new List<object>();
-            foreach (KeyValuePair<string, string> tag in tags)
+            List<object> requiredList = new List<object>();
+            if (tags != null)
             {
-                required.Add(new { Key = tag.Key, Condition = "Equals", Value = tag.Value });
+                foreach (KeyValuePair<string, string> tag in tags)
+                {
+                    requiredList.Add(new { Key = tag.Key, Condition = "Equals", Value = tag.Value });
+                }
             }
-            return new { Required = required };
+            if (required != null)
+            {
+                foreach (RetrievalTagCondition condition in required)
+                {
+                    if (String.IsNullOrEmpty(condition.Key)) continue;
+                    requiredList.Add(new { Key = condition.Key, Condition = condition.Condition.ToString(), Value = condition.Value });
+                }
+            }
+            List<object> excludedList = new List<object>();
+            if (excluded != null)
+            {
+                foreach (RetrievalTagCondition condition in excluded)
+                {
+                    if (String.IsNullOrEmpty(condition.Key)) continue;
+                    excludedList.Add(new { Key = condition.Key, Condition = condition.Condition.ToString(), Value = condition.Value });
+                }
+            }
+            if (requiredList.Count == 0 && excludedList.Count == 0) return null;
+            if (excludedList.Count == 0) return new { Required = requiredList };
+            if (requiredList.Count == 0) return new { Excluded = excludedList };
+            return new { Required = requiredList, Excluded = excludedList };
         }
 
         private HttpRequestMessage BuildRequest(HttpMethod method, string url, string? json)

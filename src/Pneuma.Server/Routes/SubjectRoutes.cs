@@ -222,6 +222,7 @@ namespace Pneuma.Server.Routes
             existing.Collection = update.Collection;
             existing.RerankingPrompt = update.RerankingPrompt;
             existing.PromptRewritePrompt = update.PromptRewritePrompt;
+            existing.RetrievalFilterJson = update.RetrievalFilterJson;
             existing.HistoryRetentionDays = update.HistoryRetentionDays;
 
             // A changed slug must stay unique within the tenant; an explicit clash with another subject is a conflict.

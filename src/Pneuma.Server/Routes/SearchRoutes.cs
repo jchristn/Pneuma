@@ -108,7 +108,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, ctx.Token).ConfigureAwait(false);
+            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, token: ctx.Token).ConfigureAwait(false);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (SearchHit hit in hits)
@@ -163,7 +163,7 @@ namespace Pneuma.Server.Routes
             if (!String.IsNullOrEmpty(collectionId))
             {
                 Dictionary<string, string> filter = new Dictionary<string, string> { { "subjectId", subjectId } };
-                hits = await _Search.SearchAsync(tenantId, collectionId, query, 1000, filter, ctx.Token).ConfigureAwait(false);
+                hits = await _Search.SearchAsync(tenantId, collectionId, query, 1000, filter, token: ctx.Token).ConfigureAwait(false);
             }
 
             // A source link is stored as many RecallDB documents (one per chunk). Each chunk hit carries its

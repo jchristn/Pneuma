@@ -370,7 +370,8 @@ namespace Pneuma.Server.Services
                 ContextSize = runner.ContextSize,
                 CitationsJson = citations.Count > 0 ? Json.Serialize(citations) : null,
                 PerformanceJson = Json.Serialize(performance),
-                PerformanceSchemaVersion = performance.SchemaVersion
+                PerformanceSchemaVersion = performance.SchemaVersion,
+                RetrievalFilterJson = subject?.RetrievalFilterJson
             };
 
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;

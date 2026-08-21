@@ -138,7 +138,17 @@ and analytics (#5) can aggregate efficiently.
 
 ---
 
-## Phase 2 — #2 Metadata / facet retrieval filters  ⬜
+## Phase 2 — #2 Metadata / facet retrieval filters  ✅
+
+> **Status note:** scoped to chunk-**tag** predicates (Pneuma has no separate "labels" concept). Backend is
+> complete: `RetrievalFilter`/`RetrievalTagCondition`/`TagConditionEnum`, native push-down through
+> `IVectorRepository`/`IInvertedIndex` → RecallDB `TagFilter` (+ fake), subject default
+> `retrievalFilterJson` + per-request `metadataFilter` on `/v1.0/query` merged (union), applied on the
+> grounded and agentic search paths, effective filter persisted on the turn, migration v12 (all four
+> providers), tests (93 pass), docs. Subject forms (admin + creator) get a JSON filter editor with
+> validation; the History modal shows the applied filter as chips. **Deferred to a follow-up:** the
+> discovery endpoints (distinct labels/tags) and the visual Ask-composer filter builder + MCP
+> `metadataFilter` on `pneuma_query`/`pneuma_search` (folded into Phase 7).
 
 **Goal:** let a query constrain retrieval by required/excluded **labels** and **tag conditions** over the tags
 Pneuma already stores on chunks/nodes (`rights`, `authority`, `confidence`, `nodeType`, `documentType`,
@@ -387,7 +397,7 @@ comply" gate.
 | Phase | Feature | Backend | Data/migration | MCP | REST/SDK/Postman/docs | Dashboards | Tests | Validated |
 |---|---|---|---|---|---|---|---|---|
 | 1 | #1 Telemetry | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
-| 2 | #2 Facet filters | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 2 | #2 Facet filters | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (JSON editor) | ✅ | 🟨 |
 | 3 | #6 Threads + tool trace | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 4 | #5 Analytics | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 5 | #4 Eval harness | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |

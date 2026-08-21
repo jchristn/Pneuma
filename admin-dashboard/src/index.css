@@ -815,3 +815,6 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .hd-rating { font-size: 1.3rem; line-height: 1.2; }
 .hd-feedback-body { flex: 1; font-size: 0.86rem; color: var(--color-text); }
 .hd-feedback-meta { margin-top: 6px; font-size: 0.72rem; color: var(--color-text-secondary); }
+.hd-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.hd-filter-chip { display: inline-block; padding: 3px 8px; font-size: 0.76rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: 6px; color: var(--color-text); }
+.hd-filter-exc { color: var(--color-danger); border-color: var(--color-danger); text-decoration: line-through; }

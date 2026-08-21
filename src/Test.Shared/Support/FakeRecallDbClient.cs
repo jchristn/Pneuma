@@ -5,8 +5,10 @@ namespace Test.Shared.Support
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Requests;
 
     /// <summary>
     /// In-memory RecallDB fake implementing the collection store, vector repository, and inverted index.
@@ -135,7 +137,7 @@ namespace Test.Shared.Support
         }
 
         /// <inheritdoc />
-        public Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, CancellationToken token = default)
+        public Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required = null, IReadOnlyList<RetrievalTagCondition>? excluded = null, CancellationToken token = default)
         {
             List<VectorSearchHit> hits = new List<VectorSearchHit>();
             lock (_Lock)
@@ -144,6 +146,7 @@ namespace Test.Shared.Support
                 {
                     if (doc.TenantId != tenantId || doc.CollectionId != collectionId) continue;
                     if (!MatchesTags(doc, tags)) continue;
+                    if (!MatchesConditions(doc, required, excluded)) continue;
                     double score = Cosine(embedding, doc.Embedding);
                     if (score < minimumScore) continue;
                     if (!doc.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || string.IsNullOrEmpty(nodeId)) continue;
@@ -166,7 +169,7 @@ namespace Test.Shared.Support
         // ---- IInvertedIndex ----
 
         /// <inheritdoc />
-        public Task<List<SearchHit>> SearchAsync(string tenantId, string collectionId, string query, int maxResults, IReadOnlyDictionary<string, string>? tags, CancellationToken token = default)
+        public Task<List<SearchHit>> SearchAsync(string tenantId, string collectionId, string query, int maxResults, IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required = null, IReadOnlyList<RetrievalTagCondition>? excluded = null, CancellationToken token = default)
         {
             List<SearchHit> hits = new List<SearchHit>();
             lock (_Lock)
@@ -175,6 +178,7 @@ namespace Test.Shared.Support
                 {
                     if (doc.TenantId != tenantId || doc.CollectionId != collectionId) continue;
                     if (!MatchesTags(doc, tags)) continue;
+                    if (!MatchesConditions(doc, required, excluded)) continue;
                     if (doc.Content.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
                     hits.Add(new SearchHit
                     {
@@ -197,6 +201,45 @@ namespace Test.Shared.Support
                 if (!doc.Tags.TryGetValue(tag.Key, out string? v) || v != tag.Value) return false;
             }
             return true;
+        }
+
+        private static bool MatchesConditions(Stored doc, IReadOnlyList<RetrievalTagCondition>? required, IReadOnlyList<RetrievalTagCondition>? excluded)
+        {
+            if (required != null)
+            {
+                foreach (RetrievalTagCondition condition in required)
+                {
+                    if (!Evaluate(doc, condition)) return false;
+                }
+            }
+            if (excluded != null)
+            {
+                foreach (RetrievalTagCondition condition in excluded)
+                {
+                    if (Evaluate(doc, condition)) return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool Evaluate(Stored doc, RetrievalTagCondition condition)
+        {
+            bool present = doc.Tags.TryGetValue(condition.Key, out string? raw);
+            string value = raw ?? String.Empty;
+            string compare = condition.Value ?? String.Empty;
+            switch (condition.Condition)
+            {
+                case TagConditionEnum.Equals: return present && value == compare;
+                case TagConditionEnum.NotEquals: return !present || value != compare;
+                case TagConditionEnum.Contains: return present && value.IndexOf(compare, StringComparison.OrdinalIgnoreCase) >= 0;
+                case TagConditionEnum.StartsWith: return present && value.StartsWith(compare, StringComparison.OrdinalIgnoreCase);
+                case TagConditionEnum.EndsWith: return present && value.EndsWith(compare, StringComparison.OrdinalIgnoreCase);
+                case TagConditionEnum.GreaterThan: return present && String.CompareOrdinal(value, compare) > 0;
+                case TagConditionEnum.LessThan: return present && String.CompareOrdinal(value, compare) < 0;
+                case TagConditionEnum.IsNull: return !present;
+                case TagConditionEnum.IsNotNull: return present;
+                default: return true;
+            }
         }
 
         private static double Cosine(IReadOnlyList<float> a, float[] b)

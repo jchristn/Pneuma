@@ -14,7 +14,9 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
+    using Pneuma.Core.Serialization;
     using Pneuma.Server.Settings;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
@@ -98,7 +100,7 @@ namespace Pneuma.Server.Services
         /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its chunks.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The grounded answer.</returns>
-        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token = default)
+        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
         {
             Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
 
@@ -106,7 +108,7 @@ namespace Pneuma.Server.Services
             // the user's original question.
             string retrievalQuestion = await RewriteQuestionAsync(tenantId, subject, question, token).ConfigureAwait(false);
 
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, retrievalQuestion, max, subjectId, citedLinkScores, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, retrievalQuestion, max, subjectId, citedLinkScores, requestFilter, token).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -150,7 +152,24 @@ namespace Pneuma.Server.Services
         /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its chunks.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The supporting nodes.</returns>
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token = default)
+        /// <summary>
+        /// Resolve a subject's default retrieval facet filter, or null when the subject has none. Used by the
+        /// agentic search tool so it applies the same facets as the grounded path.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject identifier, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The subject's default filter, or null when absent or empty.</returns>
+        public async Task<RetrievalFilter?> GetSubjectFilterAsync(string tenantId, string? subjectId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(subjectId)) return null;
+            Subject? subject = await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            if (subject == null || String.IsNullOrWhiteSpace(subject.RetrievalFilterJson)) return null;
+            RetrievalFilter merged = MergeFilters(subject.RetrievalFilterJson, null);
+            return merged.IsEmpty() ? null : merged;
+        }
+
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
         {
             List<GraphNode> primary = new List<GraphNode>();
             Dictionary<string, int> positionByNode = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -167,6 +186,13 @@ namespace Pneuma.Server.Services
             if (String.IsNullOrEmpty(collectionId)) return primary;
             string? embeddingEndpointId = subject?.EmbeddingModel;
 
+            // Facet filter: the subject's default retrieval filter merged with any per-request filter (union of
+            // required, union of excluded — a request narrows, never widens, the subject default). Pushed down
+            // to RecallDB's tag filter so only eligible chunks are considered.
+            RetrievalFilter effectiveFilter = MergeFilters(subject?.RetrievalFilterJson, requestFilter);
+            IReadOnlyList<RetrievalTagCondition>? requiredFacets = effectiveFilter.Required.Count > 0 ? effectiveFilter.Required : null;
+            IReadOnlyList<RetrievalTagCondition>? excludedFacets = effectiveFilter.Excluded.Count > 0 ? effectiveFilter.Excluded : null;
+
             // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
             // exact-match subjectId tag every ingested chunk carries.
             IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
@@ -180,7 +206,7 @@ namespace Pneuma.Server.Services
             {
                 try
                 {
-                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, token).ConfigureAwait(false);
+                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
                     foreach (SearchHit hit in hits)
                     {
                         if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
@@ -211,7 +237,7 @@ namespace Pneuma.Server.Services
                 List<float>? queryEmbedding = await EmbedQueryAsync(question, embeddingEndpointId, token).ConfigureAwait(false);
                 if (queryEmbedding != null && queryEmbedding.Count > 0)
                 {
-                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, token).ConfigureAwait(false);
+                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
                     foreach (VectorSearchHit hit in vectorHits)
                     {
                         if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;
@@ -549,6 +575,36 @@ namespace Pneuma.Server.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Merge a subject's default retrieval filter (serialized JSON) with a per-request filter. The result is
+        /// the union of both filters' required and excluded conditions, so a per-request filter narrows — never
+        /// widens — the subject default. Invalid or absent JSON contributes nothing.
+        /// </summary>
+        /// <param name="subjectFilterJson">The subject's default filter as serialized JSON, or null.</param>
+        /// <param name="requestFilter">The per-request filter, or null.</param>
+        /// <returns>The merged effective filter (never null).</returns>
+        private static RetrievalFilter MergeFilters(string? subjectFilterJson, RetrievalFilter? requestFilter)
+        {
+            RetrievalFilter merged = new RetrievalFilter();
+            if (!String.IsNullOrWhiteSpace(subjectFilterJson))
+            {
+                RetrievalFilter? subjectFilter = null;
+                try { subjectFilter = Json.Deserialize<RetrievalFilter>(subjectFilterJson!); }
+                catch (Exception) { subjectFilter = null; }
+                if (subjectFilter != null)
+                {
+                    if (subjectFilter.Required != null) merged.Required.AddRange(subjectFilter.Required);
+                    if (subjectFilter.Excluded != null) merged.Excluded.AddRange(subjectFilter.Excluded);
+                }
+            }
+            if (requestFilter != null)
+            {
+                if (requestFilter.Required != null) merged.Required.AddRange(requestFilter.Required);
+                if (requestFilter.Excluded != null) merged.Excluded.AddRange(requestFilter.Excluded);
+            }
+            return merged;
+        }
 
         /// <summary>
         /// Ensure a retrieved source carries its content from the retrieval store. RecallDB is the authority

@@ -37,7 +37,8 @@ const EMPTY_FORM = {
   ontologyClassifyPrompt: DEFAULT_ONTOLOGY_CLASSIFY,
   ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION,
   rerankingPrompt: DEFAULT_RERANKING_PROMPT,
-  promptRewritePrompt: DEFAULT_PROMPT_REWRITE
+  promptRewritePrompt: DEFAULT_PROMPT_REWRITE,
+  retrievalFilterJson: ''
 };
 
 function endpointLabel(ep) { return ep.name || ep.model || ep.id; }
@@ -137,7 +138,8 @@ function SubjectsView() {
       ontologyClassifyPrompt: subject.ontologyClassifyPrompt || '',
       ontologyDefinitionPrompt: subject.ontologyDefinitionPrompt || '',
       rerankingPrompt: subject.rerankingPrompt != null ? subject.rerankingPrompt : DEFAULT_RERANKING_PROMPT,
-      promptRewritePrompt: subject.promptRewritePrompt != null ? subject.promptRewritePrompt : DEFAULT_PROMPT_REWRITE
+      promptRewritePrompt: subject.promptRewritePrompt != null ? subject.promptRewritePrompt : DEFAULT_PROMPT_REWRITE,
+      retrievalFilterJson: subject.retrievalFilterJson || ''
     });
     setFormError('');
     setFormOpen(true);
@@ -152,6 +154,10 @@ function SubjectsView() {
     if (!form.embeddingModel || !form.inferenceModel || !form.collection) {
       setFormError(t('subjects.modelsRequired', 'An embedding model, inference model, and collection are required before this subject can ingest links or answer questions.'));
       return;
+    }
+    if (form.retrievalFilterJson && form.retrievalFilterJson.trim()) {
+      try { JSON.parse(form.retrievalFilterJson); }
+      catch { setFormError(t('subjects.filterInvalid', 'The retrieval filter must be valid JSON, or left blank.')); return; }
     }
     setSaving(true);
     setFormError('');
@@ -427,6 +433,17 @@ function SubjectsView() {
               value={form.ontologyDefinitionPrompt}
               onChange={(e) => setForm({ ...form, ontologyDefinitionPrompt: e.target.value })}
               title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}
+            />
+          </div>
+          <div className="form-group" title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on, by chunk tags (e.g. rights, authority, documentType). Shape: {"required":[{key,condition,value}],"excluded":[...]}. Conditions: Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, LessThan, IsNull, IsNotNull. Leave blank for no filter.')}>
+            <label htmlFor="cd-retfilter" title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on.')}>{t('subjects.retrievalFilter', 'Retrieval Filter (JSON, optional)')}</label>
+            <textarea
+              id="cd-retfilter"
+              rows={3}
+              value={form.retrievalFilterJson}
+              placeholder={'{"required":[{"key":"rights","condition":"Equals","value":"public"}],"excluded":[]}'}
+              onChange={(e) => setForm({ ...form, retrievalFilterJson: e.target.value })}
+              title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on.')}
             />
           </div>
           <div className="form-actions">

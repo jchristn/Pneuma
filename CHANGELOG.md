@@ -7,6 +7,13 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Metadata / facet retrieval filters.** A subject can carry a default retrieval facet filter
+  (`retrievalFilterJson`, schema v12) and `/v1.0/query` accepts a per-request `metadataFilter`; both are
+  chunk-tag predicates (`required`/`excluded` with conditions Equals/NotEquals/Contains/StartsWith/EndsWith/
+  GreaterThan/LessThan/IsNull/IsNotNull) pushed down natively to RecallDB's tag filter. The per-request filter
+  is merged with the subject default (union — narrows, never widens). Applied on both the grounded and agentic
+  search paths; the effective filter is recorded on the chat turn and shown in the History detail modal, and a
+  subject's default filter is editable in the admin/creator subject forms.
 - **Per-stage chat telemetry.** Every answered agentic turn now records structured, provider-agnostic
   performance telemetry (schema v11): a serialized `TurnPerformance` on the turn's `performanceJson` (ordered
   stages — prompt rewrite, compaction, each tool call, final inference — with duration, time-to-first-token,

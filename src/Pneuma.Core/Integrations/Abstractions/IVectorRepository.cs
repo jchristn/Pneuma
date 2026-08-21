@@ -4,6 +4,7 @@ namespace Pneuma.Core.Integrations.Abstractions
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Requests;
 
     /// <summary>
     /// Provider-neutral vector store for semantic retrieval, backed by a RecallDB collection. A chunk is
@@ -30,9 +31,11 @@ namespace Pneuma.Core.Integrations.Abstractions
         /// <param name="topK">Maximum number of hits to return; minimum 1.</param>
         /// <param name="minimumScore">Minimum similarity score a hit must meet to be returned.</param>
         /// <param name="tags">Optional exact-match tag filter (AND); null applies no filter.</param>
+        /// <param name="required">Optional facet conditions every returned chunk must satisfy (AND); null applies none.</param>
+        /// <param name="excluded">Optional facet conditions that, if any match, exclude a chunk; null applies none.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The matching hits, highest score first.</returns>
-        Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, CancellationToken token = default);
+        Task<List<VectorSearchHit>> SearchAsync(string tenantId, string collectionId, IReadOnlyList<float> embedding, int topK, double minimumScore, IReadOnlyDictionary<string, string>? tags, IReadOnlyList<RetrievalTagCondition>? required = null, IReadOnlyList<RetrievalTagCondition>? excluded = null, CancellationToken token = default);
 
         /// <summary>Delete every chunk in a tenant's collection matching an exact-match tag (e.g. a jobId), to cascade-remove a source's chunks. Idempotent.</summary>
         /// <param name="tenantId">RecallDB tenant that owns the collection.</param>

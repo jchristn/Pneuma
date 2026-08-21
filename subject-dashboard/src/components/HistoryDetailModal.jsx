@@ -83,6 +83,11 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
     } catch { return []; }
   }, [turn]);
 
+  const retrievalFilter = useMemo(() => {
+    try { return turn?.retrievalFilterJson ? JSON.parse(turn.retrievalFilterJson) : null; }
+    catch { return null; }
+  }, [turn]);
+
   if (!turn) return null;
 
   const total = turn.totalTokens || ((turn.promptTokens || 0) + (turn.completionTokens || 0));
@@ -179,6 +184,21 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
                   </span>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Retrieval filter */}
+        {retrievalFilter && ((retrievalFilter.required && retrievalFilter.required.length > 0) || (retrievalFilter.excluded && retrievalFilter.excluded.length > 0)) && (
+          <div className="hd-section">
+            <div className="hd-section-title">{t('history.retrievalFilter', 'Retrieval filter applied')}</div>
+            <div className="hd-filter">
+              {(retrievalFilter.required || []).map((c, i) => (
+                <span key={`r-${i}`} className="hd-filter-chip">{c.key} {c.condition} {c.value ?? ''}</span>
+              ))}
+              {(retrievalFilter.excluded || []).map((c, i) => (
+                <span key={`e-${i}`} className="hd-filter-chip hd-filter-exc">not ({c.key} {c.condition} {c.value ?? ''})</span>
+              ))}
             </div>
           </div>
         )}

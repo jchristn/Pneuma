@@ -18,5 +18,11 @@ namespace Pneuma.Core.Requests
         /// considered. Null answers over the whole tenant.
         /// </summary>
         public string? SubjectId { get; set; } = null;
+
+        /// <summary>
+        /// Optional per-request facet filter. Merged with the subject's default filter (union of required and
+        /// excluded), so a request narrows — never widens — the subject default.
+        /// </summary>
+        public RetrievalFilter? MetadataFilter { get; set; } = null;
     }
 }

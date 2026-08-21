@@ -23,14 +23,14 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, promptrewritemodel, collection, rerankingprompt, promptrewriteprompt, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, promptrewritemodel, collection, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
                 Sanitizer.Str(subject.UrlSlug) + ", " + Sanitizer.Bit(subject.ThinkingEnabled) + ", " +
                 Sanitizer.Str(subject.SystemPrompt) + ", " + Sanitizer.Str(subject.OntologyClassifyPrompt) + ", " +
                 Sanitizer.Str(subject.OntologyDefinitionPrompt) + ", " +
-                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " +
+                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
                 Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
                 Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
                 Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
@@ -113,6 +113,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 ", collection = " + Sanitizer.Str(subject.Collection) +
                 ", rerankingprompt = " + Sanitizer.Str(subject.RerankingPrompt) +
                 ", promptrewriteprompt = " + Sanitizer.Str(subject.PromptRewritePrompt) +
+                ", retrievalfilterjson = " + Sanitizer.Str(subject.RetrievalFilterJson) +
                 ", historyretentiondays = " + Sanitizer.Num(subject.HistoryRetentionDays) +
                 ", deletionstatus = " + Sanitizer.Str(subject.DeletionStatus.ToString()) +
                 ", active = " + Sanitizer.Bit(subject.Active) +
@@ -191,6 +192,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 Collection = RowReader.GetNullableString(row, "collection"),
                 RerankingPrompt = RowReader.GetNullableString(row, "rerankingprompt"),
                 PromptRewritePrompt = RowReader.GetNullableString(row, "promptrewriteprompt"),
+                RetrievalFilterJson = RowReader.GetNullableString(row, "retrievalfilterjson"),
                 HistoryRetentionDays = RowReader.GetInt(row, "historyretentiondays"),
                 DeletionStatus = RowReader.GetEnum<SubjectDeletionStatusEnum>(row, "deletionstatus", SubjectDeletionStatusEnum.None),
                 Active = RowReader.GetBool(row, "active"),

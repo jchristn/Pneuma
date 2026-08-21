@@ -21,7 +21,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             turn.CreatedUtc = DateTime.UtcNow;
 
             string sql =
-                "INSERT INTO chatturns (id, tenantid, subjectid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, performancejson, performanceschemaversion, createdutc) VALUES (" +
+                "INSERT INTO chatturns (id, tenantid, subjectid, userid, question, answer, thinking, model, prompttokens, completiontokens, totaltokens, timetofirsttokenms, generationms, thinkingms, contextsize, citationsjson, performancejson, performanceschemaversion, retrievalfilterjson, createdutc) VALUES (" +
                 Sanitizer.Str(turn.Id) + ", " + Sanitizer.Str(turn.TenantId) + ", " +
                 Sanitizer.Str(turn.SubjectId) + ", " + Sanitizer.Str(turn.UserId) + ", " +
                 Sanitizer.Str(turn.Question) + ", " + Sanitizer.Str(turn.Answer) + ", " +
@@ -30,7 +30,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Num(turn.TotalTokens) + ", " + Sanitizer.Num(turn.TimeToFirstTokenMs) + ", " +
                 Sanitizer.Num(turn.GenerationMs) + ", " + Sanitizer.Num(turn.ThinkingMs) + ", " +
                 Sanitizer.Num(turn.ContextSize) + ", " + Sanitizer.Str(turn.CitationsJson) + ", " +
-                Sanitizer.Str(turn.PerformanceJson) + ", " + Sanitizer.Num(turn.PerformanceSchemaVersion) + ", " +
+                Sanitizer.Str(turn.PerformanceJson) + ", " + Sanitizer.Num(turn.PerformanceSchemaVersion) + ", " + Sanitizer.Str(turn.RetrievalFilterJson) + ", " +
                 Sanitizer.Ts(turn.CreatedUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return turn;
@@ -99,6 +99,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 CitationsJson = RowReader.GetNullableString(row, "citationsjson"),
                 PerformanceJson = RowReader.GetNullableString(row, "performancejson"),
                 PerformanceSchemaVersion = RowReader.GetInt(row, "performanceschemaversion"),
+                RetrievalFilterJson = RowReader.GetNullableString(row, "retrievalfilterjson"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc")
             };
         }

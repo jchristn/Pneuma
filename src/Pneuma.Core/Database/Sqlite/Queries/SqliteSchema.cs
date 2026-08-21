@@ -97,6 +97,11 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "CREATE INDEX IF NOT EXISTS idx_perfevents_tenant_subject ON chatturnperfevents (tenantid, subjectid, createdutc);",
                     "CREATE INDEX IF NOT EXISTS idx_perfevents_turn ON chatturnperfevents (turnid);"
                 }));
+                list.Add(new SchemaMigration(12, "Add subject and chat-turn retrieval facet filters", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN retrievalfilterjson TEXT;",
+                    "ALTER TABLE chatturns ADD COLUMN retrievalfilterjson TEXT;"
+                }));
                 return list;
             }
         }

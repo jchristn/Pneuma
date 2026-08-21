@@ -133,6 +133,13 @@ namespace Pneuma.Core.Models
         public string? PromptRewritePrompt { get; set; } = null;
 
         /// <summary>
+        /// Optional default retrieval facet filter for this subject, serialized as a <see cref="Requests.RetrievalFilter"/>
+        /// JSON payload (schemaless column). Applied to every query about this subject; a per-request filter is
+        /// merged with it (union of required and excluded). Null applies no default filter.
+        /// </summary>
+        public string? RetrievalFilterJson { get; set; } = null;
+
+        /// <summary>
         /// Number of days chat-turn history is retained for this subject before pruning. Clamped to a minimum
         /// of 1. Default 90.
         /// </summary>

@@ -5,10 +5,12 @@ namespace Test.Shared.Suites
     using System.Net;
     using System.Net.Http;
     using System.Threading.Tasks;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Server.Services;
     using SyslogLogging;
     using Test.Shared.Support;
@@ -165,7 +167,7 @@ namespace Test.Shared.Suites
 
                             List<VectorSearchHit> hits = await vectors.SearchAsync(
                                 "ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0,
-                                new Dictionary<string, string> { { "subjectId", "sub_1" } }, ct);
+                                new Dictionary<string, string> { { "subjectId", "sub_1" } }, token: ct);
 
                             if (hits.Count != 2) throw new Exception("Expected 2 tag-filtered hits, got " + hits.Count);
                             if (hits[0].NodeId != "n_near") throw new Exception("The closest vector should rank first, got " + hits[0].NodeId);
@@ -173,6 +175,28 @@ namespace Test.Shared.Suites
                             {
                                 if (hit.NodeId == "n_other") throw new Exception("The tag filter should have excluded n_other");
                             }
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "VectorRepository_HonorsFacetConditions", "The vector store honors required and excluded facet tag conditions",
+                        executeAsync: async ct =>
+                        {
+                            FakeRecallDbClient vectors = new FakeRecallDbClient();
+                            RecallCollection collection = await vectors.CreateCollectionAsync("ten_x", new RecallCollection { Name = "t", Dimensionality = 3 }, ct);
+                            await vectors.StoreChunksAsync("ten_x", collection.Id, new List<ChunkDocument>
+                            {
+                                new ChunkDocument { DocumentKey = "pub", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_pub" }, { "rights", "public" }, { "documentType", "html" } } },
+                                new ChunkDocument { DocumentKey = "priv", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_priv" }, { "rights", "private" }, { "documentType", "html" } } },
+                                new ChunkDocument { DocumentKey = "pubpdf", DocumentId = "d", Position = 2, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_pubpdf" }, { "rights", "public" }, { "documentType", "pdf" } } }
+                            }, ct);
+
+                            List<RetrievalTagCondition> required = new List<RetrievalTagCondition> { new RetrievalTagCondition { Key = "rights", Condition = TagConditionEnum.Equals, Value = "public" } };
+                            List<RetrievalTagCondition> excluded = new List<RetrievalTagCondition> { new RetrievalTagCondition { Key = "documentType", Condition = TagConditionEnum.Equals, Value = "pdf" } };
+
+                            List<VectorSearchHit> reqOnly = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, required, null, ct);
+                            if (reqOnly.Count != 2) throw new Exception("Required rights=public should keep 2 hits, got " + reqOnly.Count);
+
+                            List<VectorSearchHit> both = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, required, excluded, ct);
+                            if (both.Count != 1 || both[0].NodeId != "n_pub") throw new Exception("Required public + excluded pdf should keep only n_pub, got " + both.Count);
                         }),
 
                     new TestCaseDescriptor("ExternalServices", "LiteGraph_ReadRequestsFullNode_AndRoundTripsDataTags", "Node reads request incldata/inclsub and map Data, Tags, and Labels back",
@@ -299,7 +323,7 @@ namespace Test.Shared.Suites
                                         new ChunkDocument { DocumentKey = "k_" + Guid.NewGuid().ToString("N"), DocumentId = "lnk_live", Position = 0, Content = "hello world", Embedding = new List<float> { 1f, 0f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", nodeId } } }
                                     }, ct);
 
-                                    List<VectorSearchHit> hits = await recall.SearchAsync("pneuma", collection.Id, new float[] { 1f, 0f, 0f, 0f }, 5, 0.5, null, ct);
+                                    List<VectorSearchHit> hits = await recall.SearchAsync("pneuma", collection.Id, new float[] { 1f, 0f, 0f, 0f }, 5, 0.5, null, token: ct);
                                     if (!hits.Exists(h => h.NodeId == nodeId && h.Score > 0.9))
                                     {
                                         throw new Exception("live cosine search did not return the stored chunk with a high score; hits=" + hits.Count);

@@ -390,6 +390,7 @@ namespace Test.Shared.Suites
                                 Collection = "col_ada",
                                 RerankingPrompt = "Rank by relevance.",
                                 PromptRewritePrompt = "Rewrite tersely.",
+                                RetrievalFilterJson = "{\"required\":[{\"key\":\"rights\",\"condition\":\"Equals\",\"value\":\"public\"}]}",
                                 HistoryRetentionDays = 0 // must clamp to >= 1
                             }, ct);
                             if (created.HistoryRetentionDays != 1) throw new Exception("HistoryRetentionDays must clamp to a minimum of 1, got " + created.HistoryRetentionDays);
@@ -408,6 +409,7 @@ namespace Test.Shared.Suites
                             if (read.Collection != "col_ada") throw new Exception("Collection did not round-trip");
                             if (read.RerankingPrompt != "Rank by relevance.") throw new Exception("RerankingPrompt did not round-trip");
                             if (read.PromptRewritePrompt != "Rewrite tersely.") throw new Exception("PromptRewritePrompt did not round-trip");
+                            if (read.RetrievalFilterJson == null || !read.RetrievalFilterJson.Contains("rights")) throw new Exception("RetrievalFilterJson did not round-trip");
                             if (read.DeletionStatus != SubjectDeletionStatusEnum.None) throw new Exception("New subject must have DeletionStatus None");
 
                             Subject bySlug = await db.Subjects.ReadBySlugAsync(t.Id, "ada-lovelace", ct) ?? throw new Exception("ReadBySlug failed to resolve the slug");

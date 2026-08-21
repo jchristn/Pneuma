@@ -9,6 +9,7 @@ namespace Pneuma.Server.Mcp
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Services;
@@ -86,7 +87,12 @@ namespace Pneuma.Server.Mcp
             IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
                 ? null
                 : new Dictionary<string, string> { { "subjectId", subjectId } };
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, token).ConfigureAwait(false);
+            // Apply the subject's default retrieval facet filter so the agentic search tool narrows the same way
+            // the grounded path does.
+            RetrievalFilter? subjectFilter = await _Query.GetSubjectFilterAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            IReadOnlyList<RetrievalTagCondition>? requiredFacets = subjectFilter != null && subjectFilter.Required.Count > 0 ? subjectFilter.Required : null;
+            IReadOnlyList<RetrievalTagCondition>? excludedFacets = subjectFilter != null && subjectFilter.Excluded.Count > 0 ? subjectFilter.Excluded : null;
+            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
 
             // Optional reranking: when the subject has a reranking model configured, reorder the hits by
             // relevance to the query (by snippet) before they are surfaced to the assistant.
@@ -186,7 +192,7 @@ namespace Pneuma.Server.Mcp
 
             int max = ClampMax(arguments);
             string tenantId = rc.TenantId ?? String.Empty;
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, null, token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, null, token: token).ConfigureAwait(false);
 
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
@@ -228,7 +234,7 @@ namespace Pneuma.Server.Mcp
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, null, token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, null, token: token).ConfigureAwait(false);
                 List<object> sourceSummaries = new List<object>();
                 foreach (GraphNode source in sources)
                 {
