@@ -100,6 +100,18 @@ namespace Pneuma.Core.Helpers
         /// <returns>Chat tool-call identifier.</returns>
         public static string GenerateChatToolCallId() => Generate(Constants.ChatToolCallPrefix);
 
+        /// <summary>Generate an evaluation ground-truth fact identifier.</summary>
+        /// <returns>Eval fact identifier.</returns>
+        public static string GenerateEvalFactId() => Generate(Constants.EvalFactPrefix);
+
+        /// <summary>Generate an evaluation run identifier.</summary>
+        /// <returns>Eval run identifier.</returns>
+        public static string GenerateEvalRunId() => Generate(Constants.EvalRunPrefix);
+
+        /// <summary>Generate an evaluation result identifier.</summary>
+        /// <returns>Eval result identifier.</returns>
+        public static string GenerateEvalResultId() => Generate(Constants.EvalResultPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

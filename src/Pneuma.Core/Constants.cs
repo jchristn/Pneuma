@@ -79,6 +79,15 @@ namespace Pneuma.Core
         /// <summary>Chat tool-call identifier prefix.</summary>
         public const string ChatToolCallPrefix = "tcall_";
 
+        /// <summary>Evaluation ground-truth fact identifier prefix.</summary>
+        public const string EvalFactPrefix = "efact_";
+
+        /// <summary>Evaluation run identifier prefix.</summary>
+        public const string EvalRunPrefix = "erun_";
+
+        /// <summary>Evaluation result identifier prefix.</summary>
+        public const string EvalResultPrefix = "eres_";
+
         #endregion
 
         #region General

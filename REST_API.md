@@ -113,6 +113,13 @@ Response envelope:
 | GET | `/v1.0/threads/{id}` | A thread with its turns: `{ thread, turns: [...] }` |
 | PUT | `/v1.0/threads/{id}` | Rename a thread. Body `{ title }` |
 | DELETE | `/v1.0/threads/{id}` | Delete a thread and cascade its turns + tool calls. Returns 204 |
+| GET | `/v1.0/eval/facts` | List a subject's ground-truth facts (`?subjectId=` required) → `{ objects: [...] }` |
+| POST | `/v1.0/eval/facts` | Create a fact. Body `{ subjectId, question, expectedAnswer, category? }` |
+| DELETE | `/v1.0/eval/facts/{id}` | Delete a fact. Returns 204 |
+| GET | `/v1.0/eval/runs` | List evaluation runs, optionally `?subjectId=` → `{ objects: [...] }` |
+| POST | `/v1.0/eval/runs` | Start a run. Body `{ subjectId, category? }` — answers each fact through the pipeline and LLM-judges it, returning the completed run `{ status, totalFacts, passCount, partialCount, failCount, ... }` (synchronous) |
+| GET | `/v1.0/eval/runs/{id}` | A run with its results: `{ run, results: [{ question, expectedAnswer, producedAnswer, verdict, score, reason, failureMode, category }] }` |
+| DELETE | `/v1.0/eval/runs/{id}` | Delete a run and its results. Returns 204 |
 | GET | `/v1.0/analytics` | Per-subject chat analytics over a window. Query `subjectId?` + `days?` (default 30, clamped 1–365) → `{ overview: { turnCount, avgGenerationMs, p50/p95/p99GenerationMs, avgTimeToFirstTokenMs, avgPromptTokens, avgCompletionTokens, avgTokensPerSecond, thumbsUp, thumbsDown }, timeseries: [{ bucketUtc, count, avgGenerationMs }], stages: [{ stage, count, avgDurationMs, p95DurationMs }] }` |
 | GET | `/v1.0/feedback` | List feedback (newest first), optionally `?subjectId=`. Each item is `{ feedback, turn }` (the rated turn is enriched inline). Paginated `EnumerationResult` |
 | POST | `/v1.0/feedback` | Submit feedback on a turn: `{ turnId, rating: "Up"\|"Down"\|"None", comment? }`. Requires a rating and/or comment; unknown `turnId` → 404 |

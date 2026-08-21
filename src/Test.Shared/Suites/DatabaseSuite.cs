@@ -525,6 +525,35 @@ namespace Test.Shared.Suites
                             if (await db.ChatThreads.ReadAsync(t.Id, thread.Id, ct) != null) throw new Exception("Thread delete must remove the thread");
                         }),
 
+                    new TestCaseDescriptor("Database", "Eval_Facts_Runs_Results_Crud", "Eval facts, runs, and results persist, enumerate, update, and delete",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "Ev" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+
+                            EvalFact fact = await db.EvalFacts.CreateAsync(new EvalFact { TenantId = t.Id, SubjectId = s.Id, Question = "Who?", ExpectedAnswer = "Ada", Category = "bio" }, ct);
+                            if ((await db.EvalFacts.EnumerateBySubjectAsync(t.Id, s.Id, ct)).Count != 1) throw new Exception("Expected 1 fact");
+                            if ((await db.EvalFacts.ReadAsync(t.Id, fact.Id, ct))!.ExpectedAnswer != "Ada") throw new Exception("Fact did not round-trip");
+
+                            EvalRun run = await db.EvalRuns.CreateAsync(new EvalRun { TenantId = t.Id, SubjectId = s.Id, Status = EvalRunStatusEnum.Running, TotalFacts = 1 }, ct);
+                            run.Status = EvalRunStatusEnum.Completed; run.PassCount = 1; run.FinishedUtc = DateTime.UtcNow;
+                            await db.EvalRuns.UpdateAsync(run, ct);
+                            EvalRun readRun = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct) ?? throw new Exception("Run vanished");
+                            if (readRun.Status != EvalRunStatusEnum.Completed || readRun.PassCount != 1 || readRun.FinishedUtc == null) throw new Exception("Run did not round-trip");
+
+                            await db.EvalResults.CreateAsync(new EvalResult { TenantId = t.Id, RunId = run.Id, FactId = fact.Id, Question = "Who?", ExpectedAnswer = "Ada", ProducedAnswer = "Ada Lovelace", Verdict = EvalVerdictEnum.Pass, Score = 9.5, Reason = "correct", Category = "bio" }, ct);
+                            List<EvalResult> results = await db.EvalResults.EnumerateByRunAsync(t.Id, run.Id, ct);
+                            if (results.Count != 1 || results[0].Verdict != EvalVerdictEnum.Pass || results[0].Score < 9) throw new Exception("Result did not round-trip");
+
+                            await db.EvalResults.DeleteByRunAsync(t.Id, run.Id, ct);
+                            if ((await db.EvalResults.EnumerateByRunAsync(t.Id, run.Id, ct)).Count != 0) throw new Exception("DeleteByRun must remove results");
+                            await db.EvalRuns.DeleteBySubjectAsync(t.Id, s.Id, ct);
+                            if ((await db.EvalRuns.EnumerateAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("DeleteBySubject must remove runs");
+                            await db.EvalFacts.DeleteAsync(t.Id, fact.Id, ct);
+                            if ((await db.EvalFacts.EnumerateBySubjectAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("Fact delete must remove the fact");
+                        }),
+
                     new TestCaseDescriptor("Database", "Analytics_Report_Aggregates", "Analytics aggregates turn volume, latency percentiles, stages, and feedback",
                         executeAsync: async ct =>
                         {

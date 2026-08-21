@@ -291,7 +291,14 @@ per-endpoint timing, rerank/rewrite/gate counts, feedback trends) rendered with 
 
 ---
 
-## Phase 5 — #4 RAG evaluation harness (LLM-judged)  ⬜
+## Phase 5 — #4 RAG evaluation harness (LLM-judged)  ✅
+
+> **Status note:** `evalfacts`/`evalruns`/`evalresults` (migration v14, all four providers), `EvalService`
+> answers each fact through the real grounded pipeline and LLM-judges it with a seeded `eval.judge` prompt
+> (verdict/score/reason/failure-mode), REST at `/v1.0/eval/facts` + `/v1.0/eval/runs`, an Evaluation view in
+> the admin + creator dashboards (fact management, start run, results modal), subject-cascade cleanup, tests
+> (96 pass), REST_API + CHANGELOG. **Deferred to a follow-up:** runs are **synchronous** (SSE live progress
+> + a background/cancellable worker) and MCP eval tools (Phase 7).
 
 **Goal:** ground-truth facts per subject, eval runs over the **real** answer pipeline, per-fact LLM-judge
 verdicts, category/failure-mode filtering, SSE live progress, and an Eval dashboard view.
@@ -464,7 +471,7 @@ comply" gate.
 | 2 | #2 Facet filters | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (JSON editor) | ✅ | 🟨 |
 | 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading; switcher deferred) | ✅ | 🟨 |
 | 4 | #5 Analytics | ✅ | n/a | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
-| 5 | #4 Eval harness | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 5 | #4 Eval harness | ✅ (sync) | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 6 | #10 Slash commands | ⬜ | n/a | n/a | ⬜ | ⬜ (fe) | ⬜ | ⬜ |
 | 7 | #11 MCP surface | ⬜ | n/a | ⬜ | ⬜ | n/a | ⬜ | ⬜ |
 | 7.5 | Telemetry & Grafana | ⬜ (instrument) | n/a | n/a | ⬜ (TELEMETRY.md) | ⬜ (Grafana) | ⬜ | ⬜ |

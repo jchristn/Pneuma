@@ -1193,3 +1193,20 @@ select {
 .an-stage-track { height: 12px; background: var(--bg-tertiary); border-radius: 6px; overflow: hidden; }
 .an-stage-fill { display: block; height: 100%; background: var(--color-primary); border-radius: 6px; }
 .an-stage-val { font-size: 0.78rem; color: var(--text-primary); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Evaluation view -------------------------------------------------------- */
+.ev-section-title { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 700; margin: 14px 0 10px; display: flex; align-items: center; gap: 8px; }
+.ev-fact-form { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.ev-fact-form input { flex: 1; min-width: 160px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); }
+.ev-fact-form .ev-cat { flex: 0 0 180px; min-width: 120px; }
+.ev-del { color: var(--color-danger); }
+.ev-status { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-transform: capitalize; background: var(--bg-tertiary); color: var(--text-secondary); }
+.ev-status.ev-completed { background: var(--color-success-bg); color: var(--color-success); }
+.ev-status.ev-running { background: var(--color-info-bg); color: var(--color-info); }
+.ev-status.ev-failed, .ev-status.ev-cancelled { background: var(--color-danger-bg); color: var(--color-danger); }
+.ev-verdict { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
+.ev-verdict.ev-pass { background: var(--color-success-bg); color: var(--color-success); }
+.ev-verdict.ev-partial { background: var(--color-warning-bg); color: var(--color-warning); }
+.ev-verdict.ev-fail, .ev-verdict.ev-unknown { background: var(--color-danger-bg); color: var(--color-danger); }
+.ev-run-summary { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-primary); }
+.ev-err { color: var(--color-danger); }

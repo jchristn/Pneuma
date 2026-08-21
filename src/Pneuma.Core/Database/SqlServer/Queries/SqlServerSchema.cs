@@ -116,6 +116,15 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chattoolcalls_turn' AND object_id = OBJECT_ID(N'dbo.chattoolcalls')) CREATE INDEX idx_chattoolcalls_turn ON dbo.chattoolcalls (turnid);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_chattoolcalls_tenant_subject' AND object_id = OBJECT_ID(N'dbo.chattoolcalls')) CREATE INDEX idx_chattoolcalls_tenant_subject ON dbo.chattoolcalls (tenantid, subjectid, createdutc);"
                 }));
+                list.Add(new SchemaMigration(14, "Add RAG evaluation facts, runs, and results", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.evalfacts', N'U') IS NULL CREATE TABLE dbo.evalfacts (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, question NVARCHAR(MAX), expectedanswer NVARCHAR(MAX), category NVARCHAR(128), createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_evalfacts_tenant_subject' AND object_id = OBJECT_ID(N'dbo.evalfacts')) CREATE INDEX idx_evalfacts_tenant_subject ON dbo.evalfacts (tenantid, subjectid, createdutc);",
+                    "IF OBJECT_ID(N'dbo.evalruns', N'U') IS NULL CREATE TABLE dbo.evalruns (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, status NVARCHAR(32), category NVARCHAR(128), totalfacts INT NOT NULL DEFAULT 0, passcount INT NOT NULL DEFAULT 0, partialcount INT NOT NULL DEFAULT 0, failcount INT NOT NULL DEFAULT 0, judgemodel NVARCHAR(512), error NVARCHAR(MAX), createdutc NVARCHAR(32) NOT NULL, finishedutc NVARCHAR(32));",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_evalruns_tenant_subject' AND object_id = OBJECT_ID(N'dbo.evalruns')) CREATE INDEX idx_evalruns_tenant_subject ON dbo.evalruns (tenantid, subjectid, createdutc);",
+                    "IF OBJECT_ID(N'dbo.evalresults', N'U') IS NULL CREATE TABLE dbo.evalresults (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, runid NVARCHAR(64) NOT NULL, factid NVARCHAR(64), question NVARCHAR(MAX), expectedanswer NVARCHAR(MAX), producedanswer NVARCHAR(MAX), verdict NVARCHAR(32), score FLOAT, reason NVARCHAR(MAX), failuremode NVARCHAR(128), category NVARCHAR(128), createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_evalresults_run' AND object_id = OBJECT_ID(N'dbo.evalresults')) CREATE INDEX idx_evalresults_run ON dbo.evalresults (runid);"
+                }));
                 return list;
             }
         }

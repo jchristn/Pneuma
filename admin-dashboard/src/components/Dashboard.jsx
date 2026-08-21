@@ -32,6 +32,7 @@ import AuditView from '../views/AuditView';
 import HistoryView from '../views/HistoryView';
 import FeedbackView from '../views/FeedbackView';
 import AnalyticsView from '../views/AnalyticsView';
+import EvalView from '../views/EvalView';
 
 const VIEWS = {
   home: HomeView,
@@ -56,6 +57,7 @@ const VIEWS = {
   audit: AuditView,
   history: HistoryView,
   analytics: AnalyticsView,
+  eval: EvalView,
   feedback: FeedbackView
 };
 

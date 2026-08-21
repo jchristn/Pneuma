@@ -18,6 +18,7 @@ export const NAV_GROUPS = [
       { section: 'ingestion-jobs', labelKey: 'nav.ingestionJobs', icon: 'list', tip: 'Full history of ingestion jobs across all subjects, including completed and failed runs.' },
       { section: 'history', labelKey: 'nav.history', icon: 'chat', tip: 'Every chat turn across subjects, with the full question, answer, timing, and metadata.' },
       { section: 'analytics', labelKey: 'nav.analytics', icon: 'chart', tip: 'Per-subject chat volume, latency percentiles, per-stage timing, and feedback over time.' },
+      { section: 'eval', labelKey: 'nav.eval', icon: 'list', tip: 'Grade the assistant against ground-truth facts: manage facts, run LLM-judged evaluations, and review results.' },
       { section: 'feedback', labelKey: 'nav.feedback', icon: 'chart', tip: 'Thumbs up/down and comments users left on chat answers, with the rated prompt and response.' }
     ]
   },

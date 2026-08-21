@@ -169,6 +169,24 @@ namespace Pneuma.Server.Services
             return merged.IsEmpty() ? null : merged;
         }
 
+        /// <summary>
+        /// Run a one-shot completion using a subject's answering model (its inference model, or the tenant
+        /// default). Used by the evaluation harness to judge a produced answer against a ground-truth answer.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subject">Subject in scope, or null.</param>
+        /// <param name="systemPrompt">The system prompt.</param>
+        /// <param name="userText">The user text.</param>
+        /// <param name="maxTokens">Maximum completion tokens.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The completion text, or null when no model is available.</returns>
+        public async Task<string?> CompleteWithSubjectAsync(string tenantId, Subject? subject, string systemPrompt, string userText, int maxTokens, CancellationToken token = default)
+        {
+            ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
+            if (runner == null) return null;
+            return await CompleteTextAsync(runner, systemPrompt, userText, maxTokens, token).ConfigureAwait(false);
+        }
+
         public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
         {
             List<GraphNode> primary = new List<GraphNode>();

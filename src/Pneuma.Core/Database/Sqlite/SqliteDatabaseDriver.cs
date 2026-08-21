@@ -77,6 +77,9 @@ namespace Pneuma.Core.Database.Sqlite
             ChatTurnPerfEvents = new ChatTurnPerfEventMethods(this);
             ChatThreads = new ChatThreadMethods(this);
             ChatToolCalls = new ChatToolCallMethods(this);
+            EvalFacts = new EvalFactMethods(this);
+            EvalRuns = new EvalRunMethods(this);
+            EvalResults = new EvalResultMethods(this);
         }
 
         #endregion

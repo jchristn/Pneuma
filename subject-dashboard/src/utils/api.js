@@ -269,6 +269,28 @@ class ApiClient {
     return this._request('GET', '/v1.0/analytics', { query: { days, ...(subjectId ? { subjectId } : {}) } });
   }
 
+  evalListFacts(subjectId) {
+    return this._request('GET', '/v1.0/eval/facts', { query: { subjectId } });
+  }
+  evalCreateFact(fact) {
+    return this._request('POST', '/v1.0/eval/facts', { body: fact });
+  }
+  evalDeleteFact(id) {
+    return this._request('DELETE', `/v1.0/eval/facts/${encodeURIComponent(id)}`);
+  }
+  evalListRuns(subjectId = null) {
+    return this._request('GET', '/v1.0/eval/runs', { query: subjectId ? { subjectId } : {} });
+  }
+  evalStartRun(subjectId, category = null) {
+    return this._request('POST', '/v1.0/eval/runs', { body: { subjectId, category } });
+  }
+  evalGetRun(id) {
+    return this._request('GET', `/v1.0/eval/runs/${encodeURIComponent(id)}`);
+  }
+  evalDeleteRun(id) {
+    return this._request('DELETE', `/v1.0/eval/runs/${encodeURIComponent(id)}`);
+  }
+
   listThreads(subjectId = null) {
     return this._request('GET', '/v1.0/threads', { query: { maxResults: 1000, ...(subjectId ? { subjectId } : {}) } });
   }

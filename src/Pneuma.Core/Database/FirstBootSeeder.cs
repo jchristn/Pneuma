@@ -207,6 +207,13 @@ namespace Pneuma.Core.Database
             // the subject may append its own override after this global base (same merge as the system prompt).
             await SeedPromptAsync(db, "prompt.rewrite", "Prompt Rewrite", DefaultPromptRewritePrompt, token).ConfigureAwait(false);
             await SeedPromptAsync(db, "reranking", "Reranking", DefaultRerankingPrompt, token).ConfigureAwait(false);
+            await SeedPromptAsync(db, "eval.judge", "Eval Judge",
+                "You are an impartial grader for a knowledge-base assistant. You are given a question, the expected " +
+                "correct answer, and the answer the assistant produced. Judge whether the produced answer is correct " +
+                "and complete relative to the expected answer, ignoring wording and style. Respond with ONLY a JSON " +
+                "object: {\"verdict\":\"Pass|Partial|Fail\",\"score\":0-10,\"reason\":\"one sentence\",\"failureMode\":\"" +
+                "missing_evidence|hallucination|incomplete|wrong|none\"}. Pass = fully correct; Partial = partially " +
+                "correct or incomplete; Fail = incorrect or unsupported.", token).ConfigureAwait(false);
 
             // Self-heal the two answering prompts on existing deployments (e.g. the local docker Postgres volume,
             // which is seeded once and never re-seeded): if an unedited default is still stored — recognized by its

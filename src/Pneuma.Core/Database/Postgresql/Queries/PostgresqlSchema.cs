@@ -116,6 +116,15 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "CREATE INDEX IF NOT EXISTS idx_chattoolcalls_turn ON chattoolcalls (turnid);",
                     "CREATE INDEX IF NOT EXISTS idx_chattoolcalls_tenant_subject ON chattoolcalls (tenantid, subjectid, createdutc);"
                 }));
+                list.Add(new SchemaMigration(14, "Add RAG evaluation facts, runs, and results", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS evalfacts (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, question TEXT, expectedanswer TEXT, category TEXT, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_evalfacts_tenant_subject ON evalfacts (tenantid, subjectid, createdutc);",
+                    "CREATE TABLE IF NOT EXISTS evalruns (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, status TEXT, category TEXT, totalfacts INTEGER NOT NULL DEFAULT 0, passcount INTEGER NOT NULL DEFAULT 0, partialcount INTEGER NOT NULL DEFAULT 0, failcount INTEGER NOT NULL DEFAULT 0, judgemodel TEXT, error TEXT, createdutc TEXT NOT NULL, finishedutc TEXT);",
+                    "CREATE INDEX IF NOT EXISTS idx_evalruns_tenant_subject ON evalruns (tenantid, subjectid, createdutc);",
+                    "CREATE TABLE IF NOT EXISTS evalresults (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, runid TEXT NOT NULL, factid TEXT, question TEXT, expectedanswer TEXT, producedanswer TEXT, verdict TEXT, score DOUBLE PRECISION, reason TEXT, failuremode TEXT, category TEXT, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_evalresults_run ON evalresults (runid);"
+                }));
                 return list;
             }
         }

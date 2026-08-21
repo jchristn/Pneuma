@@ -79,6 +79,9 @@ namespace Pneuma.Core.Database.SqlServer
             ChatTurnPerfEvents = new ChatTurnPerfEventMethods(this);
             ChatThreads = new ChatThreadMethods(this);
             ChatToolCalls = new ChatToolCallMethods(this);
+            EvalFacts = new EvalFactMethods(this);
+            EvalRuns = new EvalRunMethods(this);
+            EvalResults = new EvalResultMethods(this);
         }
 
         #endregion

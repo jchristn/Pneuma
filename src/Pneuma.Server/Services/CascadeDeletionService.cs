@@ -129,6 +129,15 @@ namespace Pneuma.Server.Services
             await TryExternalAsync(() => _Db.ChatTurnPerfEvents.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatToolCalls.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatThreads.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+
+            // Remove the subject's evaluation data: results (per run), runs, then facts.
+            await TryExternalAsync(async () =>
+            {
+                List<EvalRun> runs = await _Db.EvalRuns.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
+                foreach (EvalRun run in runs) await _Db.EvalResults.DeleteByRunAsync(tenantId, run.Id, token).ConfigureAwait(false);
+                await _Db.EvalRuns.DeleteBySubjectAsync(tenantId, subjectId, token).ConfigureAwait(false);
+                await _Db.EvalFacts.DeleteBySubjectAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            }).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatTurns.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
 
             // The subject, its links, its jobs, and all job events are removed in one transaction.

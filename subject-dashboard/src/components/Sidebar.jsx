@@ -55,6 +55,11 @@ function Sidebar() {
           icon: icon(<><path d="M3 3v18h18" /><path d="M7 15l3-4 3 3 4-6" /></>)
         },
         {
+          id: 'eval',
+          label: t('nav.eval', 'Evaluation'),
+          icon: icon(<><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>)
+        },
+        {
           id: 'feedback',
           label: t('nav.feedback', 'Feedback'),
           icon: icon(<><path d="M14 9V5a3 3 0 0 0-6 0v4" /><path d="M5 9h14l1 11H4z" /></>)

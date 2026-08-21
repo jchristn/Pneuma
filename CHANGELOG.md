@@ -7,6 +7,13 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **RAG evaluation harness.** Ground-truth facts per subject (`evalfacts`), LLM-judged runs (`evalruns`) that
+  answer each fact through the real grounded pipeline and grade the result against the expected answer with a
+  seeded `eval.judge` prompt, and per-fact results (`evalresults`) with verdict (Pass/Partial/Fail), 0–10
+  score, reason, and failure mode (schema v14). REST at `/v1.0/eval/facts` (list/create/delete) and
+  `/v1.0/eval/runs` (list/start/get-with-results/delete); an **Evaluation** view (admin + creator) manages
+  facts, starts runs, and reviews results. Eval data is removed on subject cascade. (Runs execute
+  synchronously; SSE live progress is a planned enhancement.)
 - **Per-subject chat analytics.** `GET /v1.0/analytics?subjectId=&days=` returns a windowed report — turn
   volume, latency percentiles (p50/p95/p99 generation), avg TTFT/tokens/throughput, per-stage average+p95
   latency (from the v11 performance events), a daily time series, and feedback tallies — computed in-process

@@ -9,6 +9,7 @@ import AskView from '../views/AskView';
 import RequestHistoryView from '../views/RequestHistoryView';
 import HistoryView from '../views/HistoryView';
 import AnalyticsView from '../views/AnalyticsView';
+import EvalView from '../views/EvalView';
 import FeedbackView from '../views/FeedbackView';
 import ApiExplorerView from '../views/ApiExplorerView';
 import SettingsView from '../views/SettingsView';
@@ -34,6 +35,8 @@ function Dashboard() {
         return <HistoryView />;
       case 'analytics':
         return <AnalyticsView />;
+      case 'eval':
+        return <EvalView />;
       case 'feedback':
         return <FeedbackView />;
       case 'requests':

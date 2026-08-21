@@ -116,6 +116,12 @@ namespace Pneuma.Core.Database.Mysql.Queries
                         "durationms DOUBLE, sequence INT NOT NULL DEFAULT 0, createdutc VARCHAR(32) NOT NULL, " +
                         "KEY idx_chattoolcalls_turn (turnid), KEY idx_chattoolcalls_tenant_subject (tenantid, subjectid, createdutc));"
                 }));
+                list.Add(new SchemaMigration(14, "Add RAG evaluation facts, runs, and results", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS evalfacts (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64) NOT NULL, question TEXT, expectedanswer TEXT, category VARCHAR(128), createdutc VARCHAR(32) NOT NULL, KEY idx_evalfacts_tenant_subject (tenantid, subjectid, createdutc));",
+                    "CREATE TABLE IF NOT EXISTS evalruns (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64) NOT NULL, status VARCHAR(32), category VARCHAR(128), totalfacts INT NOT NULL DEFAULT 0, passcount INT NOT NULL DEFAULT 0, partialcount INT NOT NULL DEFAULT 0, failcount INT NOT NULL DEFAULT 0, judgemodel VARCHAR(512), error TEXT, createdutc VARCHAR(32) NOT NULL, finishedutc VARCHAR(32), KEY idx_evalruns_tenant_subject (tenantid, subjectid, createdutc));",
+                    "CREATE TABLE IF NOT EXISTS evalresults (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, runid VARCHAR(64) NOT NULL, factid VARCHAR(64), question TEXT, expectedanswer TEXT, producedanswer TEXT, verdict VARCHAR(32), score DOUBLE, reason TEXT, failuremode VARCHAR(128), category VARCHAR(128), createdutc VARCHAR(32) NOT NULL, KEY idx_evalresults_run (runid));"
+                }));
                 return list;
             }
         }

@@ -94,6 +94,15 @@ namespace Pneuma.Core.Database
         /// <summary>Chat tool-call methods.</summary>
         public IChatToolCallMethods ChatToolCalls { get; protected set; } = null!;
 
+        /// <summary>Evaluation ground-truth fact methods.</summary>
+        public IEvalFactMethods EvalFacts { get; protected set; } = null!;
+
+        /// <summary>Evaluation run methods.</summary>
+        public IEvalRunMethods EvalRuns { get; protected set; } = null!;
+
+        /// <summary>Evaluation result methods.</summary>
+        public IEvalResultMethods EvalResults { get; protected set; } = null!;
+
         #endregion
 
         #region Public-Methods
