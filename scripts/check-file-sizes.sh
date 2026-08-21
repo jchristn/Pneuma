@@ -39,6 +39,8 @@ FRONTEND_ALLOWLIST=(
   "admin-dashboard/src/components/ResourceView.jsx"
   # The subject create/edit view — one hand-rolled modal form with the subject's full configuration.
   "subject-dashboard/src/views/SubjectsView.jsx"
+  # The subject-dashboard content-links view (table + submit/bulk/detail modal orchestration).
+  "subject-dashboard/src/views/LinksView.jsx"
 )
 
 violations=0
