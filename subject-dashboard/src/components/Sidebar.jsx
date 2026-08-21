@@ -50,6 +50,11 @@ function Sidebar() {
           icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>)
         },
         {
+          id: 'analytics',
+          label: t('nav.analytics', 'Analytics'),
+          icon: icon(<><path d="M3 3v18h18" /><path d="M7 15l3-4 3 3 4-6" /></>)
+        },
+        {
           id: 'feedback',
           label: t('nav.feedback', 'Feedback'),
           icon: icon(<><path d="M14 9V5a3 3 0 0 0-6 0v4" /><path d="M5 9h14l1 11H4z" /></>)

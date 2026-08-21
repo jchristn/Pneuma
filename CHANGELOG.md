@@ -7,6 +7,11 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Per-subject chat analytics.** `GET /v1.0/analytics?subjectId=&days=` returns a windowed report — turn
+  volume, latency percentiles (p50/p95/p99 generation), avg TTFT/tokens/throughput, per-stage average+p95
+  latency (from the v11 performance events), a daily time series, and feedback tallies — computed in-process
+  (provider-neutral percentiles). A new **Analytics** view (admin + creator dashboards) renders it with
+  hand-rolled SVG charts (volume-per-day bars, per-stage latency bars) and metric tiles.
 - **Conversation threads + persisted tool-call trace.** Chat turns are now grouped into named conversation
   threads (schema v13): every agentic turn creates or continues a thread (id returned on the `complete` SSE
   event), and the three dashboards thread the `threadId` through so a conversation stays together. New

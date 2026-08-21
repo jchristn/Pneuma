@@ -253,7 +253,13 @@ only streamed live) so it appears in the history modal.
 
 ---
 
-## Phase 4 — #5 Per-subject analytics dashboard  ⬜
+## Phase 4 — #5 Per-subject analytics dashboard  ✅
+
+> **Status note:** `AnalyticsService` aggregates turns + v11 perf events + feedback into a windowed
+> `AnalyticsReport` (overview with p50/p95/p99, daily time series, per-stage avg/p95), served at
+> `GET /v1.0/analytics`. An **Analytics** view lands in the admin and creator dashboards with hand-rolled SVG
+> charts (volume-per-day, per-stage latency) + metric tiles, wired into nav. Tests (95 pass), REST_API +
+> CHANGELOG updated. MCP analytics tools fold into Phase 7.
 
 **Goal:** per-subject observability rollups (latency percentiles, success/failure, throughput, per-stage and
 per-endpoint timing, rerank/rewrite/gate counts, feedback trends) rendered with hand-rolled SVG charts.
@@ -457,7 +463,7 @@ comply" gate.
 | 1 | #1 Telemetry | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 2 | #2 Facet filters | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (JSON editor) | ✅ | 🟨 |
 | 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading; switcher deferred) | ✅ | 🟨 |
-| 4 | #5 Analytics | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 4 | #5 Analytics | ✅ | n/a | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 5 | #4 Eval harness | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | 6 | #10 Slash commands | ⬜ | n/a | n/a | ⬜ | ⬜ (fe) | ⬜ | ⬜ |
 | 7 | #11 MCP surface | ⬜ | n/a | ⬜ | ⬜ | n/a | ⬜ | ⬜ |

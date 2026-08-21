@@ -525,6 +525,36 @@ namespace Test.Shared.Suites
                             if (await db.ChatThreads.ReadAsync(t.Id, thread.Id, ct) != null) throw new Exception("Thread delete must remove the thread");
                         }),
 
+                    new TestCaseDescriptor("Database", "Analytics_Report_Aggregates", "Analytics aggregates turn volume, latency percentiles, stages, and feedback",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "An" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "s" }, ct);
+
+                            for (int i = 0; i < 5; i++)
+                            {
+                                ChatTurnRecord turn = await db.ChatTurns.CreateAsync(new ChatTurnRecord
+                                {
+                                    TenantId = t.Id, SubjectId = s.Id, Question = "q", Answer = "a",
+                                    GenerationMs = 100 * (i + 1), CompletionTokens = 20, PromptTokens = 30, TimeToFirstTokenMs = 50
+                                }, ct);
+                                await db.ChatTurnPerfEvents.CreateManyAsync(new System.Collections.Generic.List<ChatTurnPerfEvent>
+                                {
+                                    new ChatTurnPerfEvent { TenantId = t.Id, TurnId = turn.Id, SubjectId = s.Id, Stage = "final_inference", Kind = "inference", DurationMs = 100 * (i + 1) }
+                                }, ct);
+                            }
+                            await db.ChatFeedback.CreateAsync(new ChatFeedback { TenantId = t.Id, TurnId = "trn_x", SubjectId = s.Id, Rating = FeedbackRatingEnum.Up }, ct);
+
+                            Pneuma.Server.Services.AnalyticsService analytics = new Pneuma.Server.Services.AnalyticsService(db);
+                            Pneuma.Core.Responses.AnalyticsReport report = await analytics.BuildAsync(t.Id, s.Id, DateTime.UtcNow.AddDays(-1), ct);
+                            if (report.Overview.TurnCount != 5) throw new Exception("Expected 5 turns, got " + report.Overview.TurnCount);
+                            if (report.Overview.ThumbsUp != 1) throw new Exception("Expected 1 thumbs-up, got " + report.Overview.ThumbsUp);
+                            if (report.Overview.P95GenerationMs < report.Overview.P50GenerationMs) throw new Exception("p95 must be >= p50");
+                            if (report.Stages.Count != 1 || report.Stages[0].Stage != "final_inference") throw new Exception("Expected one aggregated stage");
+                            if (report.Timeseries.Count < 1) throw new Exception("Expected at least one timeseries bucket");
+                        }),
+
                     new TestCaseDescriptor("Database", "Subject_PendingDeletion_Enumeration", "EnumeratePendingDeletion returns only Pending/Deleting subjects, across tenants",
                         executeAsync: async ct =>
                         {

@@ -328,6 +328,10 @@ class ApiClient {
     return this._request('GET', `/v1.0/history/${encodeURIComponent(id)}`);
   }
 
+  getAnalytics(subjectId = null, days = 30) {
+    return this._request('GET', '/v1.0/analytics', { query: { days, ...(subjectId ? { subjectId } : {}) } });
+  }
+
   listFeedback(subjectId = null) {
     return this._request('GET', '/v1.0/feedback', { query: { maxResults: 1000, ...(subjectId ? { subjectId } : {}) } });
   }
