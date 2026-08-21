@@ -36,6 +36,9 @@ namespace Pneuma.Core.Observability
         private static readonly ConcurrentDictionary<string, long> _IntegrationRequests = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, HistogramSeries> _IntegrationDuration = new ConcurrentDictionary<string, HistogramSeries>();
         private static readonly ConcurrentDictionary<string, long> _AuthzDecisions = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _ChatAnswers = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatAnswerDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
 
         private static long _Requests2xx = 0;
         private static long _Requests4xx = 0;
@@ -104,6 +107,25 @@ namespace Pneuma.Core.Observability
             _IntegrationDuration.GetOrAdd("service=\"" + Escape(safeService) + "\",operation=\"" + Escape(safeOperation) + "\"", CreateHistogram).Observe(seconds);
         }
 
+        /// <summary>Record a completed chat/answer turn's outcome and total duration.</summary>
+        /// <param name="outcome">Answer outcome: ok, insufficient, error, or cancelled.</param>
+        /// <param name="seconds">Total answer duration in seconds.</param>
+        public static void RecordChatAnswer(string outcome, double seconds)
+        {
+            string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
+            Increment(_ChatAnswers, "outcome=\"" + Escape(safeOutcome) + "\"");
+            _ChatAnswerDuration.GetOrAdd("outcome=\"" + Escape(safeOutcome) + "\"", CreateHistogram).Observe(seconds);
+        }
+
+        /// <summary>Record one answer-pipeline stage's duration (rewrite, retrieval, rerank, tool, inference).</summary>
+        /// <param name="stage">Stage name.</param>
+        /// <param name="seconds">Stage duration in seconds.</param>
+        public static void RecordChatStage(string stage, double seconds)
+        {
+            string safeStage = String.IsNullOrEmpty(stage) ? "(unknown)" : stage;
+            _ChatStageDuration.GetOrAdd("stage=\"" + Escape(safeStage) + "\"", CreateHistogram).Observe(seconds);
+        }
+
         /// <summary>Record an authorization decision.</summary>
         /// <param name="result">Decision result: permit or deny.</param>
         public static void RecordAuthzDecision(string result)
@@ -153,6 +175,9 @@ namespace Pneuma.Core.Observability
             AppendSimpleCounter(sb, "pneuma_http_requests_5xx_total", "HTTP 5xx responses", Interlocked.Read(ref _Requests5xx));
             AppendSimpleCounter(sb, "pneuma_ingestion_completed_total", "Completed ingestion jobs", Interlocked.Read(ref _IngestionCompleted));
             AppendSimpleCounter(sb, "pneuma_ingestion_failed_total", "Failed ingestion jobs", Interlocked.Read(ref _IngestionFailed));
+            AppendCounterFamily(sb, "pneuma_chat_answers_total", "Chat/answer turns by outcome", _ChatAnswers);
+            AppendHistogramFamily(sb, "pneuma_chat_answer_duration_seconds", "Chat answer total duration in seconds, by outcome", _ChatAnswerDuration);
+            AppendHistogramFamily(sb, "pneuma_chat_stage_duration_seconds", "Chat answer-pipeline stage duration in seconds, by stage", _ChatStageDuration);
             AppendSimpleCounter(sb, "pneuma_authz_denied_total", "Authorization denials", Interlocked.Read(ref _AuthzDenied));
 
             return sb.ToString();

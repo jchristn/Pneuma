@@ -11,6 +11,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Mcp;
     using PolyPrompt.Clients;
@@ -375,6 +376,13 @@ namespace Pneuma.Server.Services
             double wallMs = 0;
             foreach (TurnPerformanceStage stage in perfStages) wallMs += stage.DurationMs;
             TurnPerformance performance = new TurnPerformance { SchemaVersion = 1, WallTimeMs = wallMs, Stages = perfStages };
+
+            // Prometheus metrics for the retrieval/answer path (low-cardinality: outcome + coarse stage name).
+            PneumaMetrics.RecordChatAnswer("ok", wallMs / 1000.0);
+            foreach (TurnPerformanceStage stage in perfStages)
+            {
+                PneumaMetrics.RecordChatStage(String.Equals(stage.Kind, "tool", StringComparison.Ordinal) ? "tool" : stage.Name, stage.DurationMs / 1000.0);
+            }
 
             // Build the turn record up front so its id can be handed to the caller (for feedback) in the
             // complete event; it is persisted immediately after.

@@ -391,7 +391,16 @@ without drifting from REST authorization.
 
 ---
 
-## Phase 7.5 — Telemetry & Grafana (full metrics + traces across ingestion and retrieval)  ⬜
+## Phase 7.5 — Telemetry & Grafana (full metrics + traces across ingestion and retrieval)  ✅
+
+> **Status note:** ingestion already had per-stage metrics + spans; added retrieval/answer metrics
+> (`pneuma_chat_answers_total`, `pneuma_chat_answer_duration_seconds`, `pneuma_chat_stage_duration_seconds`)
+> wired from `AgenticChatService`. The Grafana dashboard (both `assets/grafana` and `docker/factory`) gains a
+> **Retrieval & Answer** domain row (answer rate, p95, per-stage p95) — it was already sectioned into
+> Overview/HTTP/Ingestion/Integrations. **TELEMETRY.md** written (metrics+traces inventory, exposure,
+> collection, Grafana access, reading each section + traces, workflows). Tests green (96). **Follow-up:**
+> explicit OTLP spans on each answer stage (answer path is currently metered + persisted per-turn; ingestion
+> already has spans).
 
 **Goal:** metrics (meters) and distributed traces cover **every** ingestion and retrieval/answer step and are
 exposed (`/metrics` + OTLP), collected (Prometheus + Tempo), and displayed in **domain-sectioned** Grafana
@@ -487,4 +496,4 @@ comply" gate.
 | 5 | #4 Eval harness | ✅ (sync) | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 6 | #10 Slash commands | n/a | n/a | n/a | ✅ | ✅ (all 3 Ask views) | n/a | 🟨 |
 | 7 | #11 MCP surface | ✅ | n/a | ✅ | ✅ | n/a | ✅ | 🟨 |
-| 7.5 | Telemetry & Grafana | ⬜ (instrument) | n/a | n/a | ⬜ (TELEMETRY.md) | ⬜ (Grafana) | ⬜ | ⬜ |
+| 7.5 | Telemetry & Grafana | ✅ (metrics) | n/a | n/a | ✅ (TELEMETRY.md) | ✅ (Grafana row) | ✅ | 🟨 |

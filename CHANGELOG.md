@@ -7,6 +7,13 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Retrieval/answer metrics + Grafana section + TELEMETRY.md.** New Prometheus metrics cover the answer path
+  (`pneuma_chat_answers_total`, `pneuma_chat_answer_duration_seconds`, `pneuma_chat_stage_duration_seconds` by
+  stage), complementing the existing HTTP/ingestion/integration metrics and the ingestion + integration
+  traces. The Grafana observability dashboard gains a **Retrieval & Answer** domain section (answer rate,
+  answer p95, per-stage p95) alongside Overview/HTTP/Ingestion/Integrations. A new **TELEMETRY.md** walks an
+  operator through the full metrics/traces inventory, exposure (`/metrics`, OTLP), collection
+  (Prometheus/Tempo), Grafana access, and how to use each dashboard section and traces.
 - **Broadened MCP surface.** Six new read tools make the new data operable by an agent:
   `pneuma_get_history_turn` (turn + feedback + tool-call trace + telemetry), `pneuma_enumerate_threads`,
   `pneuma_enumerate_feedback`, `pneuma_analytics`, `pneuma_enumerate_eval_runs`, and `pneuma_get_eval_run` —
