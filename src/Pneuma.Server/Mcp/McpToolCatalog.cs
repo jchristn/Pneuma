@@ -258,6 +258,72 @@ namespace Pneuma.Server.Mcp
                         },
                         required = new[] { "question" }
                     }
+                },
+                new
+                {
+                    name = "pneuma_get_history_turn",
+                    description = "Fetch one persisted chat turn with its feedback, agentic tool-call trace, and per-stage performance telemetry (performanceJson).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Chat turn id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_threads",
+                    description = "Enumerate conversation threads (most-recently-active first), optionally scoped by subjectId.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_feedback",
+                    description = "Enumerate chat feedback (thumbs up/down + comments), optionally scoped by subjectId.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_analytics",
+                    description = "Per-subject chat analytics over a window: turn volume, latency percentiles, per-stage timing, and feedback. Optional subjectId and days (default 30).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Optional subject id to scope to." },
+                            days = new { type = "integer", description = "Window size in days (1..365, default 30)." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_eval_runs",
+                    description = "Enumerate RAG evaluation runs (newest first), optionally scoped by subjectId.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_eval_run",
+                    description = "Fetch one evaluation run with its per-fact results (verdict, score, reason, failure mode).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Evaluation run id." } },
+                        required = new[] { "id" }
+                    }
                 }
             };
         }

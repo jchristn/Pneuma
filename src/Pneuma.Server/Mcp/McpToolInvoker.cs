@@ -128,6 +128,26 @@ namespace Pneuma.Server.Mcp
                     toolResult = await _Entities.GetLinkAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
+                case "pneuma_get_history_turn":
+                    toolResult = await _Entities.GetHistoryTurnAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_threads":
+                    toolResult = await _Entities.EnumerateThreadsAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_enumerate_feedback":
+                    toolResult = await _Entities.EnumerateFeedbackAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_analytics":
+                    toolResult = await _Entities.AnalyticsAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_enumerate_eval_runs":
+                    toolResult = await _Entities.EnumerateEvalRunsAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_eval_run":
+                    toolResult = await _Entities.GetEvalRunAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
                 case "pneuma_search":
                     toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, null, null, ctx.Token).ConfigureAwait(false);
                     break;

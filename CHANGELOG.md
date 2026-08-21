@@ -7,6 +7,10 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Broadened MCP surface.** Six new read tools make the new data operable by an agent:
+  `pneuma_get_history_turn` (turn + feedback + tool-call trace + telemetry), `pneuma_enumerate_threads`,
+  `pneuma_enumerate_feedback`, `pneuma_analytics`, `pneuma_enumerate_eval_runs`, and `pneuma_get_eval_run` —
+  each RBAC-mapped (Subject / Read) exactly like the REST twins and advertised in `tools/list`.
 - **Chat slash commands.** All three dashboards' chat composers handle `/help`, `/clear` / `/new` (start a
   new conversation), `/context` (context usage), and `/compact` (informational) client-side without sending
   them to the model.

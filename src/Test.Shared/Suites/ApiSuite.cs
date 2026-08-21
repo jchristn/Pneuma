@@ -323,6 +323,7 @@ namespace Test.Shared.Suites
                             if (!body.Contains("pneuma_search")) throw new Exception("tools/list should advertise the search tool");
                             if (!body.Contains("pneuma_get_node") || !body.Contains("pneuma_get_neighbors")) throw new Exception("tools/list should advertise the graph-node tools");
                             if (!body.Contains("pneuma_query")) throw new Exception("tools/list should advertise the grounded-query tool");
+                            if (!body.Contains("pneuma_get_history_turn") || !body.Contains("pneuma_enumerate_threads") || !body.Contains("pneuma_analytics") || !body.Contains("pneuma_enumerate_eval_runs")) throw new Exception("tools/list should advertise the history/threads/analytics/eval tools");
                             if (!body.Contains("endOfResults")) throw new Exception("the enumerate tool description should teach the paging protocol");
                         }),
 

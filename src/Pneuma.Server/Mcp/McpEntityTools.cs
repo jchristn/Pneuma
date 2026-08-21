@@ -12,6 +12,7 @@ namespace Pneuma.Server.Mcp
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
+    using Pneuma.Server.Services;
     using WatsonWebserver.Core;
 
     /// <summary>
@@ -64,6 +65,98 @@ namespace Pneuma.Server.Mcp
             }
 
             return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
+        }
+
+        /// <summary>Enumerate conversation threads, optionally scoped to a subject.</summary>
+        /// <param name="rc">Request context.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The threads.</returns>
+        public async Task<object> EnumerateThreadsAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            string? subjectId = GetOptionalString(arguments, "subjectId");
+            List<ChatThread> threads = String.IsNullOrEmpty(tenantId) ? new List<ChatThread>() : await _Db.ChatThreads.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            return new { objects = threads };
+        }
+
+        /// <summary>Enumerate chat feedback, optionally scoped to a subject.</summary>
+        /// <param name="rc">Request context.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The feedback.</returns>
+        public async Task<object> EnumerateFeedbackAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            string? subjectId = GetOptionalString(arguments, "subjectId");
+            List<ChatFeedback> feedback = String.IsNullOrEmpty(tenantId) ? new List<ChatFeedback>() : await _Db.ChatFeedback.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            return new { objects = feedback };
+        }
+
+        /// <summary>Fetch a chat turn with its feedback, tool-call trace, and performance telemetry.</summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The turn detail, or null when an error response was already sent.</returns>
+        public async Task<object?> GetHistoryTurnAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            string turnId = McpJsonRpc.GetStringArgument(arguments, "id");
+            if (String.IsNullOrEmpty(turnId)) { await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: 'id' is required.").ConfigureAwait(false); return null; }
+            string tenantId = rc.TenantId ?? String.Empty;
+            ChatTurnRecord? turn = String.IsNullOrEmpty(tenantId) ? null : await _Db.ChatTurns.ReadAsync(tenantId, turnId, token).ConfigureAwait(false);
+            if (turn == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Chat turn not found.").ConfigureAwait(false); return null; }
+            List<ChatFeedback> allFeedback = await _Db.ChatFeedback.EnumerateAsync(tenantId, turn.SubjectId, token).ConfigureAwait(false);
+            List<ChatFeedback> feedback = allFeedback.FindAll(f => String.Equals(f.TurnId, turn.Id, StringComparison.Ordinal));
+            List<ChatToolCall> toolCalls = await _Db.ChatToolCalls.EnumerateByTurnAsync(tenantId, turn.Id, token).ConfigureAwait(false);
+            return new { turn, feedback, toolCalls };
+        }
+
+        /// <summary>Per-subject chat analytics over a window.</summary>
+        /// <param name="rc">Request context.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The analytics report.</returns>
+        public async Task<object> AnalyticsAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            string? subjectId = GetOptionalString(arguments, "subjectId");
+            int days = 30;
+            if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("days", out JsonElement d) && d.ValueKind == JsonValueKind.Number && d.TryGetInt32(out int parsed)) days = Math.Clamp(parsed, 1, 365);
+            DateTime sinceUtc = DateTime.UtcNow.AddDays(-days);
+            return await new AnalyticsService(_Db).BuildAsync(tenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, sinceUtc, token).ConfigureAwait(false);
+        }
+
+        /// <summary>Enumerate evaluation runs, optionally scoped to a subject.</summary>
+        /// <param name="rc">Request context.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The runs.</returns>
+        public async Task<object> EnumerateEvalRunsAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
+        {
+            string tenantId = rc.TenantId ?? String.Empty;
+            string? subjectId = GetOptionalString(arguments, "subjectId");
+            List<EvalRun> runs = String.IsNullOrEmpty(tenantId) ? new List<EvalRun>() : await _Db.EvalRuns.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            return new { objects = runs };
+        }
+
+        /// <summary>Fetch an evaluation run with its results.</summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The run and its results, or null when an error response was already sent.</returns>
+        public async Task<object?> GetEvalRunAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            string runId = McpJsonRpc.GetStringArgument(arguments, "id");
+            if (String.IsNullOrEmpty(runId)) { await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: 'id' is required.").ConfigureAwait(false); return null; }
+            string tenantId = rc.TenantId ?? String.Empty;
+            EvalRun? run = String.IsNullOrEmpty(tenantId) ? null : await _Db.EvalRuns.ReadAsync(tenantId, runId, token).ConfigureAwait(false);
+            if (run == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Run not found.").ConfigureAwait(false); return null; }
+            List<EvalResult> results = await _Db.EvalResults.EnumerateByRunAsync(tenantId, runId, token).ConfigureAwait(false);
+            return new { run, results };
         }
 
         /// <summary>Fetch a single full subject by id.</summary>

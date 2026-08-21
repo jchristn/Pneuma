@@ -46,6 +46,13 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_get_neighbors":
                 case "pneuma_query":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.GraphNode, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_get_history_turn":
+                case "pneuma_enumerate_threads":
+                case "pneuma_enumerate_feedback":
+                case "pneuma_analytics":
+                case "pneuma_enumerate_eval_runs":
+                case "pneuma_get_eval_run":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
                 default:
                     return false;
             }

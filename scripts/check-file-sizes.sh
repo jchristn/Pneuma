@@ -27,6 +27,8 @@ BACKEND_ALLOWLIST=(
   # A single test suite: many independent TestCaseDescriptors in one static class.
   "src/Test.Shared/Suites/ApiSuite.cs"
   "src/Test.Shared/Suites/DatabaseSuite.cs"
+  # A single cohesive class of MCP entity/report tool handlers (one method per tool).
+  "src/Pneuma.Server/Mcp/McpEntityTools.cs"
 )
 
 # Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the

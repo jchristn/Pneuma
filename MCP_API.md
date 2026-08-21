@@ -74,6 +74,12 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_get_node` | Fetch one full knowledge-graph node by id. | GraphNode / Read |
 | `pneuma_get_neighbors` | Fetch a node's adjacent nodes as a bounded set of summaries. | GraphNode / Read |
 | `pneuma_query` | Ask a grounded question; returns a cited answer, supporting sources, and an `insufficientSupport` flag. | GraphNode / Read |
+| `pneuma_get_history_turn` | Fetch one chat turn with its feedback, tool-call trace, and per-stage performance telemetry (`id` required). | Subject / Read |
+| `pneuma_enumerate_threads` | Enumerate conversation threads, optional `subjectId`. | Subject / Read |
+| `pneuma_enumerate_feedback` | Enumerate chat feedback, optional `subjectId`. | Subject / Read |
+| `pneuma_analytics` | Per-subject chat analytics over a window (`subjectId?`, `days?` default 30): volume, latency percentiles, per-stage timing, feedback. | Subject / Read |
+| `pneuma_enumerate_eval_runs` | Enumerate RAG evaluation runs, optional `subjectId`. | Subject / Read |
+| `pneuma_get_eval_run` | Fetch one evaluation run with its per-fact results (`id` required). | Subject / Read |
 
 Further tools (ingest a link) follow the same contract as they land. The grounded-answer logic is shared with the REST `/v1.0/query` endpoint, so the two surfaces cannot drift.
 

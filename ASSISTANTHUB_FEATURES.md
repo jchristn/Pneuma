@@ -363,7 +363,14 @@ verdicts, category/failure-mode filtering, SSE live progress, and an Eval dashbo
 
 ---
 
-## Phase 7 — #11 Broadened MCP management surface  ⬜
+## Phase 7 — #11 Broadened MCP management surface  ✅
+
+> **Status note:** six new read tools added (`pneuma_get_history_turn`, `pneuma_enumerate_threads`,
+> `pneuma_enumerate_feedback`, `pneuma_analytics`, `pneuma_enumerate_eval_runs`, `pneuma_get_eval_run`),
+> registered in the catalog, dispatched via the invoker, and RBAC-mapped (Subject/Read) so MCP matches REST.
+> Tests + MCP_API.md + CHANGELOG updated (96 pass). This also lands the MCP surface deferred from Phases 1–5.
+> The facet `metadataFilter` on `pneuma_query`/`pneuma_search` and eval/thread **write** tools over MCP remain
+> a follow-up.
 
 **Goal:** make Pneuma fully operable by an agent — expose the new and existing management/read surfaces over MCP
 without drifting from REST authorization.
@@ -479,5 +486,5 @@ comply" gate.
 | 4 | #5 Analytics | ✅ | n/a | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 5 | #4 Eval harness | ✅ (sync) | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 6 | #10 Slash commands | n/a | n/a | n/a | ✅ | ✅ (all 3 Ask views) | n/a | 🟨 |
-| 7 | #11 MCP surface | ⬜ | n/a | ⬜ | ⬜ | n/a | ⬜ | ⬜ |
+| 7 | #11 MCP surface | ✅ | n/a | ✅ | ✅ | n/a | ✅ | 🟨 |
 | 7.5 | Telemetry & Grafana | ⬜ (instrument) | n/a | n/a | ⬜ (TELEMETRY.md) | ⬜ (Grafana) | ⬜ | ⬜ |
