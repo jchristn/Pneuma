@@ -122,6 +122,13 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "CREATE TABLE IF NOT EXISTS evalruns (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64) NOT NULL, status VARCHAR(32), category VARCHAR(128), totalfacts INT NOT NULL DEFAULT 0, passcount INT NOT NULL DEFAULT 0, partialcount INT NOT NULL DEFAULT 0, failcount INT NOT NULL DEFAULT 0, judgemodel VARCHAR(512), error TEXT, createdutc VARCHAR(32) NOT NULL, finishedutc VARCHAR(32), KEY idx_evalruns_tenant_subject (tenantid, subjectid, createdutc));",
                     "CREATE TABLE IF NOT EXISTS evalresults (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, runid VARCHAR(64) NOT NULL, factid VARCHAR(64), question TEXT, expectedanswer TEXT, producedanswer TEXT, verdict VARCHAR(32), score DOUBLE, reason TEXT, failuremode VARCHAR(128), category VARCHAR(128), createdutc VARCHAR(32) NOT NULL, KEY idx_evalresults_run (runid));"
                 }));
+                list.Add(new SchemaMigration(15, "Add ingestion labels and tags to links and jobs", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN labelsjson TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN tagsjson TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN labelsjson TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN tagsjson TEXT;"
+                }));
                 return list;
             }
         }

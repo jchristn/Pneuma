@@ -161,6 +161,50 @@ namespace Test.Shared.Suites
                             if (empty.TotalCount != 0) throw new Exception("summary for an unknown subject should be empty");
                         }),
 
+                    new TestCaseDescriptor("Ingestion", "LabelsAndTags_PropagateToChunksAndGraph", "Operator labels/tags on a link land on every chunk (as label:{value} tags + verbatim tags) and on the source graph node",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            FakeLiteGraphClient graph = new FakeLiteGraphClient();
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Text"), recall, graph);
+
+                            List<string> labels = new List<string> { "news", "2024" };
+                            Dictionary<string, string> tags = new Dictionary<string, string> { { "author", "jane" } };
+                            Context context = await SeedJobAsync(db, recall, true, ct, labels, tags);
+                            IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
+                            await processor.ProcessAsync(claimed, ct);
+
+                            IngestionJob after = await db.IngestionJobs.ReadAsync(context.TenantId, claimed.Id, ct) ?? throw new Exception("job gone");
+                            if (after.Status != IngestionStatusEnum.Completed) throw new Exception("expected Completed, got " + after.Status + " (" + after.Error + ")");
+
+                            // The claimed job round-tripped its labels/tags through the database (Map/Insert).
+                            if (!after.Labels.Contains("news") || !after.Labels.Contains("2024")) throw new Exception("job labels did not persist through the database");
+                            if (!after.Tags.TryGetValue("author", out string? jobAuthor) || jobAuthor != "jane") throw new Exception("job tag did not persist through the database");
+
+                            // Positive: every stored chunk carries each label as its own label:{value} tag and the verbatim user tag.
+                            List<Dictionary<string, string>> chunkTags = recall.AllDocumentTags();
+                            if (chunkTags.Count < 1) throw new Exception("no chunk documents stored");
+                            string newsKey = RetrievalFilter.LabelTagKeyFor("news");
+                            string yearKey = RetrievalFilter.LabelTagKeyFor("2024");
+                            string absentKey = RetrievalFilter.LabelTagKeyFor("absent");
+                            foreach (Dictionary<string, string> chunk in chunkTags)
+                            {
+                                if (!chunk.TryGetValue(newsKey, out string? nv) || nv != "news") throw new Exception("chunk missing label:news tag");
+                                if (!chunk.TryGetValue(yearKey, out string? yv) || yv != "2024") throw new Exception("chunk missing label:2024 tag");
+                                if (!chunk.TryGetValue("author", out string? a) || a != "jane") throw new Exception("chunk missing author tag");
+                                // Negative: a label that was never supplied must not appear on any chunk.
+                                if (chunk.ContainsKey(absentKey)) throw new Exception("chunk carries a label that was never supplied");
+                            }
+
+                            // The labels/tags also ride on the source graph node (labels as graph labels, tags as graph tags).
+                            List<GraphNode> nodes = await graph.SearchNodesByTagsAsync(new Dictionary<string, string> { { "nodeType", Ontology.NodeSource } }, 100, ct);
+                            GraphNode? sourceNode = nodes.Find(n => String.Equals(n.NodeType, Ontology.NodeSource, StringComparison.Ordinal));
+                            if (sourceNode == null) throw new Exception("source graph node not found");
+                            if (!sourceNode.Labels.Contains("news") || !sourceNode.Labels.Contains("2024")) throw new Exception("source node missing operator labels");
+                            if (!sourceNode.Tags.TryGetValue("author", out string? nodeAuthor) || nodeAuthor != "jane") throw new Exception("source node missing operator tag");
+                        }),
+
                     new TestCaseDescriptor("Ingestion", "CascadeDelete_RemovesArtifacts", "Deleting a subject cascades through links, jobs, logs, graph nodes, and stored chunk documents",
                         executeAsync: async ct =>
                         {
@@ -213,11 +257,15 @@ namespace Test.Shared.Suites
 
         // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the
         // (RecallDB) fake under the tenant and assigned to the job, so ingestion has a valid target.
-        private static async Task<Context> SeedJobAsync(DatabaseDriverBase db, FakeRecallDbClient recall, bool createCollection, System.Threading.CancellationToken ct)
+        private static async Task<Context> SeedJobAsync(DatabaseDriverBase db, FakeRecallDbClient recall, bool createCollection, System.Threading.CancellationToken ct, List<string>? labels = null, Dictionary<string, string>? tags = null)
         {
             Tenant tenant = await db.Tenants.CreateAsync(new Tenant { Name = "IngestTenant" }, ct);
             Subject subject = await db.Subjects.CreateAsync(new Subject { TenantId = tenant.Id, DisplayName = "Chuck D" }, ct);
-            SubjectLink link = await db.SubjectLinks.CreateAsync(new SubjectLink { TenantId = tenant.Id, SubjectId = subject.Id, Url = "https://example.com/artifact" }, ct);
+            SubjectLink link = await db.SubjectLinks.CreateAsync(new SubjectLink
+            {
+                TenantId = tenant.Id, SubjectId = subject.Id, Url = "https://example.com/artifact",
+                Labels = labels ?? new List<string>(), Tags = tags ?? new Dictionary<string, string>()
+            }, ct);
 
             string? collectionId = null;
             if (createCollection)
@@ -229,7 +277,8 @@ namespace Test.Shared.Suites
 
             await db.IngestionJobs.CreateAsync(new IngestionJob
             {
-                TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, SourceUrl = link.Url, Status = IngestionStatusEnum.Queued, CollectionId = collectionId
+                TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, SourceUrl = link.Url, Status = IngestionStatusEnum.Queued, CollectionId = collectionId,
+                Labels = labels ?? new List<string>(), Tags = tags ?? new Dictionary<string, string>()
             }, ct);
             return new Context { TenantId = tenant.Id, SubjectId = subject.Id, LinkId = link.Id, CollectionId = collectionId };
         }

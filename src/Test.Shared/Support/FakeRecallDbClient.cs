@@ -29,6 +29,18 @@ namespace Test.Shared.Support
         /// <summary>Total stored chunk documents across all tenants and collections.</summary>
         public int DocumentCount { get { lock (_Lock) { return _Docs.Count; } } }
 
+        /// <summary>Snapshot of every stored chunk document's tag map (test inspection).</summary>
+        /// <returns>One tag dictionary per stored document.</returns>
+        public List<Dictionary<string, string>> AllDocumentTags()
+        {
+            lock (_Lock)
+            {
+                List<Dictionary<string, string>> result = new List<Dictionary<string, string>>(_Docs.Count);
+                foreach (Stored doc in _Docs) result.Add(new Dictionary<string, string>(doc.Tags, StringComparer.Ordinal));
+                return result;
+            }
+        }
+
         /// <summary>Whether a tenant has been ensured/created in the fake store.</summary>
         public bool TenantExists(string tenantId) { lock (_Lock) { return _Tenants.Contains(tenantId); } }
 

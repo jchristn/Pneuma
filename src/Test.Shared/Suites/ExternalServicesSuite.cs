@@ -202,7 +202,8 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor("ExternalServices", "RetrievalFilter_LabelsAndTags_ConvertAndFilter", "Retrieval filter turns labels + tags into conditions and the store honors both",
                         executeAsync: async ct =>
                         {
-                            // Conversion: labels become equals-conditions on the "label" tag, alongside explicit tag conditions.
+                            // Conversion: each label becomes an equals-condition on its own "label:{value}" tag,
+                            // alongside explicit tag conditions.
                             RetrievalFilter filter = new RetrievalFilter
                             {
                                 RequiredLabels = new List<string> { "html" },
@@ -210,20 +211,24 @@ namespace Test.Shared.Suites
                                 RequiredTags = new List<RetrievalTagCondition> { new RetrievalTagCondition { Key = "rights", Condition = TagConditionEnum.Equals, Value = "public" } }
                             };
                             if (filter.IsEmpty()) throw new Exception("Filter with labels/tags should not be empty");
+                            string htmlKey = RetrievalFilter.LabelTagKeyFor("html");
+                            string pdfKey = RetrievalFilter.LabelTagKeyFor("pdf");
+                            if (htmlKey != "label:html") throw new Exception("Per-label tag key should be 'label:html', got " + htmlKey);
                             List<RetrievalTagCondition> req = filter.EffectiveRequired();
                             if (req.Count != 2) throw new Exception("Required should be tag + label condition, got " + req.Count);
-                            if (!req.Exists(c => c.Key == "label" && c.Value == "html")) throw new Exception("Required label did not convert to a label-tag condition");
+                            if (!req.Exists(c => c.Key == htmlKey && c.Value == "html" && c.Condition == TagConditionEnum.Equals)) throw new Exception("Required label did not convert to a per-label tag condition");
                             if (!req.Exists(c => c.Key == "rights" && c.Value == "public")) throw new Exception("Required tag condition missing");
                             List<RetrievalTagCondition> exc = filter.EffectiveExcluded();
-                            if (exc.Count != 1 || exc[0].Key != "label" || exc[0].Value != "pdf") throw new Exception("Excluded label did not convert");
+                            if (exc.Count != 1 || exc[0].Key != pdfKey || exc[0].Value != "pdf") throw new Exception("Excluded label did not convert");
 
-                            // Behavior: a labels-only filter keeps html and drops pdf against the store.
+                            // Behavior: a labels-only filter keeps html and drops pdf against the store, where each
+                            // chunk carries its labels as distinct "label:{value}" tags (as ingestion writes them).
                             FakeRecallDbClient vectors = new FakeRecallDbClient();
                             RecallCollection collection = await vectors.CreateCollectionAsync("ten_x", new RecallCollection { Name = "t", Dimensionality = 3 }, ct);
                             await vectors.StoreChunksAsync("ten_x", collection.Id, new List<ChunkDocument>
                             {
-                                new ChunkDocument { DocumentKey = "h", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_h" }, { "label", "html" } } },
-                                new ChunkDocument { DocumentKey = "p", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_p" }, { "label", "pdf" } } }
+                                new ChunkDocument { DocumentKey = "h", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_h" }, { htmlKey, "html" } } },
+                                new ChunkDocument { DocumentKey = "p", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_p" }, { pdfKey, "pdf" } } }
                             }, ct);
                             RetrievalFilter labelsOnly = new RetrievalFilter { RequiredLabels = new List<string> { "html" }, ExcludedLabels = new List<string> { "pdf" } };
                             List<VectorSearchHit> hits = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, labelsOnly.EffectiveRequired(), labelsOnly.EffectiveExcluded(), ct);
@@ -233,6 +238,30 @@ namespace Test.Shared.Suites
                             RetrievalFilter noneMatch = new RetrievalFilter { RequiredLabels = new List<string> { "docx" } };
                             List<VectorSearchHit> empty = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, noneMatch.EffectiveRequired(), null, ct);
                             if (empty.Count != 0) throw new Exception("Requiring an absent label should return no hits, got " + empty.Count);
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "RetrievalFilter_MultipleLabels_RequireAll", "A chunk carrying several labels matches a filter that requires more than one, and requiring an absent one excludes it",
+                        executeAsync: async ct =>
+                        {
+                            // A single chunk carries two labels at once — only possible because each label is its own
+                            // "label:{value}" tag rather than a single shared "label" key.
+                            FakeRecallDbClient vectors = new FakeRecallDbClient();
+                            RecallCollection collection = await vectors.CreateCollectionAsync("ten_m", new RecallCollection { Name = "t", Dimensionality = 3 }, ct);
+                            await vectors.StoreChunksAsync("ten_m", collection.Id, new List<ChunkDocument>
+                            {
+                                new ChunkDocument { DocumentKey = "both", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_both" }, { RetrievalFilter.LabelTagKeyFor("news"), "news" }, { RetrievalFilter.LabelTagKeyFor("2024"), "2024" } } },
+                                new ChunkDocument { DocumentKey = "one", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_one" }, { RetrievalFilter.LabelTagKeyFor("news"), "news" } } }
+                            }, ct);
+
+                            // Positive: require BOTH labels — only the two-label chunk qualifies.
+                            RetrievalFilter both = new RetrievalFilter { RequiredLabels = new List<string> { "news", "2024" } };
+                            List<VectorSearchHit> bothHits = await vectors.SearchAsync("ten_m", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, both.EffectiveRequired(), null, ct);
+                            if (bothHits.Count != 1 || bothHits[0].NodeId != "n_both") throw new Exception("Requiring both labels should keep only the two-label chunk, got " + bothHits.Count);
+
+                            // Negative: require a label the two-label chunk lacks — it is excluded.
+                            RetrievalFilter missing = new RetrievalFilter { RequiredLabels = new List<string> { "news", "sports" } };
+                            List<VectorSearchHit> missHits = await vectors.SearchAsync("ten_m", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, missing.EffectiveRequired(), null, ct);
+                            if (missHits.Count != 0) throw new Exception("Requiring an absent label should exclude every chunk, got " + missHits.Count);
                         }),
 
                     new TestCaseDescriptor("ExternalServices", "GroundedAnswer_SourceContext_OmitsInternalNodeType", "The grounded-answer context presents numbered excerpts and never leaks a node's internal type/name",

@@ -170,6 +170,24 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
+        /// Resolve the effective retrieval filter for a request: the subject's default filter merged with a
+        /// per-request filter (union of required and excluded, so the request narrows — never widens — the
+        /// default). Used by the agentic chat path so a per-turn filter scopes the search tool the same way the
+        /// grounded path scopes REST retrieval.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject identifier, or null.</param>
+        /// <param name="requestFilter">The per-request filter, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The merged effective filter, or null when it carries no predicate.</returns>
+        public async Task<RetrievalFilter?> ResolveEffectiveFilterAsync(string tenantId, string? subjectId, RetrievalFilter? requestFilter, CancellationToken token = default)
+        {
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            RetrievalFilter merged = MergeFilters(subject?.RetrievalFilterJson, requestFilter);
+            return merged.IsEmpty() ? null : merged;
+        }
+
+        /// <summary>
         /// Run a one-shot completion using a subject's answering model (its inference model, or the tenant
         /// default). Used by the evaluation harness to judge a produced answer against a ground-truth answer.
         /// </summary>

@@ -98,6 +98,37 @@ namespace Test.Shared.Suites
                             if (!logBody.Contains("\"job\"") && !logBody.Contains("\"events\"")) throw new Exception("link log missing job/events shape");
                         }),
 
+                    new TestCaseDescriptor("Api", "Subject_Link_LabelsAndTags_RoundTrip", "Submitting a link with labels and tags round-trips them on the created and re-read link; a link with no URL is rejected",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+                            if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
+
+                            // Positive: labels + tags on the body round-trip on the created link.
+                            string body = "{\"url\":\"https://example.com/a\",\"labels\":[\"news\",\"2024\"],\"tags\":{\"author\":\"jane\"}}";
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, body, ct);
+                            if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
+                            string linkBody = await linkResp.Content.ReadAsStringAsync(ct);
+                            if (!linkBody.Contains("news") || !linkBody.Contains("2024")) throw new Exception("created link did not echo its labels: " + linkBody);
+                            if (!linkBody.Contains("author") || !linkBody.Contains("jane")) throw new Exception("created link did not echo its tags: " + linkBody);
+
+                            // Persisted: re-reading the link returns the same labels/tags.
+                            string linkId = ExtractString(linkBody, "id");
+                            HttpResponseMessage readResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/links/" + linkId, token, null, ct);
+                            if (readResp.StatusCode != HttpStatusCode.OK) throw new Exception("link read not 200: " + (int)readResp.StatusCode);
+                            string readBody = await readResp.Content.ReadAsStringAsync(ct);
+                            if (!readBody.Contains("news") || !readBody.Contains("author")) throw new Exception("persisted link missing labels/tags: " + readBody);
+
+                            // Negative: a body with no URL is rejected with 400 even when labels/tags are present.
+                            HttpResponseMessage bad = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"labels\":[\"x\"]}", ct);
+                            if (bad.StatusCode != HttpStatusCode.BadRequest) throw new Exception("expected 400 for a link with no URL, got " + (int)bad.StatusCode);
+                        }),
+
                     new TestCaseDescriptor("Api", "TokenRevoke", "A revoked token is rejected",
                         executeAsync: async ct =>
                         {

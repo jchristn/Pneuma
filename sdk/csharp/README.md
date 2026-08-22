@@ -121,6 +121,62 @@ QueryResponse answer = await client.QueryAsync("What themes recur across the cat
 Console.WriteLine(answer.Answer);
 ```
 
+## Labels, tags & metadata filters
+
+When submitting a link you can attach operator-supplied `Labels` (a list of plain strings) and
+`Tags` (a key/value map) via `SubmitLinkRequest` (or `BulkSubmitLinkRequest`, where they apply to
+every URL in the batch). Both are optional. They ride along with every chunk the link produces, and
+they round-trip on the returned `SubjectLink`, so retrieval can later be scoped to them.
+
+```csharp
+using System.Collections.Generic;
+using Pneuma.Sdk.Enums;
+using Pneuma.Sdk.Models;
+using Pneuma.Sdk.Requests;
+
+// Submit a link with labels and tags.
+SubjectLink tagged = await client.SubmitLinkAsync(subject.Id, new SubmitLinkRequest
+{
+    Url = "https://example.com/1965-live-at-newport",
+    Title = "Live at Newport (1965)",
+    Labels = new List<string> { "live", "1965" },
+    Tags = new Dictionary<string, string>
+    {
+        ["source"] = "official",
+        ["rights"] = "cleared"
+    }
+});
+```
+
+On a grounded query you can pass a `SubjectId` to scope retrieval to one subject, and a
+`MetadataFilter` (a `RetrievalFilter`) to restrict retrieval to documents ingested with matching
+labels/tags. A `RetrievalFilter` has four optional parts: `RequiredLabels`, `ExcludedLabels`,
+`RequiredTags`, and `ExcludedTags`. Each tag entry is a `RetrievalTagCondition` — a `Key`, a
+`Condition` (`TagConditionEnum`: `Equals` (default), `NotEquals`, `Contains`, `StartsWith`,
+`EndsWith`, `GreaterThan`, `LessThan`, `IsNull`, `IsNotNull`), and a `Value` (ignored for
+`IsNull`/`IsNotNull`). A chunk is eligible only when it carries every required label and satisfies
+every required tag condition, and none of the excluded labels or tag conditions match. The filter is
+merged with the subject's default filter (union of required and excluded) — it narrows, never widens.
+
+```csharp
+QueryResponse scoped = await client.QueryAsync(new QueryRequest
+{
+    Question = "What themes recur across the live recordings?",
+    MaxResults = 10,
+    SubjectId = subject.Id,
+    MetadataFilter = new RetrievalFilter
+    {
+        RequiredLabels = new List<string> { "live" },
+        ExcludedLabels = new List<string> { "bootleg" },
+        RequiredTags = new List<RetrievalTagCondition>
+        {
+            new RetrievalTagCondition { Key = "rights", Condition = TagConditionEnum.Equals, Value = "cleared" }
+        }
+    }
+});
+Console.WriteLine(scoped.Answer);
+```
+
 ## Pagination
 
 Every list (GET-all) call returns a paginated `EnumerationResult<T>` envelope rather than a bare list.

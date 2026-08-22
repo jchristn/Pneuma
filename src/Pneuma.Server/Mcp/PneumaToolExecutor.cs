@@ -9,6 +9,7 @@ namespace Pneuma.Server.Mcp
     using Pneuma.Core.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
 
@@ -70,8 +71,9 @@ namespace Pneuma.Server.Mcp
         /// <param name="subjectId">Optional subject to scope search/grounded-answer tools to; null searches the whole tenant.</param>
         /// <param name="citedLinkScores">Optional sink mapping each cited content-link id surfaced by search/answer tools to its best relevance score.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="requestFilter">Optional per-request facet filter, merged with the subject default to scope search/grounded-answer tools.</param>
         /// <returns>The tool result or a failure with a message.</returns>
-        public async Task<ToolInvocationResult> ExecuteAsync(RequestContext rc, string toolName, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
+        public async Task<ToolInvocationResult> ExecuteAsync(RequestContext rc, string toolName, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token, RetrievalFilter? requestFilter = null)
         {
             if (String.IsNullOrEmpty(toolName)) return ToolInvocationResult.Fail("A tool name is required.");
 
@@ -97,7 +99,7 @@ namespace Pneuma.Server.Mcp
                     return ToolInvocationResult.Ok(await _Entities.EnumerateLinksAsync(rc, arguments, token).ConfigureAwait(false));
 
                 case "pneuma_search":
-                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(tenantId, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false));
+                    return ToolInvocationResult.Ok(await _GraphTools.SearchAsync(tenantId, arguments, subjectId, citedLinkScores, token, requestFilter).ConfigureAwait(false));
 
                 case "pneuma_get_subject":
                     return await GetSubjectAsync(tenantId, arguments, token).ConfigureAwait(false);
@@ -118,7 +120,7 @@ namespace Pneuma.Server.Mcp
                     return await GetNeighborsAsync(tenantId, arguments, token).ConfigureAwait(false);
 
                 case "pneuma_query":
-                    return await GroundedQueryAsync(tenantId, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false);
+                    return await GroundedQueryAsync(tenantId, arguments, subjectId, citedLinkScores, requestFilter, token).ConfigureAwait(false);
 
                 default:
                     return ToolInvocationResult.Fail("Unknown tool: " + toolName);
@@ -180,7 +182,7 @@ namespace Pneuma.Server.Mcp
             return ToolInvocationResult.Ok(new { nodeId = id, count = summaries.Count, neighbors = summaries });
         }
 
-        private async Task<ToolInvocationResult> GroundedQueryAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
+        private async Task<ToolInvocationResult> GroundedQueryAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter, CancellationToken token)
         {
             string question = McpJsonRpc.GetStringArgument(arguments, "question");
             if (String.IsNullOrWhiteSpace(question)) return ToolInvocationResult.Fail("'question' is required.");
@@ -191,7 +193,7 @@ namespace Pneuma.Server.Mcp
                 max = Math.Clamp(parsed, 1, 20);
             }
 
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkScores, token: token).ConfigureAwait(false);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, subjectId, citedLinkScores, requestFilter, token).ConfigureAwait(false);
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
             {

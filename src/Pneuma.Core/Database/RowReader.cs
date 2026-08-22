@@ -162,6 +162,25 @@ namespace Pneuma.Core.Database
             }
         }
 
+        /// <summary>Read a JSON object column into a string-keyed string dictionary.</summary>
+        /// <param name="row">Data row.</param>
+        /// <param name="column">Column name.</param>
+        /// <returns>String dictionary (empty when null/invalid).</returns>
+        public static Dictionary<string, string> GetStringDictionary(DataRow row, string column)
+        {
+            string? s = GetNullableString(row, column);
+            if (String.IsNullOrWhiteSpace(s)) return new Dictionary<string, string>();
+            try
+            {
+                Dictionary<string, string>? map = JsonSerializer.Deserialize<Dictionary<string, string>>(s);
+                return map ?? new Dictionary<string, string>();
+            }
+            catch (JsonException)
+            {
+                return new Dictionary<string, string>();
+            }
+        }
+
         /// <summary>Read a JSON array of enum names into an enum list.</summary>
         /// <typeparam name="T">Enum type.</typeparam>
         /// <param name="row">Data row.</param>

@@ -45,6 +45,26 @@ function LinkDetailModal({ detail, subjectName, onClose }) {
               <span className="detail-value"><CopyableId value={detail.url} title="Copy URL" /></span>
             </div>
           </div>
+          {((Array.isArray(detail.labels) && detail.labels.length > 0) || (detail.tags && Object.keys(detail.tags).length > 0)) && (
+            <div className="detail-grid" style={{ marginBottom: 18 }}>
+              {Array.isArray(detail.labels) && detail.labels.length > 0 && (
+                <div className="detail-item">
+                  <span className="detail-label">{t('links.labels', 'Labels')}</span>
+                  <span className="detail-value lt-chips">
+                    {detail.labels.map((l) => (<span key={l} className="lt-chip">{l}</span>))}
+                  </span>
+                </div>
+              )}
+              {detail.tags && Object.keys(detail.tags).length > 0 && (
+                <div className="detail-item">
+                  <span className="detail-label">{t('links.tags', 'Tags')}</span>
+                  <span className="detail-value lt-chips">
+                    {Object.entries(detail.tags).map(([k, v]) => (<span key={k} className="lt-chip">{k}: {v}</span>))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {isFailed(detail.status) && detail.lastError && (
             <div className="form-error" style={{ marginBottom: 18 }}>{detail.lastError}</div>
           )}

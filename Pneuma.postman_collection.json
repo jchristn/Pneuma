@@ -395,7 +395,7 @@
         },
         {
           "name": "Submit Link",
-          "description": "embeddingEndpointId and completionEndpointId are required (ids from GET /v1.0/ingestion/endpoints); collectionId is required (a RecallDB collection from GET /v1.0/collections \u2014 run 'Create Collection' first to capture it).",
+          "description": "The embedding/inference models and collection are taken from the subject (configure them on the subject first). Optional labels (strings) and tags (key/value) are attached to every chunk this link produces and to its source graph node, so retrieval can later be scoped to them via a query/chat metadataFilter.",
           "request": {
             "method": "POST",
             "header": [
@@ -406,7 +406,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\"\n}"
+              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"labels\": [\"biography\", \"music\"],\n  \"tags\": {\n    \"rights\": \"public\",\n    \"source\": \"wikipedia\"\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links"
           }
@@ -423,7 +423,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ]\n}"
+              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"labels\": [\"music\"],\n  \"tags\": {\n    \"source\": \"wikipedia\"\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links/bulk"
           }
@@ -590,7 +590,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"What themes recur in Chuck D's work?\",\n  \"maxResults\": 8\n}"
+              "raw": "{\n  \"question\": \"What themes recur in Chuck D's work?\",\n  \"maxResults\": 8,\n  \"metadataFilter\": {\n    \"requiredLabels\": [\"music\"],\n    \"excludedLabels\": [],\n    \"requiredTags\": [\n      { \"key\": \"rights\", \"condition\": \"Equals\", \"value\": \"public\" }\n    ],\n    \"excludedTags\": []\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/query"
           }

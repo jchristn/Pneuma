@@ -44,6 +44,18 @@ namespace Pneuma.Core.Models
         /// <summary>The source URL being ingested.</summary>
         public string SourceUrl { get; set; } = String.Empty;
 
+        /// <summary>
+        /// Operator-supplied labels carried from the originating link. Stamped onto every chunk this job
+        /// produces (as filterable retrieval labels) and onto the link's source graph node.
+        /// </summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Operator-supplied key/value tags carried from the originating link. Stamped onto every chunk this
+        /// job produces (as filterable retrieval tags) and onto the link's source graph node.
+        /// </summary>
+        public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
+
         /// <summary>Overall job status.</summary>
         public IngestionStatusEnum Status { get; set; } = IngestionStatusEnum.Queued;
 

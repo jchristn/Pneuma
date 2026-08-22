@@ -71,10 +71,11 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
         internal static string InsertSql(SubjectLink link)
         {
             return
-                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, submittedbyuserid, status, lastingestedutc, lasterror, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(link.Id) + ", " + Sanitizer.Str(link.TenantId) + ", " +
                 Sanitizer.Str(link.SubjectId) + ", " + Sanitizer.Str(link.Url) + ", " +
-                Sanitizer.Str(link.Title) + ", " + Sanitizer.Str(link.SubmittedByUserId) + ", " +
+                Sanitizer.Str(link.Title) + ", " + Sanitizer.Str(JsonColumn.FromStrings(link.Labels)) + ", " +
+                Sanitizer.Str(JsonColumn.FromDictionary(link.Tags)) + ", " + Sanitizer.Str(link.SubmittedByUserId) + ", " +
                 Sanitizer.Str(link.Status.ToString()) + ", " + Sanitizer.Ts(link.LastIngestedUtc) + ", " +
                 Sanitizer.Str(link.LastError) + ", " + Sanitizer.Bit(link.Active) + ", " +
                 Sanitizer.Bit(link.IsProtected) + ", " + Sanitizer.Ts(link.CreatedUtc) + ", " +
@@ -133,6 +134,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 "UPDATE subjectlinks SET subjectid = " + Sanitizer.Str(link.SubjectId) +
                 ", url = " + Sanitizer.Str(link.Url) +
                 ", title = " + Sanitizer.Str(link.Title) +
+                ", labelsjson = " + Sanitizer.Str(JsonColumn.FromStrings(link.Labels)) +
+                ", tagsjson = " + Sanitizer.Str(JsonColumn.FromDictionary(link.Tags)) +
                 ", submittedbyuserid = " + Sanitizer.Str(link.SubmittedByUserId) +
                 ", status = " + Sanitizer.Str(link.Status.ToString()) +
                 ", lastingestedutc = " + Sanitizer.Ts(link.LastIngestedUtc) +
@@ -160,6 +163,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 SubjectId = RowReader.GetString(row, "subjectid"),
                 Url = RowReader.GetString(row, "url"),
                 Title = RowReader.GetNullableString(row, "title"),
+                Labels = RowReader.GetStringList(row, "labelsjson"),
+                Tags = RowReader.GetStringDictionary(row, "tagsjson"),
                 SubmittedByUserId = RowReader.GetNullableString(row, "submittedbyuserid"),
                 Status = RowReader.GetEnum<SubjectLinkStatusEnum>(row, "status", SubjectLinkStatusEnum.Submitted),
                 LastIngestedUtc = RowReader.GetNullableDateTime(row, "lastingestedutc"),

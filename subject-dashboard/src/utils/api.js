@@ -31,6 +31,13 @@ export function asArray(resp, ...keys) {
   return [];
 }
 
+/** Whether a RetrievalFilter object carries no predicate (so it can be omitted from a request). */
+export function isEmptyFilter(f) {
+  if (!f) return true;
+  const len = (a) => (Array.isArray(a) ? a.length : 0);
+  return !len(f.requiredLabels) && !len(f.excludedLabels) && !len(f.requiredTags) && !len(f.excludedTags);
+}
+
 class ApiClient {
   constructor(baseUrl, token = null) {
     this.baseUrl = (baseUrl || '').replace(/\/+$/, '');
@@ -179,15 +186,21 @@ class ApiClient {
   }
   // Submitting a link enqueues an ingestion job server-side. The backend requires an embedding
   // endpoint, a completion endpoint, and a target collection.
-  // The subject owns its embedding/inference models and collection, so submission carries only url/title.
-  async submitLink(subjectId, { url, title }) {
+  // The subject owns its embedding/inference models and collection, so submission carries only url/title
+  // plus optional labels/tags to attach to every produced chunk (for later retrieval scoping).
+  async submitLink(subjectId, { url, title, labels, tags }) {
     const body = { url };
     if (title) body.title = title;
+    if (labels && labels.length) body.labels = labels;
+    if (tags && Object.keys(tags).length) body.tags = tags;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, { body });
   }
-  // Bulk submit multiple links for a subject in a single request.
-  async bulkSubmitLinks(subjectId, { urls }) {
-    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body: { urls } });
+  // Bulk submit multiple links for a subject in a single request; labels/tags apply to every URL.
+  async bulkSubmitLinks(subjectId, { urls, labels, tags }) {
+    const body = { urls };
+    if (labels && labels.length) body.labels = labels;
+    if (tags && Object.keys(tags).length) body.tags = tags;
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
   }
 
   // Ingestion jobs
@@ -255,11 +268,17 @@ class ApiClient {
    * Pneuma's read tools while answering. Invokes `onEvent` for each `delta` / `tool_call` /
    * `tool_result` / `complete` / `error` event. `messages` is an array of `{ role, content }` turns.
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId, threadId } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId, threadId, metadataFilter = null } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults, subjectId: subjectId || null, threadId: threadId || null },
+      body: {
+        messages,
+        maxResults,
+        subjectId: subjectId || null,
+        threadId: threadId || null,
+        ...(metadataFilter && !isEmptyFilter(metadataFilter) ? { metadataFilter } : {}),
+      },
       signal,
       onEvent,
     });

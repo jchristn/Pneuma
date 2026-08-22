@@ -4,6 +4,13 @@
  */
 import { streamSse } from './sse.js';
 
+/** Whether a RetrievalFilter object carries no predicate (so it can be omitted from a request). */
+export function isEmptyFilter(f) {
+  if (!f) return true;
+  const len = (a) => (Array.isArray(a) ? a.length : 0);
+  return !len(f.requiredLabels) && !len(f.excludedLabels) && !len(f.requiredTags) && !len(f.excludedTags);
+}
+
 export class ApiError extends Error {
   constructor(status, body, parsed) {
     super(parsed?.message || parsed?.error || `HTTP ${status}`);
@@ -114,11 +121,17 @@ class ApiClient {
    * Pneuma's read tools while answering. Invokes `onEvent` for each `delta` / `tool_call` /
    * `tool_result` / `complete` / `error` event. `messages` is an array of `{ role, content }` turns.
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId, threadId } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId, threadId, metadataFilter = null } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults, subjectId: subjectId || null, threadId: threadId || null },
+      body: {
+        messages,
+        maxResults,
+        subjectId: subjectId || null,
+        threadId: threadId || null,
+        ...(metadataFilter && !isEmptyFilter(metadataFilter) ? { metadataFilter } : {}),
+      },
       signal,
       onEvent,
     });

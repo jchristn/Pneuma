@@ -30,6 +30,13 @@ namespace Pneuma.Core.Requests
         /// </summary>
         public string? ThreadId { get; set; } = null;
 
+        /// <summary>
+        /// Optional per-request facet filter scoping the assistant's retrieval for this turn. Merged with the
+        /// subject's default filter (union of required and excluded), so a request narrows — never widens —
+        /// the subject default. Null applies only the subject default.
+        /// </summary>
+        public RetrievalFilter? MetadataFilter { get; set; } = null;
+
         #endregion
     }
 }

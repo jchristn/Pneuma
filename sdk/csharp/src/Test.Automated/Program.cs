@@ -151,11 +151,20 @@ namespace Test.Automated
                 SubmitLinkRequest request = new SubmitLinkRequest
                 {
                     Url = "https://example.com/pneuma-sdk-smoke-test",
-                    Title = "SDK smoke test link"
+                    Title = "SDK smoke test link",
+                    Labels = new List<string> { "sdk-smoke", "live" },
+                    Tags = new Dictionary<string, string>
+                    {
+                        ["source"] = "sdk-test",
+                        ["rights"] = "cleared"
+                    }
                 };
                 SubjectLink link = await client.SubmitLinkAsync(createdSubjectId!, request).ConfigureAwait(false);
                 if (string.IsNullOrEmpty(link.Id)) throw new Exception("Submitted link has no id.");
-                Console.WriteLine("       linkId=" + link.Id + " status=" + link.Status);
+                if (!link.Labels.Contains("sdk-smoke") || !link.Labels.Contains("live")) throw new Exception("Submitted link labels did not round-trip: " + string.Join(",", link.Labels));
+                if (!link.Tags.TryGetValue("source", out string? sourceTag) || sourceTag != "sdk-test") throw new Exception("Submitted link tag 'source' did not round-trip.");
+                if (!link.Tags.TryGetValue("rights", out string? rightsTag) || rightsTag != "cleared") throw new Exception("Submitted link tag 'rights' did not round-trip.");
+                Console.WriteLine("       linkId=" + link.Id + " status=" + link.Status + " labels=" + string.Join(",", link.Labels));
             }).ConfigureAwait(false);
 
             await Step("List jobs", async () =>

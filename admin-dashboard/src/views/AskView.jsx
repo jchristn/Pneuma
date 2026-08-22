@@ -12,6 +12,7 @@ import { WAIT_MESSAGES } from '../components/chatWaitMessages';
 import ErrorBanner from '../components/ErrorBanner';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
+import ScopeFilter, { buildScopeFilter } from '../components/ScopeFilter';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
 function useThemeMode() {
@@ -321,6 +322,9 @@ function AskView() {
   const [subjects, setSubjects] = useState([]);
   const [subjectId, setSubjectId] = useState('');
   const [waitMessage, setWaitMessage] = useState('');
+  // Optional retrieval scope: narrow answers to content ingested with these labels/tags.
+  const [scopeLabels, setScopeLabels] = useState([]);
+  const [scopeTags, setScopeTags] = useState([]);
 
   const abortRef = useRef(null);
   const threadIdRef = useRef(null);
@@ -441,6 +445,7 @@ function AskView() {
         signal: controller.signal,
         subjectId,
         threadId: threadIdRef.current,
+        metadataFilter: buildScopeFilter(scopeLabels, scopeTags),
         onEvent: (evt) => {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; m.compacting = false; });
@@ -496,7 +501,9 @@ function AskView() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiClient, input, messages, patchLast, streaming, subjectId, t]);
+  }, [apiClient, input, messages, patchLast, streaming, subjectId, t, scopeLabels, scopeTags]);
+
+  const onScopeChange = useCallback(({ labels, tags }) => { setScopeLabels(labels); setScopeTags(tags); }, []);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -607,6 +614,9 @@ function AskView() {
       {error ? <ErrorBanner message={error} /> : null}
 
       <div className="chat-composer">
+        <div className="scope-row">
+          <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
+        </div>
         <div className="chat-input-wrap">
           <textarea
             ref={textareaRef}

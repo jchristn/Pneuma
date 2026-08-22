@@ -7,6 +7,20 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Ingestion labels & tags (scoped retrieval).** Content links can now carry operator-supplied **labels**
+  (plain strings) and **tags** (key/value) at submission — single (`POST /v1.0/subjects/{id}/links`) and bulk
+  (`.../links/bulk`, applied to every URL). They are persisted on the link and its ingestion job (schema v15,
+  `labelsjson`/`tagsjson` on `subjectlinks` + `ingestionjobs`, all four providers) and stamped onto **every
+  chunk** the link produces (RecallDB) and its **source graph node** (LiteGraph). Each label `L` becomes a
+  distinct `label:L` chunk tag (so a chunk carries several labels at once) and the document type is exposed the
+  same way; reserved provenance keys are never overwritten. Retrieval can then be scoped to these facets: the
+  existing `metadataFilter` on `/v1.0/query` + `/v1.0/query/stream` now targets them, `/v1.0/chat/stream` gains
+  a per-request `metadataFilter` threaded through the agentic search tool (merged with the subject default and
+  recorded on the turn), and the search routes (`/v1.0/search`, `/v1.0/subjects/{id}/search`) accept an optional
+  URL-encoded `filter` and apply the subject's default filter. The ingestion labels/tags UX mirrors the Create
+  Subject facet editor: a shared labels+tags editor in the creator/admin link-submit modals, a link-detail
+  chips view, and a collapsible **Scope** control on every dashboard's Ask/chat page. Mirrored across the C#,
+  JS, and Python SDKs (request models + `RetrievalFilter`/`metadataFilter`) and documented in `REST_API.md`.
 - **Retrieval/answer metrics + Grafana section + TELEMETRY.md.** New Prometheus metrics cover the answer path
   (`pneuma_chat_answers_total`, `pneuma_chat_answer_duration_seconds`, `pneuma_chat_stage_duration_seconds` by
   stage), complementing the existing HTTP/ingestion/integration metrics and the ingestion + integration

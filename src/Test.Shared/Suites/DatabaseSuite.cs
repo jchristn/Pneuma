@@ -418,6 +418,35 @@ namespace Test.Shared.Suites
                             if (missing != null) throw new Exception("ReadBySlug must return null for an unknown slug");
                         }),
 
+                    new TestCaseDescriptor("Database", "Link_And_Job_LabelsAndTags_RoundTrip", "SubjectLink and IngestionJob ingestion labels/tags round-trip through create and read; absent values read back empty",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "LinkFields" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Chuck D" }, ct);
+
+                            List<string> labels = new List<string> { "news", "2024" };
+                            Dictionary<string, string> tags = new Dictionary<string, string> { { "author", "jane" }, { "rights", "public" } };
+                            SubjectLink link = new SubjectLink { TenantId = t.Id, SubjectId = s.Id, Url = "https://example.com/a", Title = "A", Labels = labels, Tags = tags };
+                            IngestionJob job = new IngestionJob { TenantId = t.Id, SubjectId = s.Id, LinkId = link.Id, SourceUrl = link.Url, Status = IngestionStatusEnum.Queued, Labels = labels, Tags = tags };
+                            await db.SubjectLinks.CreateWithJobAsync(link, job, ct);
+
+                            SubjectLink readLink = await db.SubjectLinks.ReadAsync(t.Id, link.Id, ct) ?? throw new Exception("link vanished");
+                            if (readLink.Labels.Count != 2 || !readLink.Labels.Contains("news") || !readLink.Labels.Contains("2024")) throw new Exception("link labels did not round-trip");
+                            if (!readLink.Tags.TryGetValue("author", out string? la) || la != "jane") throw new Exception("link tag 'author' did not round-trip");
+                            if (!readLink.Tags.TryGetValue("rights", out string? lr) || lr != "public") throw new Exception("link tag 'rights' did not round-trip");
+
+                            IngestionJob readJob = await db.IngestionJobs.ReadAsync(t.Id, job.Id, ct) ?? throw new Exception("job vanished");
+                            if (readJob.Labels.Count != 2 || !readJob.Labels.Contains("news")) throw new Exception("job labels did not round-trip");
+                            if (!readJob.Tags.TryGetValue("author", out string? ja) || ja != "jane") throw new Exception("job tag did not round-trip");
+
+                            // A link with no labels/tags reads back empty collections (never null).
+                            SubjectLink plain = await db.SubjectLinks.CreateAsync(new SubjectLink { TenantId = t.Id, SubjectId = s.Id, Url = "https://example.com/b" }, ct);
+                            SubjectLink readPlain = await db.SubjectLinks.ReadAsync(t.Id, plain.Id, ct) ?? throw new Exception("plain link vanished");
+                            if (readPlain.Labels == null || readPlain.Labels.Count != 0) throw new Exception("a link with no labels should read back an empty list");
+                            if (readPlain.Tags == null || readPlain.Tags.Count != 0) throw new Exception("a link with no tags should read back an empty map");
+                        }),
+
                     new TestCaseDescriptor("Database", "ChatTurn_Crud_And_RetentionPrune", "Chat turns persist, enumerate newest-first by subject, and prune by cutoff",
                         executeAsync: async ct =>
                         {

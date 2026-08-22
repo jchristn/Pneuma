@@ -13,6 +13,7 @@ import IngestionLogModal from '../components/IngestionLogModal';
 import LinkSubmitModal from '../components/LinkSubmitModal';
 import LinkBulkSubmitModal from '../components/LinkBulkSubmitModal';
 import LinkDetailModal from '../components/LinkDetailModal';
+import { toLabelTagPayload } from '../components/LabelTagEditor';
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -37,12 +38,12 @@ function LinksView() {
   const [autoRefreshMs, setAutoRefreshMs] = useState(0);
 
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [form, setForm] = useState({ subjectId: '', url: '', title: '' });
+  const [form, setForm] = useState({ subjectId: '', url: '', title: '', labels: [], tags: [] });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '' });
+  const [bulkForm, setBulkForm] = useState({ subjectId: '', urls: '', labels: [], tags: [] });
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [notice, setNotice] = useState('');
@@ -94,7 +95,7 @@ function LinksView() {
   }, [autoRefreshMs]);
 
   const openSubmit = () => {
-    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '' });
+    setForm({ subjectId: subjects[0]?.id || '', url: '', title: '', labels: [], tags: [] });
     setFormError('');
     setNotice('');
     setSubmitOpen(true);
@@ -113,9 +114,12 @@ function LinksView() {
     setSubmitting(true);
     setFormError('');
     try {
+      const { labels, tags } = toLabelTagPayload(form.labels, form.tags);
       await apiClient.submitLink(form.subjectId, {
         url: form.url.trim(),
-        title: form.title.trim()
+        title: form.title.trim(),
+        labels,
+        tags
       });
       setSubmitOpen(false);
       await load(false);
@@ -127,7 +131,7 @@ function LinksView() {
   };
 
   const openBulk = () => {
-    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '' });
+    setBulkForm({ subjectId: subjects[0]?.id || '', urls: '', labels: [], tags: [] });
     setBulkError('');
     setNotice('');
     setBulkOpen(true);
@@ -150,7 +154,8 @@ function LinksView() {
     setBulkSubmitting(true);
     setBulkError('');
     try {
-      const result = await apiClient.bulkSubmitLinks(bulkForm.subjectId, { urls });
+      const { labels, tags } = toLabelTagPayload(bulkForm.labels, bulkForm.tags);
+      const result = await apiClient.bulkSubmitLinks(bulkForm.subjectId, { urls, labels, tags });
       const created = typeof result?.created === 'number' ? result.created : asArray(result, 'links').length;
       setBulkOpen(false);
       setNotice(t('links.bulkCreated', { count: created }));

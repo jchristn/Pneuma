@@ -95,6 +95,38 @@ namespace Pneuma.Server.Routes
 
         #region Private-Methods
 
+        /// <summary>Trim, drop blanks, and de-duplicate submitted labels (order preserved).</summary>
+        /// <param name="labels">Submitted labels, possibly null.</param>
+        /// <returns>The normalized labels.</returns>
+        private static List<string> NormalizeLabels(List<string>? labels)
+        {
+            List<string> result = new List<string>();
+            if (labels == null) return result;
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string label in labels)
+            {
+                if (String.IsNullOrWhiteSpace(label)) continue;
+                string trimmed = label.Trim();
+                if (seen.Add(trimmed)) result.Add(trimmed);
+            }
+            return result;
+        }
+
+        /// <summary>Trim keys/values and drop entries with a blank key (last value wins on a duplicate key).</summary>
+        /// <param name="tags">Submitted tags, possibly null.</param>
+        /// <returns>The normalized tags.</returns>
+        private static Dictionary<string, string> NormalizeTags(Dictionary<string, string>? tags)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (tags == null) return result;
+            foreach (KeyValuePair<string, string> tag in tags)
+            {
+                if (String.IsNullOrWhiteSpace(tag.Key)) continue;
+                result[tag.Key.Trim()] = (tag.Value ?? String.Empty).Trim();
+            }
+            return result;
+        }
+
         private async Task<bool> GateAsync(HttpContextBase ctx, RequestContext rc, OperationTypeEnum op)
         {
             if (await _Authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, op, null, ctx.Token).ConfigureAwait(false)) return true;
@@ -153,8 +185,12 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Models and collection are owned by the subject; the link body carries only the URL/title.
+            // Models and collection are owned by the subject; the link body carries the URL/title plus optional
+            // labels/tags that are stamped onto every chunk (RecallDB) and the link's source graph node (LiteGraph).
             if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
+
+            List<string> labels = NormalizeLabels(request.Labels);
+            Dictionary<string, string> tags = NormalizeTags(request.Tags);
 
             SubjectLink link = new SubjectLink
             {
@@ -162,6 +198,8 @@ namespace Pneuma.Server.Routes
                 SubjectId = subjectId,
                 Url = request.Url,
                 Title = request.Title,
+                Labels = labels,
+                Tags = tags,
                 SubmittedByUserId = rc.UserId,
                 Status = SubjectLinkStatusEnum.Submitted
             };
@@ -171,6 +209,8 @@ namespace Pneuma.Server.Routes
                 SubjectId = subjectId,
                 LinkId = link.Id,
                 SourceUrl = link.Url,
+                Labels = labels,
+                Tags = tags,
                 Status = IngestionStatusEnum.Queued,
                 Stage = IngestionStageEnum.Pending,
                 EmbeddingEndpointId = subject.EmbeddingModel,
@@ -209,7 +249,8 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Models and collection are owned by the subject; the bulk body carries only URLs.
+            // Models and collection are owned by the subject; the bulk body carries URLs plus one optional set of
+            // labels/tags applied identically to every URL in the batch.
             if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
 
             List<string> urls = new List<string>();
@@ -227,14 +268,20 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
+            List<string> labels = NormalizeLabels(request.Labels);
+            Dictionary<string, string> tags = NormalizeTags(request.Tags);
+
             List<SubjectLink> createdLinks = new List<SubjectLink>();
             foreach (string url in urls)
             {
+                // Each link gets its own copy of the batch labels/tags so per-link edits never alias one another.
                 SubjectLink link = new SubjectLink
                 {
                     TenantId = tenantId,
                     SubjectId = subjectId,
                     Url = url,
+                    Labels = new List<string>(labels),
+                    Tags = new Dictionary<string, string>(tags),
                     SubmittedByUserId = rc.UserId,
                     Status = SubjectLinkStatusEnum.Submitted
                 };
@@ -244,6 +291,8 @@ namespace Pneuma.Server.Routes
                     SubjectId = subjectId,
                     LinkId = link.Id,
                     SourceUrl = link.Url,
+                    Labels = new List<string>(labels),
+                    Tags = new Dictionary<string, string>(tags),
                     Status = IngestionStatusEnum.Queued,
                     Stage = IngestionStageEnum.Pending,
                     EmbeddingEndpointId = subject.EmbeddingModel,

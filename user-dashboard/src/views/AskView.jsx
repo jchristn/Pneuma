@@ -10,6 +10,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import Modal from '../components/Modal.jsx';
+import ScopeFilter, { buildScopeFilter } from '../components/ScopeFilter.jsx';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages.js';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
@@ -325,6 +326,9 @@ export default function AskView() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [waitMessage, setWaitMessage] = useState('');
+  // Optional retrieval scope: narrow answers to content ingested with these labels/tags.
+  const [scopeLabels, setScopeLabels] = useState([]);
+  const [scopeTags, setScopeTags] = useState([]);
 
   const abortRef = useRef(null);
   const threadIdRef = useRef(null);
@@ -441,6 +445,7 @@ export default function AskView() {
         signal: controller.signal,
         subjectId: subject?.id || null,
         threadId: threadIdRef.current,
+        metadataFilter: buildScopeFilter(scopeLabels, scopeTags),
         onEvent: (evt) => {
           if (evt.type === 'delta') {
             patchLast((m) => { m.content += evt.text || ''; m.compacting = false; });
@@ -496,7 +501,9 @@ export default function AskView() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [apiClient, messages, patchLast, streaming, t, subject?.id]);
+  }, [apiClient, messages, patchLast, streaming, t, subject?.id, scopeLabels, scopeTags]);
+
+  const onScopeChange = useCallback(({ labels, tags }) => { setScopeLabels(labels); setScopeTags(tags); }, []);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -548,6 +555,9 @@ export default function AskView() {
             autoFocus
             size="large"
           />
+          <div className="scope-row scope-row-hero">
+            <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
+          </div>
           {error ? <div className="error-banner" role="alert">{error}</div> : null}
         </section>
       </div>
@@ -621,6 +631,9 @@ export default function AskView() {
       {error ? <div className="error-banner" role="alert">{error}</div> : null}
 
       <div className="chat-composer">
+        <div className="scope-row">
+          <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
+        </div>
         <div className="chat-input-wrap">
           <textarea
             ref={textareaRef}

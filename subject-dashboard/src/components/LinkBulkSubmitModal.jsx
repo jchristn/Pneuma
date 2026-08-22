@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
+import LabelTagEditor from './LabelTagEditor';
 
 function LinkBulkSubmitModal({
   isOpen,
@@ -50,6 +51,15 @@ function LinkBulkSubmitModal({
             required
           />
           <p className="field-hint">{t('links.urlsHint')}</p>
+        </div>
+        <div className="form-group">
+          <label>{t('links.labelsAndTags', 'Labels & tags')}</label>
+          <LabelTagEditor
+            labels={bulkForm.labels || []}
+            tags={bulkForm.tags || []}
+            onChange={({ labels, tags }) => setBulkForm({ ...bulkForm, labels, tags })}
+          />
+          <p className="field-hint">{t('links.labelsAndTagsBulkHint', 'Applied to every URL in this batch. Use them later to scope search, retrieval, and chat.')}</p>
         </div>
         <p className="field-hint">{t('links.subjectModelsHint', 'These links are ingested with the subject’s configured embedding and inference models and its collection. Configure them on the subject if it has none.')}</p>
         <div className="form-actions">

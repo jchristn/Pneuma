@@ -1,6 +1,7 @@
 namespace Pneuma.Sdk.Models
 {
     using System;
+    using System.Collections.Generic;
     using Pneuma.Sdk.Enums;
 
     /// <summary>
@@ -22,6 +23,12 @@ namespace Pneuma.Sdk.Models
 
         /// <summary>Optional operator-facing title.</summary>
         public string? Title { get; set; } = null;
+
+        /// <summary>Operator-supplied labels attached to every chunk this link produced and to its source graph node.</summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>Operator-supplied key/value tags attached to every chunk this link produced and to its source graph node.</summary>
+        public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
 
         /// <summary>Identifier of the user who submitted the link.</summary>
         public string? SubmittedByUserId { get; set; } = null;

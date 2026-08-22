@@ -44,10 +44,11 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
         internal static string InsertSql(IngestionJob job)
         {
             return
-                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, labelsjson, tagsjson, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(job.Id) + ", " + Sanitizer.Str(job.TenantId) + ", " +
                 Sanitizer.Str(job.SubjectId) + ", " + Sanitizer.Str(job.LinkId) + ", " +
-                Sanitizer.Str(job.SourceUrl) + ", " + Sanitizer.Str(job.Status.ToString()) + ", " +
+                Sanitizer.Str(job.SourceUrl) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.Labels)) + ", " +
+                Sanitizer.Str(JsonColumn.FromDictionary(job.Tags)) + ", " + Sanitizer.Str(job.Status.ToString()) + ", " +
                 Sanitizer.Str(job.Stage.ToString()) + ", " + job.AttemptCount.ToString(CultureInfo.InvariantCulture) + ", " +
                 Sanitizer.Str(job.Error) + ", " + Sanitizer.Str(job.DocumentType) + ", " +
                 Sanitizer.Str(job.BlobKey) + ", " + Sanitizer.Str(job.EmbeddingEndpointId) + ", " +
@@ -137,6 +138,8 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 "UPDATE ingestionjobs SET subjectid = " + Sanitizer.Str(job.SubjectId) +
                 ", linkid = " + Sanitizer.Str(job.LinkId) +
                 ", sourceurl = " + Sanitizer.Str(job.SourceUrl) +
+                ", labelsjson = " + Sanitizer.Str(JsonColumn.FromStrings(job.Labels)) +
+                ", tagsjson = " + Sanitizer.Str(JsonColumn.FromDictionary(job.Tags)) +
                 ", status = " + Sanitizer.Str(job.Status.ToString()) +
                 ", stage = " + Sanitizer.Str(job.Stage.ToString()) +
                 ", attemptcount = " + job.AttemptCount.ToString(CultureInfo.InvariantCulture) +
@@ -170,6 +173,8 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 SubjectId = RowReader.GetString(row, "subjectid"),
                 LinkId = RowReader.GetString(row, "linkid"),
                 SourceUrl = RowReader.GetString(row, "sourceurl"),
+                Labels = RowReader.GetStringList(row, "labelsjson"),
+                Tags = RowReader.GetStringDictionary(row, "tagsjson"),
                 Status = RowReader.GetEnum<IngestionStatusEnum>(row, "status", IngestionStatusEnum.Queued),
                 Stage = RowReader.GetEnum<IngestionStageEnum>(row, "stage", IngestionStageEnum.Pending),
                 AttemptCount = RowReader.GetInt(row, "attemptcount"),

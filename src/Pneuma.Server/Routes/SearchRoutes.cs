@@ -10,8 +10,10 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
+    using Pneuma.Core.Serialization;
     using Pneuma.Server.Services;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -108,7 +110,11 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, token: ctx.Token).ConfigureAwait(false);
+            // Optional per-request facet filter (URL-encoded RetrievalFilter JSON in the `filter` query param).
+            RetrievalFilter? requestFilter = ParseFilter(ctx);
+            List<RetrievalTagCondition> req = requestFilter != null ? requestFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
+            List<RetrievalTagCondition> exc = requestFilter != null ? requestFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
+            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, req.Count > 0 ? req : null, exc.Count > 0 ? exc : null, ctx.Token).ConfigureAwait(false);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (SearchHit hit in hits)
@@ -162,8 +168,13 @@ namespace Pneuma.Server.Routes
             List<SearchHit> hits = new List<SearchHit>();
             if (!String.IsNullOrEmpty(collectionId))
             {
-                Dictionary<string, string> filter = new Dictionary<string, string> { { "subjectId", subjectId } };
-                hits = await _Search.SearchAsync(tenantId, collectionId, query, 1000, filter, token: ctx.Token).ConfigureAwait(false);
+                Dictionary<string, string> tagFilter = new Dictionary<string, string> { { "subjectId", subjectId } };
+                // Scope to the subject's default retrieval filter merged with any per-request filter, so search
+                // narrows by label/tag exactly the way grounded retrieval and chat do.
+                RetrievalFilter effective = RetrievalFilter.Merge(ParseSubjectDefault(subject), ParseFilter(ctx));
+                List<RetrievalTagCondition> req = effective.EffectiveRequired();
+                List<RetrievalTagCondition> exc = effective.EffectiveExcluded();
+                hits = await _Search.SearchAsync(tenantId, collectionId, query, 1000, tagFilter, req.Count > 0 ? req : null, exc.Count > 0 ? exc : null, ctx.Token).ConfigureAwait(false);
             }
 
             // A source link is stored as many RecallDB documents (one per chunk). Each chunk hit carries its
@@ -234,6 +245,43 @@ namespace Pneuma.Server.Routes
                 Objects = objects
             };
             await RouteHelper.SendJsonAsync(ctx, 200, envelope).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Parse the optional per-request facet filter from the <c>filter</c> query parameter (URL-encoded
+        /// <see cref="RetrievalFilter"/> JSON). Returns null when absent or unparseable.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <returns>The parsed filter, or null.</returns>
+        private static RetrievalFilter? ParseFilter(HttpContextBase ctx)
+        {
+            string? raw = ctx.Request.Query.Elements?["filter"];
+            if (String.IsNullOrWhiteSpace(raw)) return null;
+            try
+            {
+                RetrievalFilter? filter = Json.Deserialize<RetrievalFilter>(raw!);
+                return (filter == null || filter.IsEmpty()) ? null : filter;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Parse a subject's stored default retrieval filter, or null when absent or unparseable.</summary>
+        /// <param name="subject">The subject.</param>
+        /// <returns>The subject's default filter, or null.</returns>
+        private static RetrievalFilter? ParseSubjectDefault(Subject subject)
+        {
+            if (subject == null || String.IsNullOrWhiteSpace(subject.RetrievalFilterJson)) return null;
+            try
+            {
+                return Json.Deserialize<RetrievalFilter>(subject.RetrievalFilterJson!);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         #endregion

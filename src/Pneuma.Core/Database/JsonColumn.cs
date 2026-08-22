@@ -17,6 +17,14 @@ namespace Pneuma.Core.Database
             return JsonSerializer.Serialize(values);
         }
 
+        /// <summary>Serialize a string-keyed string dictionary to a JSON object.</summary>
+        /// <param name="values">Values.</param>
+        /// <returns>JSON object text.</returns>
+        public static string FromDictionary(IDictionary<string, string> values)
+        {
+            return JsonSerializer.Serialize(values ?? new Dictionary<string, string>());
+        }
+
         /// <summary>Serialize an enum list to a JSON array of names.</summary>
         /// <typeparam name="T">Enum type.</typeparam>
         /// <param name="values">Values.</param>

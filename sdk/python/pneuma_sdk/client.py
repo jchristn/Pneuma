@@ -546,6 +546,8 @@ class PneumaClient:
         subject_id: str,
         url: str,
         title: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        tags: Optional[Dict[str, str]] = None,
         embedding_endpoint_id: Optional[str] = None,
         completion_endpoint_id: Optional[str] = None,
     ) -> Any:
@@ -555,6 +557,10 @@ class PneumaClient:
             subject_id: The subject to attach the link to.
             url: The content URL to ingest.
             title: Optional operator-facing title.
+            labels: Optional labels (strings) attached to every chunk and to the
+                link's source graph node, so retrieval can be scoped to them.
+            tags: Optional key/value tags attached to every chunk and to the
+                link's source graph node, so retrieval can be scoped to them.
             embedding_endpoint_id: Partio embedding endpoint id (sent as
                 ``embeddingEndpointId``).
             completion_endpoint_id: Partio completion endpoint id (sent as
@@ -563,6 +569,10 @@ class PneumaClient:
         body: Dict[str, Any] = {"url": url}
         if title is not None:
             body["title"] = title
+        if labels is not None:
+            body["labels"] = labels
+        if tags is not None:
+            body["tags"] = tags
         if embedding_endpoint_id is not None:
             body["embeddingEndpointId"] = embedding_endpoint_id
         if completion_endpoint_id is not None:
@@ -575,6 +585,8 @@ class PneumaClient:
         self,
         subject_id: str,
         urls: List[str],
+        labels: Optional[List[str]] = None,
+        tags: Optional[Dict[str, str]] = None,
         embedding_endpoint_id: Optional[str] = None,
         completion_endpoint_id: Optional[str] = None,
     ) -> Any:
@@ -583,6 +595,8 @@ class PneumaClient:
         Args:
             subject_id: The subject to attach the links to.
             urls: The content URLs to ingest.
+            labels: Optional labels applied to every URL in the batch.
+            tags: Optional key/value tags applied to every URL in the batch.
             embedding_endpoint_id: Partio embedding endpoint id (sent as
                 ``embeddingEndpointId``).
             completion_endpoint_id: Partio completion endpoint id (sent as
@@ -592,6 +606,10 @@ class PneumaClient:
             ``{ "created": <int>, "links": [...] }``.
         """
         body: Dict[str, Any] = {"urls": urls}
+        if labels is not None:
+            body["labels"] = labels
+        if tags is not None:
+            body["tags"] = tags
         if embedding_endpoint_id is not None:
             body["embeddingEndpointId"] = embedding_endpoint_id
         if completion_endpoint_id is not None:
@@ -922,13 +940,32 @@ class PneumaClient:
         """GET /v1.0/search?q=<query>&max=<n>."""
         return self._request("GET", "/v1.0/search", params={"q": q, "max": max})
 
-    def query(self, question: str, max_results: int = 8) -> Any:
-        """POST /v1.0/query -> grounded answer with sources."""
-        return self._request(
-            "POST",
-            "/v1.0/query",
-            json_body={"question": question, "maxResults": max_results},
-        )
+    def query(
+        self,
+        question: str,
+        max_results: int = 8,
+        subject_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """POST /v1.0/query -> grounded answer with sources.
+
+        Args:
+            question: The natural-language question.
+            max_results: Maximum sources to retrieve.
+            subject_id: Optional subject to scope retrieval to (sent as
+                ``subjectId``).
+            metadata_filter: Optional facet filter (sent as ``metadataFilter``)
+                of the shape ``{"requiredLabels": [...], "excludedLabels": [...],
+                "requiredTags": [{"key", "condition", "value"}], "excludedTags":
+                [...]}``. Merged with the subject's default filter to scope
+                retrieval to documents ingested with matching labels/tags.
+        """
+        body: Dict[str, Any] = {"question": question, "maxResults": max_results}
+        if subject_id is not None:
+            body["subjectId"] = subject_id
+        if metadata_filter is not None:
+            body["metadataFilter"] = metadata_filter
+        return self._request("POST", "/v1.0/query", json_body=body)
 
     # ------------------------------------------------------------------
     # Lifecycle

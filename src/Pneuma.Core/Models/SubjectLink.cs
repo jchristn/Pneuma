@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
 
@@ -41,6 +42,18 @@ namespace Pneuma.Core.Models
 
         /// <summary>Optional operator-facing title.</summary>
         public string? Title { get; set; } = null;
+
+        /// <summary>
+        /// Operator-supplied labels (plain strings) attached to every chunk this link produces and to the
+        /// link's source graph node, so retrieval can be scoped to them. Empty when none were supplied.
+        /// </summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Operator-supplied key/value tags attached to every chunk this link produces and to the link's
+        /// source graph node, so retrieval can be scoped to them. Empty when none were supplied.
+        /// </summary>
+        public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
 
         /// <summary>Identifier of the user who submitted the link.</summary>
         public string? SubmittedByUserId { get; set; } = null;

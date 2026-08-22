@@ -93,10 +93,12 @@ namespace Pneuma.Server.Services
         /// <param name="turns">The conversation so far, oldest first.</param>
         /// <param name="maxResults">Retrieval bound passed through to tool calls.</param>
         /// <param name="subjectId">Optional subject to scope the assistant's retrieval tools to; null searches the whole tenant.</param>
+        /// <param name="threadId">Optional conversation thread to attach this turn to.</param>
+        /// <param name="requestFilter">Optional per-request facet filter, merged with the subject default to scope this turn's retrieval.</param>
         /// <param name="emit">Async delegate that writes one event: (payload, isFinal, token).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task.</returns>
-        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, string? subjectId, string? threadId, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
+        public async Task RunAsync(RequestContext rc, List<ChatTurn> turns, int maxResults, string? subjectId, string? threadId, RetrievalFilter? requestFilter, Func<object, bool, CancellationToken, Task> emit, CancellationToken token)
         {
             if (rc == null) throw new ArgumentNullException(nameof(rc));
             if (turns == null) throw new ArgumentNullException(nameof(turns));
@@ -109,6 +111,11 @@ namespace Pneuma.Server.Services
             Subject? subject = String.IsNullOrWhiteSpace(subjectId)
                 ? null
                 : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+
+            // The effective retrieval filter for this turn: the subject default merged with any per-request
+            // filter. Passed to every search/answer tool call and persisted on the turn so history shows what
+            // actually scoped it.
+            RetrievalFilter? effectiveFilter = await _Query.ResolveEffectiveFilterAsync(tenantId, subjectId, requestFilter, token).ConfigureAwait(false);
 
             ModelRunner? runner = await _Query.ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
             if (runner == null)
@@ -296,7 +303,7 @@ namespace Pneuma.Server.Services
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, token).ConfigureAwait(false);
+                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, effectiveFilter, token).ConfigureAwait(false);
                         long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });
@@ -406,7 +413,7 @@ namespace Pneuma.Server.Services
                 CitationsJson = citations.Count > 0 ? Json.Serialize(citations) : null,
                 PerformanceJson = Json.Serialize(performance),
                 PerformanceSchemaVersion = performance.SchemaVersion,
-                RetrievalFilterJson = subject?.RetrievalFilterJson
+                RetrievalFilterJson = effectiveFilter != null ? Json.Serialize(effectiveFilter) : subject?.RetrievalFilterJson
             };
 
             double tokensPerSecond = generationMs > 0 && completionTokens > 0 ? completionTokens / (generationMs / 1000.0) : 0.0;
@@ -485,7 +492,7 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, IDictionary<string, double> citedLinkScores, CancellationToken token)
+        private async Task<ToolInvocationResult> ExecuteToolAsync(RequestContext rc, ToolCall call, string? subjectId, IDictionary<string, double> citedLinkScores, RetrievalFilter? requestFilter, CancellationToken token)
         {
             JsonElement arguments;
             try
@@ -501,7 +508,7 @@ namespace Pneuma.Server.Services
                 return ToolInvocationResult.Fail("Tool arguments were not valid JSON.");
             }
 
-            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, citedLinkScores, token).ConfigureAwait(false);
+            return await _Tools.ExecuteAsync(rc, call.Name ?? String.Empty, arguments, subjectId, citedLinkScores, token, requestFilter).ConfigureAwait(false);
         }
 
         /// <summary>

@@ -406,9 +406,11 @@ export class PneumaClient {
     /**
      * Submit a link for a subject, enqueuing an ingestion job. The embedding/inference models and collection
      * used for ingestion are taken from the subject, so only the URL (and optional title) are supplied here.
-     * The subject must have those configured or the request fails with 400.
+     * The subject must have those configured or the request fails with 400. Optional `labels` (strings) and
+     * `tags` (key/value map) are attached to every chunk and to the link's source graph node, so retrieval can
+     * later be scoped to them.
      * @param {string} subjectId
-     * @param {{ url: string, title?: string }} link
+     * @param {{ url: string, title?: string, labels?: string[], tags?: Record<string,string> }} link
      * @returns {Promise<object>}
      */
     submitLink(subjectId, link) {
@@ -417,9 +419,9 @@ export class PneumaClient {
 
     /**
      * Submit multiple links for a subject in a single call, enqueuing one ingestion job per URL. The models and
-     * collection are taken from the subject.
+     * collection are taken from the subject. Any `labels`/`tags` are applied to every URL in the batch.
      * @param {string} subjectId
-     * @param {{ urls: string[] }} body
+     * @param {{ urls: string[], labels?: string[], tags?: Record<string,string> }} body
      * @returns {Promise<{ created: number, links: object[] }>}
      */
     submitLinks(subjectId, body) {
@@ -708,8 +710,10 @@ export class PneumaClient {
     }
 
     /**
-     * Grounded answer to a natural-language question.
-     * @param {{ question: string, maxResults?: number }} body
+     * Grounded answer to a natural-language question. An optional `metadataFilter` (required/excluded
+     * labels and tags) scopes retrieval to documents ingested with matching labels/tags; it is merged with
+     * the subject's default filter (union of required and excluded).
+     * @param {{ question: string, maxResults?: number, subjectId?: string, metadataFilter?: { requiredLabels?: string[], excludedLabels?: string[], requiredTags?: {key:string,condition?:string,value?:string}[], excludedTags?: {key:string,condition?:string,value?:string}[] } }} body
      * @returns {Promise<{ answer: string, sources: object[], grounded: boolean }>}
      */
     query(body) {

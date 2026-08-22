@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
+import LabelTagEditor from './LabelTagEditor';
 
 function LinkSubmitModal({
   isOpen,
@@ -58,6 +59,15 @@ function LinkSubmitModal({
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="Optional title"
           />
+        </div>
+        <div className="form-group">
+          <label>{t('links.labelsAndTags', 'Labels & tags')}</label>
+          <LabelTagEditor
+            labels={form.labels || []}
+            tags={form.tags || []}
+            onChange={({ labels, tags }) => setForm({ ...form, labels, tags })}
+          />
+          <p className="field-hint">{t('links.labelsAndTagsHint', 'Attached to everything this link produces. Use them later to scope search, retrieval, and chat.')}</p>
         </div>
         <p className="field-hint">{t('links.subjectModelsHint', 'This link is ingested with the subject’s configured embedding and inference models and its collection. Configure them on the subject if it has none.')}</p>
         <div className="form-actions">

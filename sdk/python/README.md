@@ -59,6 +59,9 @@ client.submit_link(
     subject_id,
     url="https://example.com/track",
     title="A Track",
+    # Optional operator-supplied metadata that rides along with every chunk.
+    labels=["live", "1965"],
+    tags={"source": "official", "rights": "cleared"},
     embedding_endpoint_id=embedding_endpoint_id,
     completion_endpoint_id=completion_endpoint_id,
 )
@@ -81,6 +84,18 @@ for job in jobs["objects"]:
 # Search & ask
 print(client.search("guitar solo", max=10))
 print(client.query("What genres does this subject work in?", max_results=5))
+
+# Grounded ask scoped to one subject and filtered by ingestion labels/tags.
+print(client.query(
+    "What themes recur across the live recordings?",
+    max_results=10,
+    subject_id=subject_id,
+    metadata_filter={
+        "requiredLabels": ["live"],
+        "excludedLabels": ["bootleg"],
+        "requiredTags": [{"key": "rights", "condition": "Equals", "value": "cleared"}],
+    },
+))
 
 client.close()
 ```
@@ -168,12 +183,17 @@ brevity):
   `list_audit(tenant_id=None)`
 - **Subjects**: `list_subjects()`, `create_subject(subject)`, `get_subject(id)`,
   `update_subject(id, subject)`, `delete_subject(id)`
-- **Links & ingestion**: `submit_link(subject_id, url, title=None,
+- **Links & ingestion**: `submit_link(subject_id, url, title=None, labels=None,
+  tags=None, embedding_endpoint_id=None, completion_endpoint_id=None)`,
+  `submit_links(subject_id, urls, labels=None, tags=None,
   embedding_endpoint_id=None, completion_endpoint_id=None)`,
-  `submit_links(subject_id, urls, embedding_endpoint_id=None,
-  completion_endpoint_id=None)`, `list_ingestion_endpoints()`,
-  `list_subject_links(subject_id)`, `list_links()`, `get_link(id)`,
-  `delete_link(id)`
+  `list_ingestion_endpoints()`, `list_subject_links(subject_id)`,
+  `list_links()`, `get_link(id)`, `delete_link(id)`
+  - `labels` — optional list of plain strings attached to every chunk the link
+    produces (for `submit_links`, applied to every URL in the batch)
+  - `tags` — optional `{key: value}` dict attached to every chunk (for
+    `submit_links`, applied to every URL); both round-trip on the returned link
+    and can later scope retrieval (see `query`)
 - **Jobs**: `list_jobs(status=None)`, `get_job(id)`, `restart_job(id)`
 - **Model runners**: `list_model_runners()`, `create_model_runner(runner)`,
   `get_model_runner(id)`, `update_model_runner(id, runner)`,
@@ -185,7 +205,17 @@ brevity):
   `request_history_summary(**filters)`, `get_request_history(id)`,
   `delete_request_history(id)`
 - **Knowledge graph**: `get_node(id)`, `get_neighbors(id)`, `get_edges(id)`
-- **Search & ask**: `search(q, max=20)`, `query(question, max_results=8)`
+- **Search & ask**: `search(q, max=20)`, `query(question, max_results=8,
+  subject_id=None, metadata_filter=None)`
+  - `subject_id` — optional; scopes retrieval to a single subject
+  - `metadata_filter` — optional facet filter of the shape
+    `{"requiredLabels": [...], "excludedLabels": [...], "requiredTags":
+    [{"key", "condition", "value"}], "excludedTags": [...]}` restricting
+    retrieval to documents ingested with matching labels/tags. `condition` is
+    one of `Equals` (default), `NotEquals`, `Contains`, `StartsWith`,
+    `EndsWith`, `GreaterThan`, `LessThan`, `IsNull`, `IsNotNull` (`value` is
+    ignored for `IsNull`/`IsNotNull`). Merged with the subject's default
+    filter — it narrows, never widens.
 
 ## Test harness
 

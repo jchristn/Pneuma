@@ -8,6 +8,13 @@
 
 import { streamSse } from './sse.js';
 
+/** Whether a RetrievalFilter object carries no predicate (so it can be omitted from a request). */
+export function isEmptyFilter(f) {
+  if (!f) return true;
+  const len = (a) => (Array.isArray(a) ? a.length : 0);
+  return !len(f.requiredLabels) && !len(f.excludedLabels) && !len(f.requiredTags) && !len(f.excludedTags);
+}
+
 export class ApiError extends Error {
   constructor(status, message, body = null) {
     super(message || `HTTP ${status}`);
@@ -102,16 +109,24 @@ class ApiClient {
    * Full-text search resolved to a representative set of graph nodes.
    * @returns {Promise<{query:string, results: Array<{node:object, score:number, snippet:string}>}>}
    */
-  async search(q, max = 20) {
-    return this._request('GET', '/v1.0/search', { query: { q, max } });
+  async search(q, max = 20, { subjectId = null, metadataFilter = null } = {}) {
+    const query = { q, max };
+    // The search route accepts an optional URL-encoded RetrievalFilter JSON in the `filter` query param.
+    if (metadataFilter && !isEmptyFilter(metadataFilter)) query.filter = JSON.stringify(metadataFilter);
+    const path = subjectId ? `/v1.0/subjects/${encodeURIComponent(subjectId)}/search` : '/v1.0/search';
+    return this._request('GET', path, { query });
   }
 
   /**
-   * Grounded natural-language answer over the corpus.
+   * Grounded natural-language answer over the corpus. An optional `metadataFilter` (required/excluded labels
+   * and tags) scopes retrieval to documents ingested with matching labels/tags.
    * @returns {Promise<{answer:string, sources:object[], grounded:boolean}>}
    */
-  async ask(question, maxResults = 10) {
-    return this._request('POST', '/v1.0/query', { body: { question, maxResults } });
+  async ask(question, maxResults = 10, { subjectId = null, metadataFilter = null } = {}) {
+    const body = { question, maxResults };
+    if (subjectId) body.subjectId = subjectId;
+    if (metadataFilter && !isEmptyFilter(metadataFilter)) body.metadataFilter = metadataFilter;
+    return this._request('POST', '/v1.0/query', { body });
   }
 
   /**
@@ -119,13 +134,16 @@ class ApiClient {
    * `onEvent` for each `metadata` / `delta` / `complete` / `error` event.
    * @param {string} question
    * @param {number} maxResults
-   * @param {{onEvent:(event:object)=>void, signal?:AbortSignal}} handlers
+   * @param {{onEvent:(event:object)=>void, signal?:AbortSignal, subjectId?:string, metadataFilter?:object}} handlers
    */
-  async askStream(question, maxResults = 10, { onEvent, signal } = {}) {
+  async askStream(question, maxResults = 10, { onEvent, signal, subjectId = null, metadataFilter = null } = {}) {
+    const body = { question, maxResults };
+    if (subjectId) body.subjectId = subjectId;
+    if (metadataFilter && !isEmptyFilter(metadataFilter)) body.metadataFilter = metadataFilter;
     await streamSse(this.baseUrl + '/v1.0/query/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { question, maxResults },
+      body,
       signal,
       onEvent,
     });
@@ -139,11 +157,17 @@ class ApiClient {
    * @param {number} maxResults
    * @param {{onEvent:(event:object)=>void, signal?:AbortSignal}} handlers
    */
-  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId = null, threadId = null } = {}) {
+  async chatStream(messages, maxResults = 8, { onEvent, signal, subjectId = null, threadId = null, metadataFilter = null } = {}) {
     await streamSse(this.baseUrl + '/v1.0/chat/stream', {
       method: 'POST',
       headers: this._headers({ Accept: 'text/event-stream' }),
-      body: { messages, maxResults, ...(subjectId ? { subjectId } : {}), ...(threadId ? { threadId } : {}) },
+      body: {
+        messages,
+        maxResults,
+        ...(subjectId ? { subjectId } : {}),
+        ...(threadId ? { threadId } : {}),
+        ...(metadataFilter && !isEmptyFilter(metadataFilter) ? { metadataFilter } : {}),
+      },
       signal,
       onEvent,
     });

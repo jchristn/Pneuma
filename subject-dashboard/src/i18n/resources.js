@@ -38,7 +38,17 @@ const en = {
       groundedYes: 'Grounded',
       groundedNo: 'Ungrounded',
       sourcesTitle: 'Sources',
-      answeredBy: 'Answered by {{model}}'
+      answeredBy: 'Answered by {{model}}',
+      scope: 'Scope',
+      scopeHint: 'Limit answers to content ingested with these labels and tags.',
+      scopeClear: 'Clear scope',
+      scopeLabels: 'Labels',
+      scopeTags: 'Tags',
+      scopeLabelsHint: 'Only include content carrying every one of these labels.',
+      scopeTagsHint: 'Only include content carrying every one of these tag key/value pairs.',
+      scopeLabelPlaceholder: 'label',
+      scopeTagKeyPlaceholder: 'key',
+      scopeTagValuePlaceholder: 'value'
     },
     login: {
       subtitle: 'Manage your content and knowledge graph',
@@ -137,7 +147,17 @@ const en = {
       urlsHint: 'Enter one URL per line. Blank lines are ignored.',
       urlsRequired: 'Enter at least one URL.',
       selectModelsRequired: 'Select both an embedding and a completion model.',
-      bulkCreated: '{{count}} link(s) submitted.'
+      bulkCreated: '{{count}} link(s) submitted.',
+      labels: 'Labels',
+      tags: 'Tags',
+      labelsAndTags: 'Labels & tags',
+      labelsHint: 'Labels attached to every chunk this content produces; retrieval can be scoped to them.',
+      tagsHint: 'Key/value tags attached to every chunk this content produces; retrieval can be scoped to them.',
+      labelsAndTagsHint: 'Attached to everything this link produces. Use them later to scope search, retrieval, and chat.',
+      labelsAndTagsBulkHint: 'Applied to every URL in this batch. Use them later to scope search, retrieval, and chat.',
+      labelPlaceholder: 'label',
+      tagKeyPlaceholder: 'key',
+      tagValuePlaceholder: 'value'
     },
     ingestionLog: {
       title: 'Ingestion Log',

@@ -63,7 +63,7 @@ namespace Pneuma.Server.Mcp
         /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its hits.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked results payload.</returns>
-        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token)
+        public async Task<object> SearchAsync(string tenantId, JsonElement arguments, string? subjectId, IDictionary<string, double>? citedLinkScores, CancellationToken token, RetrievalFilter? requestFilter = null)
         {
             string query = McpJsonRpc.GetStringArgument(arguments, "query");
             int max = 20;
@@ -87,11 +87,11 @@ namespace Pneuma.Server.Mcp
             IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
                 ? null
                 : new Dictionary<string, string> { { "subjectId", subjectId } };
-            // Apply the subject's default retrieval facet filter so the agentic search tool narrows the same way
-            // the grounded path does.
-            RetrievalFilter? subjectFilter = await _Query.GetSubjectFilterAsync(tenantId, subjectId, token).ConfigureAwait(false);
-            List<RetrievalTagCondition> requiredList = subjectFilter != null ? subjectFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
-            List<RetrievalTagCondition> excludedList = subjectFilter != null ? subjectFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
+            // Apply the subject's default retrieval facet filter merged with any per-request filter so the
+            // agentic search tool narrows the same way the grounded path does.
+            RetrievalFilter? effectiveFilter = await _Query.ResolveEffectiveFilterAsync(tenantId, subjectId, requestFilter, token).ConfigureAwait(false);
+            List<RetrievalTagCondition> requiredList = effectiveFilter != null ? effectiveFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
+            List<RetrievalTagCondition> excludedList = effectiveFilter != null ? effectiveFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
             IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredList.Count > 0 ? requiredList : null;
             IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedList.Count > 0 ? excludedList : null;
             List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);

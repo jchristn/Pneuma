@@ -61,7 +61,10 @@ await client.submitLink(subject.id, {
     url: 'https://example.com/track',
     title: 'New single',
     embeddingEndpointId,
-    completionEndpointId
+    completionEndpointId,
+    // Optional operator-supplied metadata that rides along with every chunk.
+    labels: ['live', '1965'],
+    tags: { source: 'official', rights: 'cleared' }
 });
 
 // Or submit several URLs at once.
@@ -87,6 +90,19 @@ console.log(jobs.objects);
 const results = await client.search('acoustic guitar', 20);
 const answer = await client.query({ question: 'Who plays guitar?', maxResults: 5 });
 console.log(answer.answer);
+
+// Grounded ask scoped to one subject and filtered by ingestion labels/tags.
+const scoped = await client.query({
+    question: 'What themes recur across the live recordings?',
+    maxResults: 10,
+    subjectId: subject.id,
+    metadataFilter: {
+        requiredLabels: ['live'],
+        excludedLabels: ['bootleg'],
+        requiredTags: [{ key: 'rights', condition: 'Equals', value: 'cleared' }]
+    }
+});
+console.log(scoped.answer);
 ```
 
 ### Pagination
@@ -199,8 +215,11 @@ order, search }` options object as its last argument.
 - `listSubjects(options?)`, `createSubject(subject)`, `getSubject(id)`, `updateSubject(id, subject)`, `deleteSubject(id)`
 
 ### Content links & ingestion
-- `submitLink(subjectId, { url, title?, embeddingEndpointId, completionEndpointId })`
-- `submitLinks(subjectId, { urls, embeddingEndpointId, completionEndpointId })`
+- `submitLink(subjectId, { url, title?, labels?, tags? })`
+  - `labels` — optional array of plain strings attached to every chunk this link produces
+  - `tags` — optional `{ key: value }` map attached to every chunk this link produces
+  - both round-trip on the returned link and can later scope retrieval (see `query`)
+- `submitLinks(subjectId, { urls, labels?, tags? })` — `labels`/`tags` apply to every URL in the batch
 - `listIngestionEndpoints()`
 - `listSubjectLinks(subjectId, options?)`
 - `listLinks(options?)`, `getLink(id)`, `deleteLink(id)`
@@ -226,7 +245,15 @@ order, search }` options object as its last argument.
 
 ### Search & ask
 - `search(q, max = 20)`
-- `query({ question, maxResults? })`
+- `query({ question, maxResults?, subjectId?, metadataFilter? })`
+  - `subjectId` — optional; scopes retrieval to a single subject
+  - `metadataFilter` — optional facet filter restricting retrieval to documents ingested with
+    matching labels/tags, of shape `{ requiredLabels?, excludedLabels?, requiredTags?, excludedTags? }`.
+    Each tag entry is `{ key, condition, value }` where `condition` is one of `Equals` (default),
+    `NotEquals`, `Contains`, `StartsWith`, `EndsWith`, `GreaterThan`, `LessThan`, `IsNull`,
+    `IsNotNull` (`value` is ignored for `IsNull`/`IsNotNull`). A chunk is eligible only when it
+    carries every required label and satisfies every required tag condition, and no excluded label
+    or tag condition matches. Merged with the subject's default filter — it narrows, never widens.
 
 ## Test harness
 

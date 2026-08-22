@@ -234,7 +234,16 @@ const en = {
       addMultiple: 'Add Multiple',
       urls: 'URLs (one per line)',
       urlsPlaceholder: 'https://example.com/one\nhttps://example.com/two',
-      bulkCreated: '{{count}} link(s) submitted for ingestion.'
+      bulkCreated: '{{count}} link(s) submitted for ingestion.',
+      labels: 'Labels',
+      tags: 'Tags',
+      labelsAndTags: 'Labels & tags',
+      labelsHint: 'Labels attached to every chunk this content produces; retrieval can be scoped to them.',
+      tagsHint: 'Key/value tags attached to every chunk this content produces; retrieval can be scoped to them.',
+      labelsAndTagsBulkHint: 'Applied to every URL in this batch. Use them later to scope search, retrieval, and chat.',
+      labelPlaceholder: 'label',
+      tagKeyPlaceholder: 'key',
+      tagValuePlaceholder: 'value'
     },
     collections: {
       title: 'Collections',
@@ -277,7 +286,17 @@ const en = {
       statGenTip: 'Total generation time',
       statTokensTip: 'Prompt + completion tokens',
       statTpsTip: 'Completion tokens per second',
-      error: 'The assistant failed to respond.'
+      error: 'The assistant failed to respond.',
+      scope: 'Scope',
+      scopeHint: 'Limit answers to content ingested with these labels and tags.',
+      scopeClear: 'Clear scope',
+      scopeLabels: 'Labels',
+      scopeTags: 'Tags',
+      scopeLabelsHint: 'Only include content carrying every one of these labels.',
+      scopeTagsHint: 'Only include content carrying every one of these tag key/value pairs.',
+      scopeLabelPlaceholder: 'label',
+      scopeTagKeyPlaceholder: 'key',
+      scopeTagValuePlaceholder: 'value'
     },
     search: {
       title: 'Search',

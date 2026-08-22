@@ -125,6 +125,13 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF OBJECT_ID(N'dbo.evalresults', N'U') IS NULL CREATE TABLE dbo.evalresults (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, runid NVARCHAR(64) NOT NULL, factid NVARCHAR(64), question NVARCHAR(MAX), expectedanswer NVARCHAR(MAX), producedanswer NVARCHAR(MAX), verdict NVARCHAR(32), score FLOAT, reason NVARCHAR(MAX), failuremode NVARCHAR(128), category NVARCHAR(128), createdutc NVARCHAR(32) NOT NULL);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_evalresults_run' AND object_id = OBJECT_ID(N'dbo.evalresults')) CREATE INDEX idx_evalresults_run ON dbo.evalresults (runid);"
                 }));
+                list.Add(new SchemaMigration(15, "Add ingestion labels and tags to links and jobs", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'labelsjson') IS NULL ALTER TABLE dbo.subjectlinks ADD labelsjson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'tagsjson') IS NULL ALTER TABLE dbo.subjectlinks ADD tagsjson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'labelsjson') IS NULL ALTER TABLE dbo.ingestionjobs ADD labelsjson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'tagsjson') IS NULL ALTER TABLE dbo.ingestionjobs ADD tagsjson NVARCHAR(MAX);"
+                }));
                 return list;
             }
         }

@@ -41,21 +41,58 @@ namespace Pneuma.Core.Requests
                 && (ExcludedTags == null || ExcludedTags.Count == 0);
         }
 
-        /// <summary>The conventional chunk tag key that carries a chunk's label.</summary>
-        public const string LabelTagKey = "label";
+        /// <summary>
+        /// The conventional prefix for a chunk's per-label tag key. Each label <c>L</c> a chunk carries is
+        /// stored as a distinct tag <c>label:L = L</c>, so a chunk may carry several labels at once (a plain
+        /// <c>Dictionary&lt;string,string&gt;</c> holds only one value per key). A required/excluded label
+        /// filter then matches with an equals-condition on <c>label:L</c> (present ⇒ eligible; absent ⇒ not).
+        /// </summary>
+        public const string LabelTagPrefix = "label:";
 
-        /// <summary>The required predicates as tag conditions (tags plus each required label as an equals-condition on the label tag).</summary>
+        /// <summary>The chunk tag key that carries the label <paramref name="label"/> (see <see cref="LabelTagPrefix"/>).</summary>
+        /// <param name="label">The label value.</param>
+        /// <returns>The per-label tag key, or empty when <paramref name="label"/> is blank.</returns>
+        public static string LabelTagKeyFor(string label)
+        {
+            return String.IsNullOrWhiteSpace(label) ? String.Empty : LabelTagPrefix + label.Trim();
+        }
+
+        /// <summary>The required predicates as tag conditions (tags plus each required label as an equals-condition on its per-label tag).</summary>
         /// <returns>The combined required conditions.</returns>
         public List<RetrievalTagCondition> EffectiveRequired()
         {
             return Combine(RequiredTags, RequiredLabels);
         }
 
-        /// <summary>The excluded predicates as tag conditions (tags plus each excluded label as an equals-condition on the label tag).</summary>
+        /// <summary>The excluded predicates as tag conditions (tags plus each excluded label as an equals-condition on its per-label tag).</summary>
         /// <returns>The combined excluded conditions.</returns>
         public List<RetrievalTagCondition> EffectiveExcluded()
         {
             return Combine(ExcludedTags, ExcludedLabels);
+        }
+
+        /// <summary>
+        /// Union two filters into one, so a per-request filter narrows — never widens — a default: the result
+        /// carries every required and excluded predicate from both inputs. Nulls are treated as empty.
+        /// </summary>
+        /// <param name="a">First filter (may be null).</param>
+        /// <param name="b">Second filter (may be null).</param>
+        /// <returns>The merged filter (never null).</returns>
+        public static RetrievalFilter Merge(RetrievalFilter? a, RetrievalFilter? b)
+        {
+            RetrievalFilter merged = new RetrievalFilter();
+            Absorb(merged, a);
+            Absorb(merged, b);
+            return merged;
+        }
+
+        private static void Absorb(RetrievalFilter into, RetrievalFilter? from)
+        {
+            if (from == null) return;
+            if (from.RequiredLabels != null) into.RequiredLabels.AddRange(from.RequiredLabels);
+            if (from.ExcludedLabels != null) into.ExcludedLabels.AddRange(from.ExcludedLabels);
+            if (from.RequiredTags != null) into.RequiredTags.AddRange(from.RequiredTags);
+            if (from.ExcludedTags != null) into.ExcludedTags.AddRange(from.ExcludedTags);
         }
 
         private static List<RetrievalTagCondition> Combine(List<RetrievalTagCondition> tags, List<string> labels)
@@ -72,7 +109,7 @@ namespace Pneuma.Core.Requests
             {
                 foreach (string label in labels)
                 {
-                    if (!String.IsNullOrWhiteSpace(label)) result.Add(new RetrievalTagCondition { Key = LabelTagKey, Condition = TagConditionEnum.Equals, Value = label });
+                    if (!String.IsNullOrWhiteSpace(label)) result.Add(new RetrievalTagCondition { Key = LabelTagKeyFor(label), Condition = TagConditionEnum.Equals, Value = label.Trim() });
                 }
             }
             return result;

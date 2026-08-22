@@ -125,6 +125,13 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "CREATE TABLE IF NOT EXISTS evalresults (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, runid TEXT NOT NULL, factid TEXT, question TEXT, expectedanswer TEXT, producedanswer TEXT, verdict TEXT, score DOUBLE PRECISION, reason TEXT, failuremode TEXT, category TEXT, createdutc TEXT NOT NULL);",
                     "CREATE INDEX IF NOT EXISTS idx_evalresults_run ON evalresults (runid);"
                 }));
+                list.Add(new SchemaMigration(15, "Add ingestion labels and tags to links and jobs", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN IF NOT EXISTS labelsjson TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN IF NOT EXISTS tagsjson TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS labelsjson TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS tagsjson TEXT;"
+                }));
                 return list;
             }
         }

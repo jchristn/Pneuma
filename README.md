@@ -62,6 +62,8 @@ An app or agent asks a question  →  lexical + semantic retrieval over the grap
 
 Ingestion runs as an explicit **Categorize** phase (fetch → atomize → classify into a candidate plan) followed by a **Hydrate** phase (commit to the graph, embeddings, and index), with per-phase logs you can follow live. Grounded answering blends lexical (inverted-index) and semantic (vector) retrieval with optional graph-neighbor expansion, from one shared service used identically by REST and MCP.
 
+Links can be submitted with **labels** and **tags** that are stamped onto every chunk and graph node they produce; search, grounded Q&A, and chat can then be **scoped** to those facets (a per-request `metadataFilter`, merged with a subject's default filter) so a query narrows to exactly the content you mean.
+
 Each **subject** carries its own chat behavior: a unique URL slug (the user dashboard opens `/{slug}` as that subject's chat), a system prompt and ontology prompts that are appended to the global ones, a toggle for whether model *thinking* is shown, and a history-retention window. Every chat turn is persisted with its full timing/metadata, users can rate answers (👍/👎 + comment), and operators review both in the **History** and **Feedback** views. Deleting a subject returns immediately and runs its large cascade (links, jobs, artifacts, graph, index, history, feedback) in a background worker.
 
 ## How to get started

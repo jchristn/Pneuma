@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import Modal from './Modal';
+import LabelTagEditor, { toLabelTagPayload } from './LabelTagEditor';
 
 // Parse a textarea of URLs (one per line): trim each line and drop blanks.
 function parseUrls(text) {
@@ -20,6 +21,8 @@ function BulkAddLinksModal({ subjectOptions, onClose, onCreated }) {
   const { apiClient } = useAuth();
   const [subjectId, setSubjectId] = useState('');
   const [urlsText, setUrlsText] = useState('');
+  const [labels, setLabels] = useState([]);
+  const [tags, setTags] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -32,7 +35,8 @@ function BulkAddLinksModal({ subjectOptions, onClose, onCreated }) {
     setBusy(true);
     setError('');
     try {
-      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls });
+      const payload = toLabelTagPayload(labels, tags);
+      const resp = await apiClient.bulkSubmitLinks(subjectId, { urls, labels: payload.labels, tags: payload.tags });
       const created = resp?.created ?? resp?.Created ?? (resp?.links || resp?.Links || []).length;
       onCreated(created);
     } catch (err) {
@@ -65,6 +69,13 @@ function BulkAddLinksModal({ subjectOptions, onClose, onCreated }) {
               onChange={(e) => setUrlsText(e.target.value)} />
             <div className="field-hint" style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
               {t('links.subjectModelsHint', 'These links are ingested with the subject’s configured embedding and inference models and its collection.')}
+            </div>
+          </div>
+          <div className="field field-full">
+            <label>{t('links.labelsAndTags', 'Labels & tags')}</label>
+            <LabelTagEditor labels={labels} tags={tags} onChange={({ labels: l, tags: tg }) => { setLabels(l); setTags(tg); }} />
+            <div className="field-hint" style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+              {t('links.labelsAndTagsBulkHint', 'Applied to every URL in this batch. Use them later to scope search, retrieval, and chat.')}
             </div>
           </div>
         </div>
