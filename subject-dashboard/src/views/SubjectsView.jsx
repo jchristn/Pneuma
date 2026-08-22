@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
 import CopyableId from '../components/CopyableId';
+import FacetFilterEditor from '../components/FacetFilterEditor';
 
 
 // Sensible starter prompts pre-filled when creating a subject. Appended after the global prompts, so they
@@ -435,16 +436,9 @@ function SubjectsView() {
               title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}
             />
           </div>
-          <div className="form-group" title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on, by chunk tags (e.g. rights, authority, documentType). Shape: {"required":[{key,condition,value}],"excluded":[...]}. Conditions: Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, LessThan, IsNull, IsNotNull. Leave blank for no filter.')}>
-            <label htmlFor="cd-retfilter" title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on.')}>{t('subjects.retrievalFilter', 'Retrieval Filter (JSON, optional)')}</label>
-            <textarea
-              id="cd-retfilter"
-              rows={3}
-              value={form.retrievalFilterJson}
-              placeholder={'{"required":[{"key":"rights","condition":"Equals","value":"public"}],"excluded":[]}'}
-              onChange={(e) => setForm({ ...form, retrievalFilterJson: e.target.value })}
-              title={t('subjects.retrievalFilterTip', 'Optional default facet filter (JSON) restricting which ingested chunks answers may draw on.')}
-            />
+          <div className="form-group" title={t('subjects.retrievalFilterTip', 'Optional default facet filter restricting which ingested chunks answers may draw on. Add required/excluded labels (e.g. html, pdf) and tag key/value pairs. Leave empty for no filter.')}>
+            <label title={t('subjects.retrievalFilterTip', 'Optional default facet filter restricting which ingested chunks answers may draw on.')}>{t('subjects.retrievalFilter', 'Retrieval Filter (optional)')}</label>
+            <FacetFilterEditor value={form.retrievalFilterJson} onChange={(json) => setForm({ ...form, retrievalFilterJson: json })} />
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)} disabled={saving}>

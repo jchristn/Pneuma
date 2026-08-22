@@ -328,7 +328,13 @@ namespace Pneuma.Server.Services
                     { "jobId", job.Id },
                     { "sourceUrl", job.SourceUrl }
                 };
-                if (!String.IsNullOrEmpty(job.DocumentType)) tags["documentType"] = job.DocumentType!;
+                if (!String.IsNullOrEmpty(job.DocumentType))
+                {
+                    tags["documentType"] = job.DocumentType!;
+                    // A conventional "label" tag so retrieval label filters have data to match; today it reflects
+                    // the source document type (html, pdf, …).
+                    tags["label"] = job.DocumentType!;
+                }
 
                 documents.Add(new ChunkDocument
                 {

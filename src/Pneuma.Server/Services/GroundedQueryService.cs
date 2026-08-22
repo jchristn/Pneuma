@@ -208,8 +208,10 @@ namespace Pneuma.Server.Services
             // required, union of excluded — a request narrows, never widens, the subject default). Pushed down
             // to RecallDB's tag filter so only eligible chunks are considered.
             RetrievalFilter effectiveFilter = MergeFilters(subject?.RetrievalFilterJson, requestFilter);
-            IReadOnlyList<RetrievalTagCondition>? requiredFacets = effectiveFilter.Required.Count > 0 ? effectiveFilter.Required : null;
-            IReadOnlyList<RetrievalTagCondition>? excludedFacets = effectiveFilter.Excluded.Count > 0 ? effectiveFilter.Excluded : null;
+            List<RetrievalTagCondition> requiredConditions = effectiveFilter.EffectiveRequired();
+            List<RetrievalTagCondition> excludedConditions = effectiveFilter.EffectiveExcluded();
+            IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredConditions.Count > 0 ? requiredConditions : null;
+            IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedConditions.Count > 0 ? excludedConditions : null;
 
             // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
             // exact-match subjectId tag every ingested chunk carries.
@@ -602,6 +604,14 @@ namespace Pneuma.Server.Services
         /// <param name="subjectFilterJson">The subject's default filter as serialized JSON, or null.</param>
         /// <param name="requestFilter">The per-request filter, or null.</param>
         /// <returns>The merged effective filter (never null).</returns>
+        private static void Absorb(RetrievalFilter into, RetrievalFilter from)
+        {
+            if (from.RequiredLabels != null) into.RequiredLabels.AddRange(from.RequiredLabels);
+            if (from.ExcludedLabels != null) into.ExcludedLabels.AddRange(from.ExcludedLabels);
+            if (from.RequiredTags != null) into.RequiredTags.AddRange(from.RequiredTags);
+            if (from.ExcludedTags != null) into.ExcludedTags.AddRange(from.ExcludedTags);
+        }
+
         private static RetrievalFilter MergeFilters(string? subjectFilterJson, RetrievalFilter? requestFilter)
         {
             RetrievalFilter merged = new RetrievalFilter();
@@ -610,17 +620,9 @@ namespace Pneuma.Server.Services
                 RetrievalFilter? subjectFilter = null;
                 try { subjectFilter = Json.Deserialize<RetrievalFilter>(subjectFilterJson!); }
                 catch (Exception) { subjectFilter = null; }
-                if (subjectFilter != null)
-                {
-                    if (subjectFilter.Required != null) merged.Required.AddRange(subjectFilter.Required);
-                    if (subjectFilter.Excluded != null) merged.Excluded.AddRange(subjectFilter.Excluded);
-                }
+                if (subjectFilter != null) Absorb(merged, subjectFilter);
             }
-            if (requestFilter != null)
-            {
-                if (requestFilter.Required != null) merged.Required.AddRange(requestFilter.Required);
-                if (requestFilter.Excluded != null) merged.Excluded.AddRange(requestFilter.Excluded);
-            }
+            if (requestFilter != null) Absorb(merged, requestFilter);
             return merged;
         }
 

@@ -76,6 +76,14 @@ function FieldInput({ field, value, onChange }) {
       </div>
     );
   }
+  if (field.type === 'custom' && typeof field.render === 'function') {
+    return (
+      <div className={`field${fullClass}`}>
+        <label className={labelClass} title={tip}>{field.label}</label>
+        {field.render(value, (v) => onChange(field.name, v))}
+      </div>
+    );
+  }
   if (field.type === 'textarea') {
     return (
       <div className={`field${fullClass}`}>

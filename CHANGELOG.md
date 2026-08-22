@@ -105,6 +105,27 @@ between releases, and the project will adopt semantic versioning at its stable 1
   negative tests were added for the DB layer, the MCP tools, and the SDK smoke harness.
 
 ### Fixed
+- **Structured retrieval-filter editor (labels + tags).** The subject's default retrieval filter — previously
+  a raw-JSON textbox on the create/edit subject form in both the admin and creator dashboards — is now a
+  structured editor: labels (`List<string>`) render as one textbox per row with a delete icon and an add
+  icon on the last row; tags (`Dictionary<string,string>`) render as side-by-side key/value textboxes with
+  the same delete/add affordances. `RetrievalFilter` gained `requiredLabels`/`excludedLabels` (matched
+  against each chunk's `label` tag, populated at ingestion from the source document type) alongside the
+  existing `requiredTags`/`excludedTags`, and the per-request `metadataFilter` shares the shape.
+- **Analytics readability + per-stage latency-over-time.** The Analytics view now humanizes stage names
+  (snake_case → Title Case, `tool:` prefixes surfaced), adds a timeframe selector, and renders a stacked bar
+  chart of per-stage latency per day (bucketed) in addition to the existing per-stage averages.
+- **Richer chat-turn measurements.** The history-turn detail modal (admin + creator) now reports
+  time-to-last-token, pipeline wall time, and both generation-only and overall throughput, matching the depth
+  of AssistantHub's turn instrumentation.
+- **Feedback modal focus.** Clicking thumbs-up/down in Ask (all three dashboards) now moves focus straight to
+  the "Share more feedback" textbox.
+- **`/help` and `/?` render an in-chat command menu.** The slash-command help now renders as a Markdown table
+  inside the conversation window rather than a single "Commands" line.
+- **Grafana dashboards split by domain.** The single "Pneuma Observability" dashboard is replaced by five
+  per-domain dashboards (Overview, HTTP, Ingestion, Chat & Retrieval, Integrations), provisioned by default.
+- **Admin dashboard nav labels.** The Analytics and Evaluation nav entries showed raw i18n keys
+  (`nav.analytics`, `nav.eval`); the missing translations are added.
 - **Fresh-install migration for the queue-duration column.** The `ingestionjobevents.queuedurationms`
   column (and the new subject columns) were being created in both the baseline schema and a migration,
   which failed on a fresh SQLite/MySQL database with a duplicate-column error. Baseline `CREATE` statements

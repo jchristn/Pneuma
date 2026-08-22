@@ -199,6 +199,42 @@ namespace Test.Shared.Suites
                             if (both.Count != 1 || both[0].NodeId != "n_pub") throw new Exception("Required public + excluded pdf should keep only n_pub, got " + both.Count);
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "RetrievalFilter_LabelsAndTags_ConvertAndFilter", "Retrieval filter turns labels + tags into conditions and the store honors both",
+                        executeAsync: async ct =>
+                        {
+                            // Conversion: labels become equals-conditions on the "label" tag, alongside explicit tag conditions.
+                            RetrievalFilter filter = new RetrievalFilter
+                            {
+                                RequiredLabels = new List<string> { "html" },
+                                ExcludedLabels = new List<string> { "pdf" },
+                                RequiredTags = new List<RetrievalTagCondition> { new RetrievalTagCondition { Key = "rights", Condition = TagConditionEnum.Equals, Value = "public" } }
+                            };
+                            if (filter.IsEmpty()) throw new Exception("Filter with labels/tags should not be empty");
+                            List<RetrievalTagCondition> req = filter.EffectiveRequired();
+                            if (req.Count != 2) throw new Exception("Required should be tag + label condition, got " + req.Count);
+                            if (!req.Exists(c => c.Key == "label" && c.Value == "html")) throw new Exception("Required label did not convert to a label-tag condition");
+                            if (!req.Exists(c => c.Key == "rights" && c.Value == "public")) throw new Exception("Required tag condition missing");
+                            List<RetrievalTagCondition> exc = filter.EffectiveExcluded();
+                            if (exc.Count != 1 || exc[0].Key != "label" || exc[0].Value != "pdf") throw new Exception("Excluded label did not convert");
+
+                            // Behavior: a labels-only filter keeps html and drops pdf against the store.
+                            FakeRecallDbClient vectors = new FakeRecallDbClient();
+                            RecallCollection collection = await vectors.CreateCollectionAsync("ten_x", new RecallCollection { Name = "t", Dimensionality = 3 }, ct);
+                            await vectors.StoreChunksAsync("ten_x", collection.Id, new List<ChunkDocument>
+                            {
+                                new ChunkDocument { DocumentKey = "h", DocumentId = "d", Position = 0, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_h" }, { "label", "html" } } },
+                                new ChunkDocument { DocumentKey = "p", DocumentId = "d", Position = 1, Content = "", Embedding = new List<float> { 1f, 0f, 0f }, Tags = new Dictionary<string, string> { { "litegraphNodeId", "n_p" }, { "label", "pdf" } } }
+                            }, ct);
+                            RetrievalFilter labelsOnly = new RetrievalFilter { RequiredLabels = new List<string> { "html" }, ExcludedLabels = new List<string> { "pdf" } };
+                            List<VectorSearchHit> hits = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, labelsOnly.EffectiveRequired(), labelsOnly.EffectiveExcluded(), ct);
+                            if (hits.Count != 1 || hits[0].NodeId != "n_h") throw new Exception("Required label html + excluded pdf should keep only n_h, got " + hits.Count);
+
+                            // Negative: requiring a label no chunk has yields nothing.
+                            RetrievalFilter noneMatch = new RetrievalFilter { RequiredLabels = new List<string> { "docx" } };
+                            List<VectorSearchHit> empty = await vectors.SearchAsync("ten_x", collection.Id, new float[] { 1f, 0f, 0f }, 10, 0.0, null, noneMatch.EffectiveRequired(), null, ct);
+                            if (empty.Count != 0) throw new Exception("Requiring an absent label should return no hits, got " + empty.Count);
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "LiteGraph_ReadRequestsFullNode_AndRoundTripsDataTags", "Node reads request incldata/inclsub and map Data, Tags, and Labels back",
                         executeAsync: async ct =>
                         {

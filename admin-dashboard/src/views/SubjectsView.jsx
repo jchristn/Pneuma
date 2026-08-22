@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import ResourceView from '../components/ResourceView';
+import FacetFilterEditor from '../components/FacetFilterEditor';
 import StatusPill from '../components/StatusPill';
 import { formatDateTime } from '../i18n/formatters';
 
@@ -108,7 +109,7 @@ function SubjectsView() {
     { name: 'promptRewritePrompt', label: 'Prompt Rewrite Prompt', type: 'textarea', rows: 3, fullWidth: true, default: DEFAULT_PROMPT_REWRITE, tip: 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt to guide how the question is rewritten into a retrieval query.' },
     { name: 'ontologyClassifyPrompt', label: 'Ontology Classification Prompt', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_ONTOLOGY_CLASSIFY, tip: 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.' },
     { name: 'ontologyDefinitionPrompt', label: 'Ontology Definition', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_ONTOLOGY_DEFINITION, tip: 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.' },
-    { name: 'retrievalFilterJson', label: 'Retrieval Filter (JSON, optional)', type: 'textarea', rows: 3, fullWidth: true, placeholder: '{"required":[{"key":"rights","condition":"Equals","value":"public"}],"excluded":[]}', tip: 'Optional default facet filter restricting which ingested chunks answers may draw on, by chunk tags (e.g. rights, authority, documentType). JSON shape: {"required":[{key,condition,value}],"excluded":[...]}. Conditions: Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, LessThan, IsNull, IsNotNull. A per-request filter narrows this further. Leave blank for no filter.' },
+    { name: 'retrievalFilterJson', label: 'Retrieval Filter (optional)', type: 'custom', fullWidth: true, tip: 'Optional default facet filter restricting which ingested chunks answers may draw on. Add required/excluded labels (e.g. html, pdf) and tag key/value pairs; a per-request filter narrows this further. Leave empty for no filter.', render: (val, set) => <FacetFilterEditor value={val} onChange={set} /> },
     { name: 'description', label: 'Description', type: 'textarea', rows: 3, fullWidth: true, tip: 'Optional notes shown in the subjects list to help operators tell similar subjects apart.' },
     { name: 'tagline', label: 'Ask-Page Tagline', type: 'textarea', rows: 2, fullWidth: true, default: DEFAULT_TAGLINE, tip: "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject." }
   ];

@@ -90,8 +90,10 @@ namespace Pneuma.Server.Mcp
             // Apply the subject's default retrieval facet filter so the agentic search tool narrows the same way
             // the grounded path does.
             RetrievalFilter? subjectFilter = await _Query.GetSubjectFilterAsync(tenantId, subjectId, token).ConfigureAwait(false);
-            IReadOnlyList<RetrievalTagCondition>? requiredFacets = subjectFilter != null && subjectFilter.Required.Count > 0 ? subjectFilter.Required : null;
-            IReadOnlyList<RetrievalTagCondition>? excludedFacets = subjectFilter != null && subjectFilter.Excluded.Count > 0 ? subjectFilter.Excluded : null;
+            List<RetrievalTagCondition> requiredList = subjectFilter != null ? subjectFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
+            List<RetrievalTagCondition> excludedList = subjectFilter != null ? subjectFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
+            IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredList.Count > 0 ? requiredList : null;
+            IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedList.Count > 0 ? excludedList : null;
             List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
 
             // Optional reranking: when the subject has a reranking model configured, reorder the hits by

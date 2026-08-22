@@ -856,3 +856,15 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .an-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .an-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--color-text-secondary); }
 .an-legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ---- Facet filter editor (labels + tags) ------------------------------------ */
+.ff-editor { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--color-border); border-radius: 8px; padding: 12px; background: var(--color-surface-alt); }
+.ff-group { display: flex; flex-direction: column; gap: 6px; }
+.ff-group-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); font-weight: 600; }
+.ff-row { display: flex; gap: 6px; align-items: center; }
+.ff-input { flex: 1; min-width: 0; padding: 6px 9px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); font-size: 0.85rem; }
+.ff-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--color-border); border-radius: 6px; background: transparent; color: var(--color-text-secondary); cursor: pointer; flex: 0 0 auto; }
+.ff-icon:hover { background: var(--color-surface); }
+.ff-del:hover { color: var(--color-danger); border-color: var(--color-danger); }
+.ff-add:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.ff-add-empty { align-self: flex-start; }
