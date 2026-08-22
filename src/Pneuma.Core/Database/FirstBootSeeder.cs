@@ -217,10 +217,11 @@ namespace Pneuma.Core.Database
 
             // Self-heal the two answering prompts on existing deployments (e.g. the local docker Postgres volume,
             // which is seeded once and never re-seeded): if an unedited default is still stored — recognized by its
-            // opening phrase and the absence of the internal-identifier rule — replace it with the current default so
-            // the "never expose internal identifiers" instruction lands without wiping data or clobbering admin edits.
-            await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, token).ConfigureAwait(false);
-            await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, token).ConfigureAwait(false);
+            // opening phrase and the absence of a sentinel phrase from the current default — replace it with the
+            // current default so newer guidance lands without wiping data or clobbering admin edits. The sentinel is
+            // the newest rule added ("internal object kinds"), so bumping it re-heals prompts healed by an older pass.
+            await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, "internal object kinds", token).ConfigureAwait(false);
+            await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, "internal object kinds", token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -228,10 +229,12 @@ namespace Pneuma.Core.Database
         /// </summary>
         private const string DefaultUserAnswerPrompt =
             "You are answering a fan's question about a subject using only the provided source excerpts from Pneuma's " +
-            "curated corpus. Ground every statement in the sources and cite them by their title or a short quotation. Never " +
-            "expose internal identifiers — do not print node ids, GUIDs, or other database keys (for example, never write " +
-            "\"(node e125fc8a-...)\"); they are internal plumbing and meaningless to the reader. If the corpus does not support " +
-            "an answer, say so plainly rather than guessing.";
+            "curated corpus. Each source is a numbered excerpt like [1], [2]. Ground every statement in these sources and, " +
+            "where useful, refer to them by their bracketed number or a short quotation. Never expose internal identifiers — " +
+            "do not print node ids, GUIDs, or other database keys (for example, never write \"(node e125fc8a-...)\"). Never " +
+            "reference Pneuma's internal object kinds or storage labels either: do not write things like \"(source: Cell)\", " +
+            "\"Cell\", \"Chunk\", or \"Source node\" — those are internal plumbing and meaningless to the reader. If the corpus " +
+            "does not support an answer, say so plainly rather than guessing.";
 
         /// <summary>
         /// Default global prompt-rewrite prompt (Prompts key "prompt.rewrite"). Used only when a subject has a
@@ -306,9 +309,11 @@ namespace Pneuma.Core.Database
             "1. Decide which tools are needed; prefer pneuma_search to locate nodes, then pneuma_get_node for detail. Use as few " +
             "calls as will answer the question well.\n" +
             "2. Ground every claim in tool results. Refer to a source by its name, title, or a short quotation so the user can follow it.\n" +
-            "3. Never expose internal identifiers in your answer. Do not print node ids, GUIDs, tool ids, collection ids, job ids, or " +
-            "other database keys (for example, never write things like \"(node e125fc8a-ebf7-4bbb-8123-ecdee2422ed1)\"). These are " +
-            "internal plumbing and are meaningless to the user; cite sources by their human-readable title or a quoted excerpt instead.\n" +
+            "3. Never expose internal identifiers or internal object kinds in your answer. Do not print node ids, GUIDs, tool ids, " +
+            "collection ids, job ids, or other database keys (for example, never write things like \"(node e125fc8a-ebf7-4bbb-8123-ecdee2422ed1)\"), " +
+            "and never name Pneuma's internal object kinds or storage labels such as \"Cell\", \"Chunk\", or \"Source node\" (for example, " +
+            "never write \"(source: Cell)\"). These are internal plumbing and are meaningless to the user; cite sources by their " +
+            "human-readable title or a quoted excerpt instead.\n" +
             "4. If the corpus does not contain enough information, say so plainly rather than guessing.\n" +
             "5. Format answers in Markdown (headings, lists, tables, and fenced code where helpful). Be concise and direct.";
 
@@ -333,17 +338,18 @@ namespace Pneuma.Core.Database
         /// <summary>
         /// Update a still-default prompt in place to the current default content. A prompt is treated as an
         /// unedited default when its content starts with <paramref name="expectedPrefix"/> and does not yet
-        /// contain the internal-identifier rule; admin-customized prompts (different opening) are left alone,
-        /// and the update is idempotent (once healed the rule is present, so it will not run again).
+        /// contain <paramref name="sentinel"/> (a phrase unique to the current default); admin-customized prompts
+        /// (different opening) are left alone, and the update is idempotent (once healed the sentinel is present,
+        /// so it will not run again). Bumping the sentinel when the default changes re-heals older healed copies.
         /// </summary>
-        private static async Task HealPromptAsync(DatabaseDriverBase db, string key, string expectedPrefix, string newContent, CancellationToken token)
+        private static async Task HealPromptAsync(DatabaseDriverBase db, string key, string expectedPrefix, string newContent, string sentinel, CancellationToken token)
         {
             Prompt? existing = await db.Prompts.ReadByKeyAsync(null, key, token).ConfigureAwait(false);
             if (existing == null) return;
             string content = existing.Content ?? String.Empty;
             if (content == newContent) return;
             if (!content.StartsWith(expectedPrefix, StringComparison.Ordinal)) return;
-            if (content.Contains("internal identifier", StringComparison.OrdinalIgnoreCase)) return;
+            if (content.Contains(sentinel, StringComparison.OrdinalIgnoreCase)) return;
 
             existing.Content = newContent;
             existing.Version += 1;

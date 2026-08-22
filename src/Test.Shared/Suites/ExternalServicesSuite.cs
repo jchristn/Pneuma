@@ -235,6 +235,29 @@ namespace Test.Shared.Suites
                             if (empty.Count != 0) throw new Exception("Requiring an absent label should return no hits, got " + empty.Count);
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "GroundedAnswer_SourceContext_OmitsInternalNodeType", "The grounded-answer context presents numbered excerpts and never leaks a node's internal type/name",
+                        executeAsync: ct =>
+                        {
+                            List<GraphNode> sources = new List<GraphNode>
+                            {
+                                new GraphNode { NodeType = "Cell", Name = "cell_9f3a2b7c", Content = "Ada Lovelace wrote the first published algorithm." },
+                                new GraphNode { NodeType = "Source", Name = "src_1a2b", Content = "She collaborated with Charles Babbage on the Analytical Engine." }
+                            };
+                            string context = GroundedQueryService.BuildSourceContext("Who was Ada Lovelace?", sources);
+
+                            // Positive: the question and each source's content are present, numbered [1], [2].
+                            if (context.IndexOf("Who was Ada Lovelace?", StringComparison.Ordinal) < 0) throw new Exception("Context should include the question");
+                            if (context.IndexOf("[1] Ada Lovelace wrote the first published algorithm.", StringComparison.Ordinal) < 0) throw new Exception("Context should present source 1 as a numbered excerpt");
+                            if (context.IndexOf("[2] She collaborated with Charles Babbage on the Analytical Engine.", StringComparison.Ordinal) < 0) throw new Exception("Context should present source 2 as a numbered excerpt");
+
+                            // Negative: neither the internal node type nor the internal node name/id may appear —
+                            // this is what previously caused the model to echo "(source: Cell)".
+                            if (context.IndexOf("Cell", StringComparison.Ordinal) >= 0) throw new Exception("Context must not leak the internal node type 'Cell'");
+                            if (context.IndexOf("Source\n", StringComparison.Ordinal) >= 0 || context.IndexOf("(Source)", StringComparison.Ordinal) >= 0) throw new Exception("Context must not leak the internal node type 'Source'");
+                            if (context.IndexOf("cell_9f3a2b7c", StringComparison.Ordinal) >= 0 || context.IndexOf("src_1a2b", StringComparison.Ordinal) >= 0) throw new Exception("Context must not leak internal node names/ids");
+                            return Task.CompletedTask;
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "LiteGraph_ReadRequestsFullNode_AndRoundTripsDataTags", "Node reads request incldata/inclsub and map Data, Tags, and Labels back",
                         executeAsync: async ct =>
                         {

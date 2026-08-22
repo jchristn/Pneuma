@@ -28,6 +28,8 @@ function PromptsView() {
       formFields={formFields}
       idField="id"
       modalSize="prompt"
+      duplicable
+      duplicateTransform={(r) => ({ ...r, key: r.key ? `${r.key}.copy` : '' })}
     />
   );
 }

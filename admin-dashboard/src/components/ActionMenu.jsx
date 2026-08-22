@@ -13,10 +13,19 @@ function ActionMenu({ items = [] }) {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const menuWidth = 180;
+    const itemHeight = 38;
+    const menuHeight = Math.min(visible.length * itemHeight + 8, window.innerHeight - 16);
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
-    setCoords({ top: rect.bottom + 4, left });
-  }, []);
+    if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+    // Prefer dropping below the trigger; flip above (or clamp into view) when it would run off-screen.
+    let top = rect.bottom + 4;
+    if (top + menuHeight > window.innerHeight - 8) {
+      const above = rect.top - 4 - menuHeight;
+      top = above >= 8 ? above : Math.max(8, window.innerHeight - menuHeight - 8);
+    }
+    setCoords({ top, left, maxHeight: menuHeight });
+  }, [visible.length]);
 
   const toggle = (e) => {
     e.stopPropagation();
@@ -56,7 +65,7 @@ function ActionMenu({ items = [] }) {
       {open && createPortal(
         <div
           className="action-menu-popover"
-          style={{ top: coords.top, left: coords.left }}
+          style={{ top: coords.top, left: coords.left, maxHeight: coords.maxHeight, overflowY: 'auto' }}
           role="menu"
           onMouseDown={(e) => e.stopPropagation()}
         >

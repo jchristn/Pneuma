@@ -95,6 +95,39 @@ function StageTimeline({ events }) {
   );
 }
 
+const PERF_COLORS = ['#4dabf7', '#38d9a9', '#a9e34b', '#ffd43b', '#ffa94d', '#ff6b6b', '#da77f2', '#845ef7', '#20c997'];
+
+// Horizontal bar per timed stage, sized by its duration, so a viewer can see where ingestion spent time.
+function StagePerfBars({ events }) {
+  const { t } = useTranslation();
+  const stages = (events || [])
+    .map((ev) => ({ stage: readEventStage(ev), ms: Number(ev?.durationMs) || 0 }))
+    .filter((s) => s.stage && s.ms > 0);
+  if (stages.length === 0) return null;
+  const totalMs = stages.reduce((sum, s) => sum + s.ms, 0);
+  const maxMs = stages.reduce((max, s) => Math.max(max, s.ms), 0);
+  return (
+    <div className="hd-section" style={{ marginTop: 20 }}>
+      <div className="hd-section-title">{t('ingestion.timePerStage', 'Time per stage')}</div>
+      <div className="hd-timing">
+        {stages.map((s, i) => {
+          const pct = maxMs > 0 ? Math.max(2, (s.ms / maxMs) * 100) : 0;
+          const share = totalMs > 0 ? ((s.ms / totalMs) * 100).toFixed(0) : '0';
+          return (
+            <div className="hd-timing-row" key={`${s.stage}-${i}`} title={`${stageLabel(s.stage)}: ${formatDurationMs(s.ms)} (${share}%)`}>
+              <span className="hd-timing-label">{stageLabel(s.stage)}</span>
+              <span className="hd-timing-track">
+                <span className="hd-timing-fill" style={{ width: `${Math.min(pct, 100)}%`, background: PERF_COLORS[i % PERF_COLORS.length] }} />
+              </span>
+              <span className="hd-timing-value">{formatDurationMs(s.ms)} · {share}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function IngestionView() {
   const { apiClient } = useAuth();
   const { t } = useTranslation();
@@ -337,6 +370,7 @@ function IngestionView() {
 
             <h4 style={{ marginBottom: 14 }}>{t('ingestion.stages')}</h4>
             <StageTimeline events={detail.events} />
+            <StagePerfBars events={detail.events} />
 
             <div style={{ marginTop: 20 }}>
               <JsonViewer value={detail} label="Raw JSON" />

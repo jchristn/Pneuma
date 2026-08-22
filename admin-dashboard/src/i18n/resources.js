@@ -20,6 +20,7 @@ const en = {
       cancel: 'Cancel',
       close: 'Close',
       delete: 'Delete',
+      duplicate: 'Duplicate',
       edit: 'Edit',
       view: 'View',
       viewJson: 'View JSON',
@@ -355,6 +356,7 @@ const en = {
     },
     resource: {
       addTitle: 'Create {{name}}',
+      duplicateTitle: 'Duplicate {{name}}',
       editTitle: 'Edit {{name}}',
       viewTitle: 'View {{name}}',
       deleteConfirm: 'Delete this {{name}}? This action cannot be undone.',

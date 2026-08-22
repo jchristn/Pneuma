@@ -25,6 +25,17 @@ function fmtTps(completionTokens, generationMs) {
   return `${(completionTokens / (generationMs / 1000)).toFixed(1)} tok/s`;
 }
 
+// Distinct colors for the per-stage timing bars.
+const STAGE_COLORS = ['#4dabf7', '#38d9a9', '#a9e34b', '#ffd43b', '#ffa94d', '#ff6b6b', '#da77f2', '#845ef7', '#20c997', '#3bc9db'];
+
+// Humanize a pipeline stage name (snake/kebab → Title Case; surface a `tool:` prefix).
+function humanizeStage(name) {
+  if (!name) return 'Stage';
+  const n = String(name);
+  if (n.startsWith('tool:')) return `Tool · ${n.slice(5)}`;
+  return n.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function Metric({ label, value, hint, accent }) {
   return (
     <div className="hd-metric" style={accent ? { borderLeftColor: accent } : undefined} title={hint}>
@@ -91,12 +102,15 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
   if (!turn) return null;
 
   const total = turn.totalTokens || ((turn.promptTokens || 0) + (turn.completionTokens || 0));
-  const maxPhase = Math.max(turn.timeToFirstTokenMs || 0, turn.generationMs || 0, turn.thinkingMs || 0);
   const contextPct = turn.contextSize > 0 ? Math.min(100, (total / turn.contextSize) * 100) : 0;
   const promptPct = total > 0 ? ((turn.promptTokens || 0) / total) * 100 : 0;
   const ttltMs = (turn.timeToFirstTokenMs || 0) + (turn.generationMs || 0);
   const tpsOverall = ttltMs > 0 && turn.completionTokens > 0 ? `${(turn.completionTokens / (ttltMs / 1000)).toFixed(1)} tok/s` : '—';
   const wallMs = stages.reduce((s, x) => s + (x.durationMs || 0), 0);
+  // Shared max for the phase-timing bars so they read comparably against each other.
+  const timingMax = Math.max(turn.timeToFirstTokenMs || 0, turn.generationMs || 0, turn.thinkingMs || 0, ttltMs, wallMs);
+  // Longest single stage, driving the per-stage bar lengths.
+  const stageBarMax = stages.reduce((m, x) => Math.max(m, x.durationMs || 0), 0);
 
   return (
     <Modal title={t('history.detailTitle', 'Chat turn')} size="wide" onClose={onClose}
@@ -111,13 +125,35 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
           <div className="hd-id"><span className="hd-id-label">{t('history.created', 'Created')}</span><span className="hd-id-val">{formatDateTime(turn.createdUtc)}</span></div>
         </div>
 
-        {/* Roll-up metrics */}
+        {/* Performance timing — the duration KPIs rendered as horizontal bars for at-a-glance comparison. */}
+        {timingMax > 0 && (
+          <div className="hd-section">
+            <div className="hd-section-title">{t('history.timing', 'Performance timing')}</div>
+            <div className="hd-timing">
+              <TimingBar label={t('history.ttft', 'Time to first token')} durationMs={turn.timeToFirstTokenMs} maxMs={timingMax} color="#4dabf7" hint="Elapsed time from sending the prompt to the first streamed token." />
+              <TimingBar label={t('history.thinkingTime', 'Thinking')} durationMs={turn.thinkingMs} maxMs={timingMax} color="#845ef7" hint="Time the model spent in its reasoning phase before answering." />
+              <TimingBar label={t('history.gen', 'Generation')} durationMs={turn.generationMs} maxMs={timingMax} color="#ff6b6b" hint="Time spent streaming the answer, from first token to last." />
+              <TimingBar label={t('history.ttlt', 'Time to last token')} durationMs={ttltMs} maxMs={timingMax} color="#f783ac" hint="Prompt sent to last token (time to first token + generation)." />
+              {wallMs > 0 && <TimingBar label={t('history.wall', 'Pipeline wall time')} durationMs={wallMs} maxMs={timingMax} color="#a9e34b" hint="Total measured time across all answer-pipeline stages (rewrite, retrieval, tools, generation)." />}
+            </div>
+          </div>
+        )}
+
+        {/* Per-stage timing bars (from the recorded pipeline stages), sized by each stage's duration. */}
+        {stageBarMax > 0 && (
+          <div className="hd-section">
+            <div className="hd-section-title">{t('history.stageTiming', 'Time per stage')}</div>
+            <div className="hd-timing">
+              {stages.filter((s) => (s.durationMs || 0) > 0).map((s, i) => (
+                <TimingBar key={`sb-${s.name || 'stage'}-${i}`} label={humanizeStage(s.name)} durationMs={s.durationMs} maxMs={stageBarMax}
+                  color={STAGE_COLORS[i % STAGE_COLORS.length]} hint={`${s.kind || 'stage'}${s.model ? ` · ${s.model}` : ''}`} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scalar roll-up metrics (throughput, tokens, context) kept as compact cards. */}
         <div className="hd-metrics">
-          <Metric label={t('history.ttft', 'Time to first token')} value={fmtMs(turn.timeToFirstTokenMs)} accent="#4dabf7" hint="Elapsed time from sending the prompt to the first streamed token." />
-          <Metric label={t('history.gen', 'Generation')} value={fmtMs(turn.generationMs)} accent="#ff6b6b" hint="Time spent streaming the answer, from first token to last." />
-          <Metric label={t('history.ttlt', 'Time to last token')} value={fmtMs(ttltMs)} accent="#f783ac" hint="Prompt sent to last token (time to first token + generation)." />
-          <Metric label={t('history.wall', 'Pipeline wall time')} value={fmtMs(wallMs)} accent="#a9e34b" hint="Total measured time across all answer-pipeline stages (rewrite, retrieval, tools, generation)." />
-          <Metric label={t('history.thinkingTime', 'Thinking')} value={fmtMs(turn.thinkingMs)} accent="#845ef7" hint="Time the model spent in its reasoning phase before answering." />
           <Metric label={t('history.tpsGen', 'Throughput (gen)')} value={fmtTps(turn.completionTokens, turn.generationMs)} accent="#20c997" hint="Completion tokens per second over the generation window." />
           <Metric label={t('history.tpsOverall', 'Throughput (overall)')} value={tpsOverall} accent="#20c997" hint="Completion tokens per second over the whole answer (prompt sent to last token)." />
           <Metric label={t('history.promptTokens', 'Prompt tokens')} value={fmtNum(turn.promptTokens)} hint="Tokens in the assembled prompt (system + context + question)." />
@@ -125,18 +161,6 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
           <Metric label={t('history.totalTokens', 'Total tokens')} value={fmtNum(total)} hint="Prompt tokens plus completion tokens." />
           <Metric label={t('history.context', 'Context window')} value={turn.contextSize > 0 ? `${turn.contextSize.toLocaleString()} tok` : '—'} hint="Model context window this turn ran against." />
         </div>
-
-        {/* Timing visualization */}
-        {maxPhase > 0 && (
-          <div className="hd-section">
-            <div className="hd-section-title">{t('history.timing', 'Timing')}</div>
-            <div className="hd-timing">
-              <TimingBar label={t('history.ttft', 'Time to first token')} durationMs={turn.timeToFirstTokenMs} maxMs={maxPhase} color="#4dabf7" hint="Prompt sent → first token." />
-              <TimingBar label={t('history.thinkingTime', 'Thinking')} durationMs={turn.thinkingMs} maxMs={maxPhase} color="#845ef7" hint="Reasoning phase before the answer." />
-              <TimingBar label={t('history.gen', 'Generation')} durationMs={turn.generationMs} maxMs={maxPhase} color="#ff6b6b" hint="First token → last token." />
-            </div>
-          </div>
-        )}
 
         {/* Per-stage details */}
         {stages.length > 0 && (

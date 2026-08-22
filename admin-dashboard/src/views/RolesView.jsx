@@ -24,6 +24,8 @@ function RolesView() {
       columns={columns}
       formFields={formFields}
       idField="id"
+      duplicable
+      duplicateTransform={(r) => ({ ...r, name: r.name ? `${r.name} (copy)` : '' })}
     />
   );
 }

@@ -555,17 +555,7 @@ namespace Pneuma.Server.Services
                 catch (Exception) { apiKey = null; }
             }
 
-            StringBuilder context = new StringBuilder();
-            context.AppendLine("Question: " + question);
-            context.AppendLine();
-            context.AppendLine("Sources:");
-            int index = 1;
-            foreach (GraphNode node in sources)
-            {
-                string content = String.IsNullOrWhiteSpace(node.Content) ? node.Name : node.Content!;
-                context.AppendLine("[" + index + "] (" + node.NodeType + ") " + node.Name + ": " + content);
-                index++;
-            }
+            string contextText = BuildSourceContext(question, sources);
 
             try
             {
@@ -576,7 +566,7 @@ namespace Pneuma.Server.Services
                     MaxTokens = 1024,
                     SystemPrompt = systemPrompt
                 };
-                ChatResponse response = await client.ChatAsync(context.ToString(), options, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(contextText, options, token).ConfigureAwait(false);
                 if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text))
                 {
                     string? model = String.IsNullOrEmpty(response.Model) ? runner.DefaultModel : response.Model;
@@ -590,6 +580,31 @@ namespace Pneuma.Server.Services
             }
 
             return new GeneratedAnswer { Text = "An answer could not be generated, but the returned sources are relevant to your question." };
+        }
+
+        /// <summary>
+        /// Build the grounded-answer user message: the question followed by each retrieved source as a bare
+        /// numbered excerpt. The node's internal type (e.g. "Cell"/"Source"/"Chunk") and raw name/id are
+        /// deliberately omitted so the model has no internal plumbing to echo back to the reader (e.g. it can no
+        /// longer produce "(source: Cell)"); sources are referenced by their bracketed number or a short quotation.
+        /// </summary>
+        /// <param name="question">The (possibly rewritten) question being answered.</param>
+        /// <param name="sources">The retrieved source nodes, in presentation order.</param>
+        /// <returns>The assembled context string passed to the completion model.</returns>
+        public static string BuildSourceContext(string question, IEnumerable<GraphNode> sources)
+        {
+            StringBuilder context = new StringBuilder();
+            context.AppendLine("Question: " + question);
+            context.AppendLine();
+            context.AppendLine("Sources:");
+            int index = 1;
+            foreach (GraphNode node in sources)
+            {
+                string content = String.IsNullOrWhiteSpace(node.Content) ? node.Name : node.Content!;
+                context.AppendLine("[" + index + "] " + content);
+                index++;
+            }
+            return context.ToString();
         }
 
         #endregion

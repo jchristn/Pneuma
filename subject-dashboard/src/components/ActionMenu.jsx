@@ -35,9 +35,18 @@ function ActionMenu({ actions = [] }) {
     if (!open && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const menuWidth = 170;
+      const itemHeight = 38;
+      const menuHeight = Math.min(actions.length * itemHeight + 8, window.innerHeight - 16);
+      // Prefer dropping below the trigger; flip above (or clamp) when it would run off the bottom.
+      let top = rect.bottom + 4;
+      if (top + menuHeight > window.innerHeight - 8) {
+        const above = rect.top - 4 - menuHeight;
+        top = above >= 8 ? above : Math.max(8, window.innerHeight - menuHeight - 8);
+      }
       setCoords({
-        top: rect.bottom + 4,
-        left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8))
+        top,
+        left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+        maxHeight: menuHeight
       });
     }
     setOpen((v) => !v);
@@ -63,7 +72,7 @@ function ActionMenu({ actions = [] }) {
           <div
             className="action-menu-dropdown"
             role="menu"
-            style={{ top: coords.top, left: coords.left }}
+            style={{ top: coords.top, left: coords.left, maxHeight: coords.maxHeight, overflowY: 'auto' }}
           >
             {actions.map((action, idx) => (
               <button

@@ -105,6 +105,29 @@ between releases, and the project will adopt semantic versioning at its stable 1
   negative tests were added for the DB layer, the MCP tools, and the SDK smoke harness.
 
 ### Fixed
+- **Answers no longer leak internal object kinds (e.g. "(source: Cell)").** The grounded-answer context that
+  is sent to the model previously prefixed each source with its internal graph node type and name
+  (`[1] (Cell) cell_9f3a…: …`), which the model would echo back to readers as "(source: Cell)". Sources are now
+  presented as bare numbered excerpts (`[1] …`), and the system-level answering prompts (`user.answer`,
+  `assistant.system`) plus the default subject system prompt (admin + creator create-subject forms) explicitly
+  forbid naming internal object kinds/storage labels. Existing deployments self-heal the two prompts on next
+  boot (sentinel-guarded), and the change ships to `docker/` and `docker/factory/` on image rebuild.
+- **Row action menus stay on-screen.** The row `⋯` action menu (every table in the admin and creator
+  dashboards) dropped straight down from the trigger and ran off the bottom of the viewport for the last rows;
+  it now flips above the trigger (or clamps and scrolls) so it is always fully visible.
+- **Duplicate row action.** Config-heavy admin tables (Model Runners, Subjects, Collections, Roles, Prompts)
+  gain a **Duplicate** action that opens the create form pre-filled from the selected record (name/key/slug
+  auto-suffixed so it doesn't collide) — copy a definition, tweak one field, save.
+- **Ingestion "View Performance".** The admin Ingestion Jobs action menu gains **View Performance**, a
+  per-stage bar chart sized by each stage's duration with discrete timings and share-of-total; the creator
+  dashboard's ingestion detail modal shows the same "Time per stage" bars.
+- **Chat-turn detail: timing KPIs as horizontal bars.** The history-turn detail modal (admin + creator) now
+  renders the duration KPIs (TTFT, thinking, generation, time-to-last-token, pipeline wall) and the recorded
+  pipeline stages as horizontal bars, AssistantHub-style, keeping only the scalar metrics (throughput, tokens,
+  context) as compact cards.
+- **`/context` renders a formatted table.** The in-chat `/context` command (all three dashboards) now shows a
+  Markdown table — model (where surfaced), context window, context used with percentage, prompt/completion
+  tokens, and turn count — matching how `/help` renders.
 - **Structured retrieval-filter editor (labels + tags).** The subject's default retrieval filter — previously
   a raw-JSON textbox on the create/edit subject form in both the admin and creator dashboards — is now a
   structured editor: labels (`List<string>`) render as one textbox per row with a delete icon and an add

@@ -16,8 +16,9 @@ import FacetFilterEditor from '../components/FacetFilterEditor';
 const DEFAULT_SYSTEM_PROMPT =
   'Focus your answers on this subject. Prefer its ingested sources, be precise about names, dates, and relationships, '
   + 'and clearly say when the archive does not cover something. Never expose internal identifiers or system internals to '
-  + 'the user: do not print node ids, GUIDs, collection or job ids, or other database keys. Refer to sources by their '
-  + 'human-readable title or a short quotation.';
+  + 'the user: do not print node ids, GUIDs, collection or job ids, or other database keys, and never mention Pneuma’s '
+  + 'internal object kinds or storage labels such as "Cell", "Chunk", or "Source node" (for example, never write '
+  + '"(source: Cell)"). Refer to sources by their human-readable title or a short quotation.';
 const DEFAULT_ONTOLOGY_CLASSIFY =
   'Identify the entities (people, organizations, works, events, places, and themes) and the relationships among them '
   + "that are relevant to this subject, and map them into the subject's knowledge-graph ontology.";

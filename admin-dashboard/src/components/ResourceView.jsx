@@ -214,7 +214,9 @@ function ResourceView({
   selectable = false,
   bulkActions = null,
   postDeleteNotice = null,
-  twoColumnForm = false
+  twoColumnForm = false,
+  duplicable = false,
+  duplicateTransform = null
 }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
@@ -336,6 +338,7 @@ function ResourceView({
     render: (item) => (
       <ActionMenu items={[
         { key: 'view', label: t('common.view'), tip: t('common.viewTip', { name: singular, defaultValue: `Open a read-only detail view of this ${singular}.` }), onClick: () => openView(item) },
+        { key: 'duplicate', label: t('common.duplicate', 'Duplicate'), tip: t('common.duplicateTip', { name: singular, defaultValue: `Create a new ${singular} pre-filled from this one. Nothing is saved until you submit — tweak the copy first.` }), hidden: !duplicable || !capabilities.create || formFields.length === 0, onClick: () => setModal({ type: 'create', item: duplicateTransform ? duplicateTransform(item) : item }) },
         ...extraActions.map((a) => ({
           key: a.key || a.label,
           label: a.label,
@@ -377,8 +380,8 @@ function ResourceView({
         selection={bulkEnabled ? selection : null} bulkBar={bulkBar} />
 
       {modal?.type === 'create' && (
-        <Modal title={t('resource.addTitle', { name: singular })} size={modalSize} onClose={() => setModal(null)}>
-          <ResourceForm fields={formFields} onSubmit={doCreate} onCancel={() => setModal(null)} submitLabel={t('common.create')} disabled={createDisabled} notice={createNotice} twoColumn={twoColumnForm} />
+        <Modal title={modal.item ? t('resource.duplicateTitle', { name: singular, defaultValue: `Duplicate ${singular}` }) : t('resource.addTitle', { name: singular })} size={modalSize} onClose={() => setModal(null)}>
+          <ResourceForm fields={formFields} initial={modal.item || null} onSubmit={doCreate} onCancel={() => setModal(null)} submitLabel={t('common.create')} disabled={createDisabled} notice={createNotice} twoColumn={twoColumnForm} />
         </Modal>
       )}
       {modal?.type === 'edit' && (

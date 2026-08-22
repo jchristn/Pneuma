@@ -400,7 +400,19 @@ export default function AskView() {
       } else if (cmd === 'context') {
         const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.stats);
         const s = last && last.stats;
-        info = s ? `Context: ${(s.totalTokens || 0).toLocaleString()} tokens used${s.contextSize ? ` of ${s.contextSize.toLocaleString()} (${Math.round(((s.totalTokens || 0) / s.contextSize) * 100)}%)` : ''}.` : 'No context usage yet — ask a question first.';
+        if (!s) {
+          info = 'No context usage yet — ask a question first.';
+        } else {
+          const used = s.totalTokens || 0;
+          const pct = s.contextSize ? Math.round((used / s.contextSize) * 100) : null;
+          const turns = messages.filter((m) => m.role === 'user').length;
+          info = '**Context usage**\n\n| Metric | Value |\n|---|---|\n'
+            + `| Context window | ${s.contextSize ? `${s.contextSize.toLocaleString()} tokens` : 'unknown'} |\n`
+            + `| Context used | ${used.toLocaleString()} tokens${pct != null ? ` (${pct}%)` : ''} |\n`
+            + `| Prompt tokens (last turn) | ${(s.promptTokens || 0).toLocaleString()} |\n`
+            + `| Completion tokens (last turn) | ${(s.completionTokens || 0).toLocaleString()} |\n`
+            + `| Turns so far | ${turns} |`;
+        }
       } else {
         info = `Unknown command "/${cmd}". Try /help.`;
       }

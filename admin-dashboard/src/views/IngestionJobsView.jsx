@@ -11,6 +11,7 @@ import ErrorBanner from '../components/ErrorBanner';
 import CopyableId from '../components/CopyableId';
 import StatusPill, { toneForStatus } from '../components/StatusPill';
 import FollowLogsModal from '../components/FollowLogsModal';
+import JobPerformanceModal from '../components/JobPerformanceModal';
 import { stageLabel } from '../components/IngestionTimeline';
 import { getId } from '../components/ResourceView';
 import { formatDateTime } from '../i18n/formatters';
@@ -139,6 +140,7 @@ function IngestionJobsView() {
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => (
       <ActionMenu items={[
         { key: 'follow', label: t('jobs.followLogs'), tip: 'Watch this job’s stage log live, auto-refreshing until it finishes.', onClick: () => setModal({ type: 'follow', item: job }) },
+        { key: 'performance', label: t('jobs.viewPerformance', 'View Performance'), tip: 'Visualize where this job spent time — a bar per stage sized by its duration, with discrete timings.', onClick: () => setModal({ type: 'performance', item: job }) },
         { key: 'stop', label: t('jobs.stop'), tip: 'Cancel this in-progress job. Already-completed stages are kept.', hidden: !isStoppable(job), danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
         { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
       ]} />
@@ -172,6 +174,9 @@ function IngestionJobsView() {
 
       {modal?.type === 'follow' && (
         <FollowLogsModal job={modal.item} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'performance' && (
+        <JobPerformanceModal job={modal.item} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'stop' && (
         <ConfirmModal title={t('jobs.stop')} message={t('jobs.stopConfirm')} danger

@@ -42,6 +42,8 @@ function CollectionsView() {
       subject={create}
       idField="id"
       capabilities={{ create: true, edit: false, delete: true, viewJson: false }}
+      duplicable
+      duplicateTransform={(r) => ({ ...r, name: r.name ? `${r.name} (copy)` : '' })}
     />
   );
 }

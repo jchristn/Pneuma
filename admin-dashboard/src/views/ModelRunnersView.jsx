@@ -111,6 +111,8 @@ function ModelRunnersView() {
         formFields={formFields}
         detailFields={detailFields}
         idField="id"
+        duplicable
+        duplicateTransform={(r) => ({ ...r, name: r.name ? `${r.name} (copy)` : '' })}
       />
       {healthModal && (
         <HealthDetailModal title={healthModal.title} health={healthModal.data} loading={healthModal.loading}
