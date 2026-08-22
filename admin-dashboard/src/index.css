@@ -853,3 +853,6 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .ev-verdict.ev-fail, .ev-verdict.ev-unknown { background: color-mix(in srgb, var(--color-danger) 15%, transparent); color: var(--color-danger); }
 .ev-run-summary { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; font-size: 0.85rem; color: var(--color-text); }
 .ev-err { color: var(--color-danger); }
+.an-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.an-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--color-text-secondary); }
+.an-legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

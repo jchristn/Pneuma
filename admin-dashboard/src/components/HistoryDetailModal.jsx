@@ -94,6 +94,9 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
   const maxPhase = Math.max(turn.timeToFirstTokenMs || 0, turn.generationMs || 0, turn.thinkingMs || 0);
   const contextPct = turn.contextSize > 0 ? Math.min(100, (total / turn.contextSize) * 100) : 0;
   const promptPct = total > 0 ? ((turn.promptTokens || 0) / total) * 100 : 0;
+  const ttltMs = (turn.timeToFirstTokenMs || 0) + (turn.generationMs || 0);
+  const tpsOverall = ttltMs > 0 && turn.completionTokens > 0 ? `${(turn.completionTokens / (ttltMs / 1000)).toFixed(1)} tok/s` : '—';
+  const wallMs = stages.reduce((s, x) => s + (x.durationMs || 0), 0);
 
   return (
     <Modal title={t('history.detailTitle', 'Chat turn')} size="wide" onClose={onClose}
@@ -112,8 +115,11 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
         <div className="hd-metrics">
           <Metric label={t('history.ttft', 'Time to first token')} value={fmtMs(turn.timeToFirstTokenMs)} accent="#4dabf7" hint="Elapsed time from sending the prompt to the first streamed token." />
           <Metric label={t('history.gen', 'Generation')} value={fmtMs(turn.generationMs)} accent="#ff6b6b" hint="Time spent streaming the answer, from first token to last." />
+          <Metric label={t('history.ttlt', 'Time to last token')} value={fmtMs(ttltMs)} accent="#f783ac" hint="Prompt sent to last token (time to first token + generation)." />
+          <Metric label={t('history.wall', 'Pipeline wall time')} value={fmtMs(wallMs)} accent="#a9e34b" hint="Total measured time across all answer-pipeline stages (rewrite, retrieval, tools, generation)." />
           <Metric label={t('history.thinkingTime', 'Thinking')} value={fmtMs(turn.thinkingMs)} accent="#845ef7" hint="Time the model spent in its reasoning phase before answering." />
-          <Metric label={t('history.tps', 'Throughput')} value={fmtTps(turn.completionTokens, turn.generationMs)} accent="#20c997" hint="Completion tokens per second over the generation window." />
+          <Metric label={t('history.tpsGen', 'Throughput (gen)')} value={fmtTps(turn.completionTokens, turn.generationMs)} accent="#20c997" hint="Completion tokens per second over the generation window." />
+          <Metric label={t('history.tpsOverall', 'Throughput (overall)')} value={tpsOverall} accent="#20c997" hint="Completion tokens per second over the whole answer (prompt sent to last token)." />
           <Metric label={t('history.promptTokens', 'Prompt tokens')} value={fmtNum(turn.promptTokens)} hint="Tokens in the assembled prompt (system + context + question)." />
           <Metric label={t('history.completionTokens', 'Completion tokens')} value={fmtNum(turn.completionTokens)} hint="Tokens in the assistant's answer." />
           <Metric label={t('history.totalTokens', 'Total tokens')} value={fmtNum(total)} hint="Prompt tokens plus completion tokens." />

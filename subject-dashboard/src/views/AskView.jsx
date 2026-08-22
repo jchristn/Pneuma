@@ -167,6 +167,14 @@ function FeedbackBar({ turnId }) {
   const [comment, setComment] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const textareaRef = useRef(null);
+  useEffect(() => {
+    if (pending && !sent) {
+      const timer = setTimeout(() => textareaRef.current?.focus(), 60);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [pending, sent]);
   if (!turnId) return null;
 
   const open = (r) => { setComment(''); setPending(r); };
@@ -201,10 +209,10 @@ function FeedbackBar({ turnId }) {
           <>
             <p style={{ marginBottom: '0.75rem' }}>{t('ask.feedbackPrompt', { verb, defaultValue: 'Tell me more about why you {{verb}} this response.' })}</p>
             <textarea
+              ref={textareaRef}
               style={{ width: '100%', resize: 'vertical' }}
               rows={4}
               value={comment}
-              autoFocus
               onChange={(e) => setComment(e.target.value)}
               placeholder={t('ask.feedbackComment', 'Add a comment (optional)')}
             />
@@ -384,7 +392,7 @@ function AskView() {
       if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setMessages([]); setError(null); return; }
       let info;
       if (cmd === 'help' || cmd === '?') {
-        info = 'Commands: /help — this list · /clear or /new — start a new conversation · /context — show context usage · /compact — note (compaction is automatic).';
+        info = '**Commands**\n\n| Command | Description |\n|---|---|\n| `/help` or `/?` | Show this list |\n| `/clear` or `/new` | Start a new conversation |\n| `/context` | Show current context usage |\n| `/compact` | Compaction is automatic (informational) |';
       } else if (cmd === 'context') {
         const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.stats);
         const s = last && last.stats;

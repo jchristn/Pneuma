@@ -81,8 +81,9 @@ DB-native complement to the Prometheus metrics and Tempo spans.
 - **Trace exposure & collection.** The server pushes spans over OTLP to Tempo (`:4317` ingest); Tempo serves
   trace queries on `:3200`.
 - **Datasources & dashboards.** Grafana is provisioned (`docker/grafana/provisioning/…` and the `docker/factory`
-  equivalent) with **Prometheus** and **Tempo** datasources and the Pneuma observability dashboard mounted
-  from `assets/grafana/pneuma-observability-dashboard.json`.
+  equivalent) with **Prometheus** and **Tempo** datasources and a set of **per-domain dashboards** mounted
+  from `assets/grafana/*.json` — one dashboard each for Overview, HTTP, Ingestion, Chat & Retrieval, and
+  Integrations (all in the Grafana **Pneuma** folder).
 
 ---
 
@@ -93,29 +94,29 @@ DB-native complement to the Prometheus metrics and Tempo spans.
 2. Open **http://localhost:3000**.
 3. Log in with the default credentials **`admin` / `admin`** (set via `GF_SECURITY_ADMIN_*`; change them for
    any non-local deployment).
-4. Open the **Pneuma – Observability** dashboard (Dashboards → Browse → the Pneuma folder). It auto-loads
-   from provisioning.
+4. Open **Dashboards → Browse → the Pneuma folder**. Five domain dashboards auto-load from provisioning:
+   **Pneuma — Overview**, **— HTTP**, **— Ingestion**, **— Chat & Retrieval**, and **— Integrations**.
 
 Related URLs: Prometheus **http://localhost:9090**, Tempo API **http://localhost:3200**.
 
 ---
 
-## 6. Reading the dashboard (sectioned by domain)
+## 6. Reading the dashboards (one per domain)
 
-The dashboard is organized into collapsible **domain rows**; expand the one that matches your question.
+The observability dashboards are split by domain — open the one that matches your question:
 
-- **Overview** — uptime, total request rate, error ratio, ingestion completed-vs-failed. Start here for a
-  health snapshot.
-- **HTTP** — request rate by route and status class, latency quantiles (p50/p95/p99), and the top routes by
-  p95. Use it to find a slow or erroring endpoint.
-- **Ingestion** — job rate by outcome, per-stage throughput, per-stage failure rate, and **per-stage p95
-  duration**. This is where a stuck or slow ingestion stage becomes obvious — a rising p95 on `Embedding` or
-  `Classification` points straight at the bottleneck (usually model-runner contention).
-- **Retrieval & Answer** — answer rate by outcome, answer p95 latency, and **per-stage p95 latency**
+- **Pneuma — Overview** — uptime, total request rate, error ratio, ingestion completed-vs-failed. Start here
+  for a health snapshot.
+- **Pneuma — HTTP** — request rate by route and status class, latency quantiles (p50/p95/p99), and the top
+  routes by p95. Use it to find a slow or erroring endpoint.
+- **Pneuma — Ingestion** — job rate by outcome, per-stage throughput, per-stage failure rate, and **per-stage
+  p95 duration**. This is where a stuck or slow ingestion stage becomes obvious — a rising p95 on `Embedding`
+  or `Classification` points straight at the bottleneck (usually model-runner contention).
+- **Pneuma — Chat & Retrieval** — answer rate by outcome, answer p95 latency, and **per-stage p95 latency**
   (`prompt_rewrite` / `retrieval` / `rerank` / `tool` / `final_inference`). Use it to see whether answer
   slowness is generation, retrieval, or reranking.
-- **Integrations** — request and error rate by service and the p95 latency per service+operation. When an
-  answer or ingestion is slow, this row tells you whether a downstream (RecallDB/Partio/LiteGraph/DocumentAtom)
+- **Pneuma — Integrations** — request and error rate by service and the p95 latency per service+operation. When
+  an answer or ingestion is slow, this tells you whether a downstream (RecallDB/Partio/LiteGraph/DocumentAtom)
   is the cause.
 
 ## 7. Reading traces
@@ -143,4 +144,5 @@ For a single slow request rather than an aggregate:
   write by default.
 - Labels avoid ids to keep cardinality bounded; scope by `tenant`/`subject` only where the set is small.
 - To add a metric, extend `PneumaMetrics` (a `Record*` method + a family in `Render()`); to add a panel, edit
-  `assets/grafana/pneuma-observability-dashboard.json` (mirror the change into `docker/factory/assets/grafana/`).
+  the relevant domain dashboard under `assets/grafana/pneuma-*.json` (mirror the change into
+  `docker/factory/assets/grafana/`).

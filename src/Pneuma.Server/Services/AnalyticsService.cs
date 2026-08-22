@@ -86,38 +86,55 @@ namespace Pneuma.Server.Services
                 else if (item.Rating == FeedbackRatingEnum.Down) overview.ThumbsDown++;
             }
 
-            Dictionary<DateTime, List<double>> byDay = new Dictionary<DateTime, List<double>>();
+            List<ChatTurnPerfEvent> events = await _Db.ChatTurnPerfEvents.EnumerateBySubjectAsync(tenantId, subjectId, sinceUtc, token).ConfigureAwait(false);
+
+            // Per-day buckets: turn count + avg generation, plus per-stage average latency from the events, so
+            // the frontend can render a stacked latency-over-time chart.
+            Dictionary<DateTime, List<double>> generationByDay = new Dictionary<DateTime, List<double>>();
             foreach (ChatTurnRecord turn in windowed)
             {
                 DateTime day = turn.CreatedUtc.Date;
-                if (!byDay.TryGetValue(day, out List<double>? bucket))
-                {
-                    bucket = new List<double>();
-                    byDay[day] = bucket;
-                }
+                if (!generationByDay.TryGetValue(day, out List<double>? bucket)) { bucket = new List<double>(); generationByDay[day] = bucket; }
                 bucket.Add(turn.GenerationMs);
             }
-            List<DateTime> days = new List<DateTime>(byDay.Keys);
-            days.Sort();
-            foreach (DateTime day in days)
-            {
-                List<double> values = byDay[day];
-                double sum = 0;
-                foreach (double value in values) sum += value;
-                report.Timeseries.Add(new AnalyticsBucket { BucketUtc = day, Count = values.Count, AvgGenerationMs = values.Count > 0 ? sum / values.Count : 0 });
-            }
-
-            List<ChatTurnPerfEvent> events = await _Db.ChatTurnPerfEvents.EnumerateBySubjectAsync(tenantId, subjectId, sinceUtc, token).ConfigureAwait(false);
+            Dictionary<DateTime, Dictionary<string, List<double>>> stageByDay = new Dictionary<DateTime, Dictionary<string, List<double>>>();
             Dictionary<string, List<double>> byStage = new Dictionary<string, List<double>>(StringComparer.Ordinal);
             foreach (ChatTurnPerfEvent evt in events)
             {
-                if (!byStage.TryGetValue(evt.Stage, out List<double>? durations))
-                {
-                    durations = new List<double>();
-                    byStage[evt.Stage] = durations;
-                }
+                if (!byStage.TryGetValue(evt.Stage, out List<double>? durations)) { durations = new List<double>(); byStage[evt.Stage] = durations; }
                 durations.Add(evt.DurationMs);
+
+                DateTime day = evt.CreatedUtc.Date;
+                if (!stageByDay.TryGetValue(day, out Dictionary<string, List<double>>? stages)) { stages = new Dictionary<string, List<double>>(StringComparer.Ordinal); stageByDay[day] = stages; }
+                if (!stages.TryGetValue(evt.Stage, out List<double>? stageDurations)) { stageDurations = new List<double>(); stages[evt.Stage] = stageDurations; }
+                stageDurations.Add(evt.DurationMs);
             }
+
+            SortedSet<DateTime> allDays = new SortedSet<DateTime>();
+            foreach (DateTime day in generationByDay.Keys) allDays.Add(day);
+            foreach (DateTime day in stageByDay.Keys) allDays.Add(day);
+            foreach (DateTime day in allDays)
+            {
+                AnalyticsBucket bucket = new AnalyticsBucket { BucketUtc = day };
+                if (generationByDay.TryGetValue(day, out List<double>? gens) && gens.Count > 0)
+                {
+                    double sum = 0;
+                    foreach (double value in gens) sum += value;
+                    bucket.Count = gens.Count;
+                    bucket.AvgGenerationMs = sum / gens.Count;
+                }
+                if (stageByDay.TryGetValue(day, out Dictionary<string, List<double>>? dayStages))
+                {
+                    foreach (KeyValuePair<string, List<double>> pair in dayStages)
+                    {
+                        double sum = 0;
+                        foreach (double value in pair.Value) sum += value;
+                        bucket.StageLatencies[pair.Key] = pair.Value.Count > 0 ? sum / pair.Value.Count : 0;
+                    }
+                }
+                report.Timeseries.Add(bucket);
+            }
+
             List<AnalyticsStageStat> stageStats = new List<AnalyticsStageStat>();
             foreach (KeyValuePair<string, List<double>> pair in byStage)
             {

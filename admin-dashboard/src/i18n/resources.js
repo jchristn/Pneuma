@@ -69,6 +69,8 @@ const en = {
       jobs: 'Ingestion Queue',
       ingestionJobs: 'Ingestion Jobs',
       history: 'History',
+      analytics: 'Analytics',
+      eval: 'Evaluation',
       feedback: 'Feedback',
       tenants: 'Tenants',
       users: 'Users',
