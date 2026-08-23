@@ -201,9 +201,10 @@ Pneuma already stores on chunks/nodes (`rights`, `authority`, `confidence`, `nod
 > `complete` event), auto-title from the first question, and the tool-call trace persisted + returned on
 > `GET /v1.0/history/{id}`. All three dashboards thread the `threadId` through chat (a conversation stays in
 > one thread; "clear" starts a new one) and render the persisted tool trace in the History detail modal.
-> Tests (94 pass), REST_API + CHANGELOG updated. **Deferred to a follow-up:** the visual thread
-> switcher/sidebar + rename/delete UI in the Ask views and thread-grouping in the History list, and the MCP
-> thread tools (folded into Phase 7).
+> Tests (94 pass), REST_API + CHANGELOG updated. **Follow-up (done):** the visual thread switcher now ships in
+> all three Ask views (a conversations dropdown with select-to-rehydrate, inline rename, and inline
+> delete-with-confirm), and the admin + creator History views gained a Conversation column + filter. MCP thread
+> tools shipped in Phase 7.
 
 **Goal:** group turns into named conversations with a thread switcher and "new conversation" UX in all three
 Ask views, auto-generated titles, and per-thread history; and persist the agentic tool-call trace (currently
@@ -297,8 +298,11 @@ per-endpoint timing, rerank/rewrite/gate counts, feedback trends) rendered with 
 > answers each fact through the real grounded pipeline and LLM-judges it with a seeded `eval.judge` prompt
 > (verdict/score/reason/failure-mode), REST at `/v1.0/eval/facts` + `/v1.0/eval/runs`, an Evaluation view in
 > the admin + creator dashboards (fact management, start run, results modal), subject-cascade cleanup, tests
-> (96 pass), REST_API + CHANGELOG. **Deferred to a follow-up:** runs are **synchronous** (SSE live progress
-> + a background/cancellable worker) and MCP eval tools (Phase 7).
+> (96 pass), REST_API + CHANGELOG. **Follow-up (done):** runs are now **asynchronous** — `POST /v1.0/eval/runs`
+> queues a Pending run processed by a background `EvalWorkerService` (gate-aware, cancellable), with SSE live
+> progress (`GET /v1.0/eval/runs/{id}/stream`), a cancel endpoint, and a richer dashboard (live progress modal,
+> results filtering by category/verdict/failure-mode, status pills, per-row cancel, bulk-delete). Read MCP eval
+> tools shipped in Phase 7; eval write/cancel MCP tools remain out of scope.
 
 **Goal:** ground-truth facts per subject, eval runs over the **real** answer pipeline, per-fact LLM-judge
 verdicts, category/failure-mode filtering, SSE live progress, and an Eval dashboard view.
@@ -511,9 +515,9 @@ comply" gate.
 |---|---|---|---|---|---|---|---|---|
 | 1 | #1 Telemetry | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
 | 2 | #2 Facet filters | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (JSON editor) | ✅ | 🟨 |
-| 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading; switcher deferred) | ✅ | 🟨 |
+| 3 | #6 Threads + tool trace | ✅ | ✅ | 🟨 (Phase 7) | ✅ | ✅ (trace + threading + switcher + History grouping) | ✅ | 🟨 |
 | 4 | #5 Analytics | ✅ | n/a | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
-| 5 | #4 Eval harness | ✅ (sync) | ✅ | 🟨 (Phase 7) | ✅ | ✅ | ✅ | 🟨 |
+| 5 | #4 Eval harness | ✅ (async worker + SSE + cancel) | ✅ | 🟨 (Phase 7, read tools) | ✅ | ✅ (live progress + filters + bulk) | ✅ | 🟨 |
 | 6 | #10 Slash commands | n/a | n/a | n/a | ✅ | ✅ (all 3 Ask views) | n/a | 🟨 |
 | 7 | #11 MCP surface | ✅ | n/a | ✅ | ✅ | n/a | ✅ | 🟨 |
 | 7.5 | Telemetry & Grafana | ✅ (metrics) | n/a | n/a | ✅ (TELEMETRY.md) | ✅ (Grafana row) | ✅ | 🟨 |

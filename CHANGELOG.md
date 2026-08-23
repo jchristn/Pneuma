@@ -7,6 +7,24 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Conversation thread switcher.** All three dashboards' Ask/chat surfaces gain a conversation switcher: a
+  dropdown listing the subject's recent threads (title + last-activity) with select-to-rehydrate (a past
+  conversation's turns — answers, citations, thinking, and per-turn stats — are reloaded into the chat),
+  "New conversation", inline rename, and inline delete-with-confirm. The admin + creator **History** views add
+  a Conversation column and filter (turns grouped by thread). Backed by the existing `/v1.0/threads` CRUD and
+  `threadId`-on-turn plumbing; the switcher is a shared self-contained component so it drops into each
+  dashboard's chrome. (Completes the deferred UI half of the conversation-threads feature.)
+- **Async, cancellable eval runs with live progress.** RAG evaluation runs are no longer synchronous:
+  `POST /v1.0/eval/runs` now **queues** a `Pending` run and returns immediately; a background
+  `EvalWorkerService` claims it (`EvalRuns.ClaimNextQueuedAsync`, all four providers), answers + LLM-judges each
+  fact, and persists per-fact tallies as it goes — each fact admitted through the shared model-runner gate so
+  eval yields to interactive query/chat traffic. New `GET /v1.0/eval/runs/{id}/stream` streams live progress
+  over SSE (metadata → per-fact `result` → `progress` → `complete`), and `POST /v1.0/eval/runs/{id}/cancel`
+  stops a queued/running run (observed between facts; progress writes are guarded so a cancel is never
+  clobbered). The Eval dashboards (admin + creator) gain a **live progress modal** (progress bar + streaming
+  per-fact pass/fail + pass/partial/fail tallies) with cancel, a results view filterable by
+  category/verdict/failure-mode with an aggregate pass rate, run **status pills**, per-row cancel, and
+  bulk-delete. (Completes the deferred async/SSE half of the eval-harness feature.)
 - **Ingestion labels & tags (scoped retrieval).** Content links can now carry operator-supplied **labels**
   (plain strings) and **tags** (key/value) at submission — single (`POST /v1.0/subjects/{id}/links`) and bulk
   (`.../links/bulk`, applied to every URL). They are persisted on the link and its ingestion job (schema v15,

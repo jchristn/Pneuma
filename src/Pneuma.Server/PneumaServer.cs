@@ -1,6 +1,7 @@
 namespace Pneuma.Server
 {
     using System;
+    using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations.Abstractions;
@@ -42,6 +43,8 @@ namespace Pneuma.Server
         private readonly LoggingModule _Logging;
         private readonly TelemetryService _Telemetry;
         private readonly Webserver _Server;
+        private readonly CancellationTokenSource _Lifetime = new CancellationTokenSource();
+        private EvalWorkerService? _EvalWorker;
         private readonly string _Header = "[PneumaServer] ";
 
         #endregion
@@ -141,15 +144,19 @@ namespace Pneuma.Server
             ConfigureServer();
             ConfigureRoutes();
             _Server.Start();
+            // Background eval worker: processes queued (Pending) evaluation runs off the request path.
+            _EvalWorker?.Start(_Lifetime.Token);
             _Logging.Info(_Header + "listening on " + _Settings.Rest.Hostname + ":" + _Settings.Rest.Port);
         }
 
         /// <summary>Stop the server.</summary>
         public void Stop()
         {
+            _Lifetime.Cancel();
             _Server.Stop();
             _ModelRunnerGate.Dispose();
             _Telemetry.Dispose();
+            _Lifetime.Dispose();
         }
 
         #endregion
@@ -192,6 +199,9 @@ namespace Pneuma.Server
             GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
             new QueryRoutes(_Authorization, groundedQuery, _ModelRunnerGate, _Logging).Register(_Server);
             new EvalRoutes(_Database, _Authorization, groundedQuery, _Logging).Register(_Server);
+            // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
+            // interactive query/chat traffic. Started from Start() with the server's lifetime token.
+            _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
             new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging);

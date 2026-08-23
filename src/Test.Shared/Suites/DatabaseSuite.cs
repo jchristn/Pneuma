@@ -583,6 +583,42 @@ namespace Test.Shared.Suites
                             if ((await db.EvalFacts.EnumerateBySubjectAsync(t.Id, s.Id, ct)).Count != 0) throw new Exception("Fact delete must remove the fact");
                         }),
 
+                    new TestCaseDescriptor("Database", "EvalRun_Claim_Progress_Cancel", "A queued eval run is claimable to Running; progress updates only while Running; a cancel freezes tallies and the queue drains",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "EvW" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "S", UrlSlug = "sw" }, ct);
+
+                            // A Pending run is claimed atomically into Running.
+                            EvalRun run = await db.EvalRuns.CreateAsync(new EvalRun { TenantId = t.Id, SubjectId = s.Id, Status = EvalRunStatusEnum.Pending, TotalFacts = 3 }, ct);
+                            EvalRun? claimed = await db.EvalRuns.ClaimNextQueuedAsync(ct);
+                            if (claimed == null || claimed.Id != run.Id || claimed.Status != EvalRunStatusEnum.Running) throw new Exception("ClaimNextQueued should return the pending run as Running");
+                            EvalRun afterClaim = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct) ?? throw new Exception("run vanished");
+                            if (afterClaim.Status != EvalRunStatusEnum.Running) throw new Exception("claimed run should persist as Running");
+
+                            // Progress updates land while Running.
+                            run.PassCount = 1;
+                            await db.EvalRuns.UpdateProgressAsync(run, ct);
+                            EvalRun afterProgress = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct)!;
+                            if (afterProgress.PassCount != 1 || afterProgress.Status != EvalRunStatusEnum.Running) throw new Exception("progress should persist while Running");
+
+                            // An operator cancel sets the status out-of-band...
+                            run.Status = EvalRunStatusEnum.Cancelled;
+                            run.FinishedUtc = DateTime.UtcNow;
+                            await db.EvalRuns.UpdateAsync(run, ct);
+
+                            // ...after which a stray progress write is a no-op (guarded by status = Running).
+                            run.PassCount = 2;
+                            await db.EvalRuns.UpdateProgressAsync(run, ct);
+                            EvalRun afterCancel = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct)!;
+                            if (afterCancel.Status != EvalRunStatusEnum.Cancelled) throw new Exception("cancel must stick");
+                            if (afterCancel.PassCount != 1) throw new Exception("progress must not clobber a cancelled run's tallies, got " + afterCancel.PassCount);
+
+                            // No Pending runs remain to claim.
+                            if (await db.EvalRuns.ClaimNextQueuedAsync(ct) != null) throw new Exception("no pending runs should remain to claim");
+                        }),
+
                     new TestCaseDescriptor("Database", "Analytics_Report_Aggregates", "Analytics aggregates turn volume, latency percentiles, stages, and feedback",
                         executeAsync: async ct =>
                         {

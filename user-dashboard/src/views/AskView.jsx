@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import Modal from '../components/Modal.jsx';
 import ScopeFilter, { buildScopeFilter } from '../components/ScopeFilter.jsx';
+import ThreadSwitcher from '../components/ThreadSwitcher.jsx';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages.js';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
@@ -329,6 +330,9 @@ export default function AskView() {
   // Optional retrieval scope: narrow answers to content ingested with these labels/tags.
   const [scopeLabels, setScopeLabels] = useState([]);
   const [scopeTags, setScopeTags] = useState([]);
+  // Conversation thread switcher: the open thread and a token that forces the switcher to reload its list.
+  const [activeThreadId, setActiveThreadId] = useState(null);
+  const [threadReload, setThreadReload] = useState(0);
 
   const abortRef = useRef(null);
   const threadIdRef = useRef(null);
@@ -397,7 +401,7 @@ export default function AskView() {
     if (term.startsWith('/')) {
       const cmd = term.slice(1).split(/\s+/)[0].toLowerCase();
       setInput('');
-      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setMessages([]); return; }
+      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setActiveThreadId(null); setMessages([]); return; }
       let info;
       if (cmd === 'help' || cmd === '?') {
         info = '**Commands**\n\n| Command | Description |\n|---|---|\n| `/help` or `/?` | Show this list |\n| `/clear` or `/new` | Start a new conversation |\n| `/context` | Show current context usage |';
@@ -467,7 +471,12 @@ export default function AskView() {
               m.compacting = false;
               m.citations = Array.isArray(evt.citations) ? evt.citations : [];
               m.turnId = evt.turnId || null;
-              if (evt.threadId) threadIdRef.current = evt.threadId;
+              if (evt.threadId) {
+                threadIdRef.current = evt.threadId;
+                // Surface the (possibly newly-created) thread in the switcher and mark it active.
+                setActiveThreadId(evt.threadId);
+                setThreadReload((n) => n + 1);
+              }
               m.thinking = evt.thinking || '';
               m.thinkingEnabled = !!evt.thinkingEnabled;
               m.stats = {
@@ -519,11 +528,58 @@ export default function AskView() {
   const handleNewChat = useCallback(() => {
     if (streaming) return;
     threadIdRef.current = null;
+    setActiveThreadId(null);
     setMessages([]);
     setError(null);
     setInput('');
     setQuestion('');
   }, [streaming]);
+
+  // Rehydrate a past conversation: load its turns and map them into the chat message shape.
+  const loadThread = useCallback(async (threadId) => {
+    if (streaming || !threadId) return;
+    try {
+      const data = await apiClient.getThread(threadId);
+      const turns = (data && data.turns) || [];
+      const msgs = [];
+      for (const turn of turns) {
+        if (turn.question) msgs.push({ role: 'user', content: turn.question });
+        let citations = [];
+        if (turn.citationsJson) { try { citations = JSON.parse(turn.citationsJson) || []; } catch { citations = []; } }
+        const completion = turn.completionTokens || 0;
+        const genMs = turn.generationMs || 0;
+        msgs.push({
+          role: 'assistant',
+          content: turn.answer || '',
+          streaming: false,
+          tools: [],
+          citations,
+          turnId: turn.id,
+          thinking: turn.thinking || '',
+          thinkingEnabled: !!turn.thinking,
+          stats: {
+            model: turn.model || null,
+            promptTokens: turn.promptTokens || 0,
+            completionTokens: completion,
+            totalTokens: turn.totalTokens || 0,
+            timeToFirstTokenMs: turn.timeToFirstTokenMs || 0,
+            generationMs: genMs,
+            tokensPerSecond: genMs > 0 && completion > 0 ? completion / (genMs / 1000) : 0,
+            contextSize: turn.contextSize || 0,
+            thinkingMs: turn.thinkingMs || 0,
+            thinkingEnabled: !!turn.thinking,
+          },
+        });
+      }
+      threadIdRef.current = threadId;
+      setActiveThreadId(threadId);
+      setMessages(msgs);
+      setError(null);
+      setInput('');
+    } catch (err) {
+      setError(err?.message || t('ask.error', 'The assistant failed to respond.'));
+    }
+  }, [apiClient, streaming, t]);
 
   // A slug that resolves to no subject: guide the user back to the subject picker.
   if (slug && subjectMissing) {
@@ -556,6 +612,7 @@ export default function AskView() {
             size="large"
           />
           <div className="scope-row scope-row-hero">
+            <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
             <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
           </div>
           {error ? <div className="error-banner" role="alert">{error}</div> : null}
@@ -572,7 +629,8 @@ export default function AskView() {
           <h1 className="page-title">{subject ? subject.displayName : t('nav.ask', 'Ask')}</h1>
           <p className="page-subtitle">{subject?.tagline || t('ask.heroSubtitle')}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
           <Link className="button button-secondary" to="/">{t('ask.backToSubjects', 'Subjects')}</Link>
           <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
             {t('ask.newChat', 'New chat')}

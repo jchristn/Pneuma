@@ -49,6 +49,28 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EvalRun?> ClaimNextQueuedAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query("SELECT * FROM evalruns WHERE status = 'Pending' ORDER BY createdutc ASC LIMIT 1;", token).ConfigureAwait(false);
+            if (table.Rows.Count == 0) return null;
+            EvalRun run = Map(table.Rows[0]);
+            run.Status = EvalRunStatusEnum.Running;
+            await Query("UPDATE evalruns SET status = 'Running' WHERE id = " + Sanitizer.Str(run.Id) + " AND status = 'Pending';", token).ConfigureAwait(false);
+            return run;
+        }
+
+        /// <inheritdoc />
+        public async Task UpdateProgressAsync(EvalRun run, CancellationToken token = default)
+        {
+            if (run == null) throw new ArgumentNullException(nameof(run));
+            string sql = "UPDATE evalruns SET totalfacts = " + Sanitizer.Num(run.TotalFacts) +
+                ", passcount = " + Sanitizer.Num(run.PassCount) + ", partialcount = " + Sanitizer.Num(run.PartialCount) +
+                ", failcount = " + Sanitizer.Num(run.FailCount) +
+                " WHERE tenantid = " + Sanitizer.Str(run.TenantId) + " AND id = " + Sanitizer.Str(run.Id) + " AND status = 'Running';";
+            await Query(sql, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task<EvalRun> UpdateAsync(EvalRun run, CancellationToken token = default)
         {
             if (run == null) throw new ArgumentNullException(nameof(run));

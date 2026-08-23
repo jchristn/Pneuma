@@ -1249,3 +1249,29 @@ a.relationship-target:hover {
 .scope-hint { margin: 0; font-size: 0.8rem; color: var(--color-text-secondary); }
 .scope-clear { align-self: flex-start; padding: 4px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-size: 0.8rem; cursor: pointer; }
 .scope-clear:hover { color: var(--color-danger); border-color: var(--color-danger); }
+
+/* ---- Conversation thread switcher (Ask view) ------------------------------ */
+.thread-switcher { position: relative; }
+.thread-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text-secondary); font-size: 0.82rem; cursor: pointer; }
+.thread-toggle:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+.thread-toggle:disabled { opacity: 0.6; cursor: default; }
+.thread-panel { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; width: 320px; max-width: 86vw; padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 6px; }
+.thread-new { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-primary); font-size: 0.85rem; cursor: pointer; }
+.thread-new:hover { background: var(--color-bg-accent); border-color: var(--color-primary); }
+.thread-error { font-size: 0.78rem; color: var(--color-danger); padding: 2px 4px; }
+.thread-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.thread-empty { padding: 12px; text-align: center; color: var(--color-text-muted); font-size: 0.82rem; }
+.thread-row { display: flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); padding: 2px; }
+.thread-row:hover { background: var(--color-surface-alt); }
+.thread-row.active { background: var(--color-bg-accent); }
+.thread-select { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; background: transparent; border: none; cursor: pointer; text-align: left; }
+.thread-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; color: var(--color-text); }
+.thread-time { font-size: 0.72rem; color: var(--color-text-muted); }
+.thread-actions { display: none; gap: 2px; padding-right: 4px; }
+.thread-row:hover .thread-actions { display: flex; }
+.thread-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: none; border-radius: 6px; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.thread-icon:hover { background: var(--color-surface); color: var(--color-primary); }
+.thread-danger:hover { color: var(--color-danger); }
+.thread-rename, .thread-confirm { display: flex; align-items: center; gap: 4px; width: 100%; padding: 4px 6px; }
+.thread-rename-input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--color-primary); border-radius: 6px; background: var(--color-surface); color: var(--color-text); font-size: 0.84rem; }
+.thread-confirm-text { flex: 1; font-size: 0.8rem; color: var(--color-text-secondary); }

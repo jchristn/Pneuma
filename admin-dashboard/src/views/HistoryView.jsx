@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
@@ -19,6 +19,8 @@ function HistoryView() {
   const [rows, setRows] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [subjectId, setSubjectId] = useState('');
+  const [threads, setThreads] = useState([]);
+  const [threadId, setThreadId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -39,6 +41,19 @@ function HistoryView() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { apiClient.list('subjects').then((r) => setSubjects(normalizeList(r).items)).catch(() => {}); }, [apiClient]);
+  // Load the thread list for the selected subject so turns can show/filter by their conversation.
+  useEffect(() => {
+    setThreadId('');
+    apiClient.listThreads(subjectId || null).then((r) => setThreads(normalizeList(r).items)).catch(() => setThreads([]));
+  }, [apiClient, subjectId]);
+
+  const threadTitleById = useMemo(() => {
+    const map = {};
+    for (const th of threads) map[th.id] = th.title || t('threads.untitled', 'Untitled');
+    return map;
+  }, [threads, t]);
+  const threadTitle = (id) => (id ? (threadTitleById[id] || truncate(id, 12)) : '—');
+  const visibleRows = useMemo(() => (threadId ? rows.filter((r) => r.threadId === threadId) : rows), [rows, threadId]);
 
   const openDetail = useCallback(async (row) => {
     try {
@@ -52,6 +67,7 @@ function HistoryView() {
   const columns = [
     { key: 'question', label: t('history.question', 'Question'), sortable: false, cellClass: 'wrap', render: (r) => truncate(r.question, 90) },
     { key: 'subjectId', label: t('history.subject', 'Subject'), render: (r) => r.subjectId ? subjectName(r.subjectId) : '—' },
+    { key: 'threadId', label: t('history.thread', 'Conversation'), sortable: false, render: (r) => threadTitle(r.threadId) },
     { key: 'model', label: t('history.model', 'Model'), render: (r) => r.model || '—' },
     { key: 'totalTokens', label: t('history.totalTokens', 'Tokens'), render: (r) => r.totalTokens || ((r.promptTokens || 0) + (r.completionTokens || 0)) },
     { key: 'createdUtc', label: t('history.created', 'Created'), render: (r) => formatDateTime(r.createdUtc) }
@@ -68,9 +84,16 @@ function HistoryView() {
             {subjects.map((s) => <option key={s.id} value={s.id}>{s.displayName || s.name || s.id}</option>)}
           </select>
         </div>
+        <div className="field">
+          <label htmlFor="history-thread">{t('history.thread', 'Conversation')}</label>
+          <select id="history-thread" value={threadId} onChange={(e) => setThreadId(e.target.value)} disabled={threads.length === 0}>
+            <option value="">{t('history.allThreads', 'All conversations')}</option>
+            {threads.map((th) => <option key={th.id} value={th.id}>{th.title || t('threads.untitled', 'Untitled')}</option>)}
+          </select>
+        </div>
       </div>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
-      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openDetail}
+      <DataTable columns={columns} data={visibleRows} loading={loading} onRefresh={load} onRowClick={openDetail}
         emptyMessage={t('history.empty', 'No chat history yet.')} />
 
       {detail && <HistoryDetailModal detail={detail} subjectName={subjectName} onClose={() => setDetail(null)} />}

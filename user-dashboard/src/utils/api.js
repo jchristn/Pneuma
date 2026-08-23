@@ -178,6 +178,30 @@ class ApiClient {
     return this._request('POST', '/v1.0/feedback', { body: { turnId, rating, comment } });
   }
 
+  // ---- Conversation threads --------------------------------------------
+
+  /** List conversation threads (most-recently-active first), optionally scoped to a subject. */
+  async listThreads(subjectId = null) {
+    const query = { maxResults: 1000 };
+    if (subjectId) query.subjectId = subjectId;
+    return this._request('GET', '/v1.0/threads', { query });
+  }
+
+  /** Read a thread and its turns (oldest first): `{ thread, turns }`. */
+  async getThread(id) {
+    return this._request('GET', `/v1.0/threads/${encodeURIComponent(id)}`);
+  }
+
+  /** Rename a thread. */
+  async renameThread(id, title) {
+    return this._request('PUT', `/v1.0/threads/${encodeURIComponent(id)}`, { body: { title } });
+  }
+
+  /** Delete a thread and cascade its turns/tool-calls/feedback. */
+  async deleteThread(id) {
+    return this._request('DELETE', `/v1.0/threads/${encodeURIComponent(id)}`);
+  }
+
   // ---- Subjects --------------------------------------------------------
 
   /** List the subjects available to this user (tenant-scoped). */

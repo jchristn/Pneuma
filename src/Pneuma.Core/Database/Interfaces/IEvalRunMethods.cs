@@ -28,11 +28,27 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Runs, newest first.</returns>
         Task<List<EvalRun>> EnumerateAsync(string tenantId, string? subjectId, CancellationToken token = default);
 
+        /// <summary>
+        /// Atomically claim the oldest <c>Pending</c> run across all tenants, transitioning it to
+        /// <c>Running</c>. Used by the background eval worker; returns null when none are queued.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The claimed run (now <c>Running</c>), or null.</returns>
+        Task<EvalRun?> ClaimNextQueuedAsync(CancellationToken token = default);
+
         /// <summary>Update a run's status and tallies.</summary>
         /// <param name="run">Run to update.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Updated run.</returns>
         Task<EvalRun> UpdateAsync(EvalRun run, CancellationToken token = default);
+
+        /// <summary>
+        /// Update only a run's fact tallies (total/pass/partial/fail) while it is still <c>Running</c> — used
+        /// for per-fact progress so a concurrent cancel (which sets the status) is never clobbered.
+        /// </summary>
+        /// <param name="run">Run whose tallies to persist.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task UpdateProgressAsync(EvalRun run, CancellationToken token = default);
 
         /// <summary>Delete a run by identifier. Idempotent.</summary>
         /// <param name="tenantId">Tenant identifier.</param>

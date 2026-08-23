@@ -87,6 +87,18 @@ const en = {
       copyId: 'Copy node ID',
       view: 'View'
     },
+    threads: {
+      title: 'Conversations',
+      new: 'New conversation',
+      empty: 'No conversations yet.',
+      untitled: 'Untitled',
+      rename: 'Rename',
+      deleteConfirm: 'Delete this conversation?',
+      justNow: 'just now',
+      minutesAgo: '{{count}}m ago',
+      hoursAgo: '{{count}}h ago',
+      daysAgo: '{{count}}d ago'
+    },
     ask: {
       heroTitle: 'Ask a question',
       heroSubtitle: 'Get an answer grounded in the archive, with the sources that support it.',

@@ -309,9 +309,30 @@ class ApiClient {
   evalDeleteRun(id) {
     return this._request('DELETE', `/v1.0/eval/runs/${encodeURIComponent(id)}`);
   }
+  /** Cancel a queued/running eval run. Idempotent; returns the (possibly Cancelled) run. */
+  evalCancelRun(id) {
+    return this._request('POST', `/v1.0/eval/runs/${encodeURIComponent(id)}/cancel`);
+  }
+  /**
+   * Live SSE progress for an eval run. Invokes `onEvent` for each
+   * `metadata` / `result` / `progress` / `complete` / `error` event.
+   */
+  evalRunStream(id, { onEvent, signal } = {}) {
+    return streamSse(this.baseUrl + '/v1.0/eval/runs/' + encodeURIComponent(id) + '/stream', {
+      method: 'GET',
+      headers: this._headers({ Accept: 'text/event-stream' }),
+      signal,
+      onEvent,
+    });
+  }
 
   listThreads(subjectId = null) {
     return this._request('GET', '/v1.0/threads', { query: { maxResults: 1000, ...(subjectId ? { subjectId } : {}) } });
+  }
+
+  // Read a thread and its turns (oldest first): `{ thread, turns }`.
+  getThread(id) {
+    return this._request('GET', `/v1.0/threads/${encodeURIComponent(id)}`);
   }
 
   renameThread(id, title) {

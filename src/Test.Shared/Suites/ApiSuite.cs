@@ -129,6 +129,75 @@ namespace Test.Shared.Suites
                             if (bad.StatusCode != HttpStatusCode.BadRequest) throw new Exception("expected 400 for a link with no URL, got " + (int)bad.StatusCode);
                         }),
 
+                    new TestCaseDescriptor("Api", "Eval_Run_QueuesAndProcesses", "Starting a run queues it (non-blocking) and the background worker drives it to a terminal state; missing subjectId is rejected; cancel is idempotent",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Ada\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+                            if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
+
+                            HttpResponseMessage factResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/facts", token, "{\"subjectId\":\"" + subjectId + "\",\"question\":\"Who?\",\"expectedAnswer\":\"Ada\"}", ct);
+                            if (factResp.StatusCode != HttpStatusCode.Created) throw new Exception("fact create failed: " + (int)factResp.StatusCode);
+
+                            // Start returns immediately with a queued (non-terminal) run.
+                            HttpResponseMessage startResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/runs", token, "{\"subjectId\":\"" + subjectId + "\"}", ct);
+                            if (startResp.StatusCode != HttpStatusCode.Created) throw new Exception("run start failed: " + (int)startResp.StatusCode);
+                            string startBody = await startResp.Content.ReadAsStringAsync(ct);
+                            string runId = ExtractString(startBody, "id");
+                            string startStatus = ExtractString(startBody, "status");
+                            if (String.IsNullOrEmpty(runId)) throw new Exception("run id missing");
+                            if (startStatus == "Completed" || startStatus == "Failed") throw new Exception("run should be queued (Pending/Running), not already " + startStatus);
+
+                            // The background worker drives it to a terminal state.
+                            string finalStatus = String.Empty;
+                            for (int attempt = 0; attempt < 60; attempt++)
+                            {
+                                HttpResponseMessage detailResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/eval/runs/" + runId, token, null, ct);
+                                finalStatus = ExtractString(await detailResp.Content.ReadAsStringAsync(ct), "status");
+                                if (finalStatus == "Completed" || finalStatus == "Failed" || finalStatus == "Cancelled") break;
+                                await Task.Delay(500, ct);
+                            }
+                            if (finalStatus != "Completed" && finalStatus != "Failed" && finalStatus != "Cancelled") throw new Exception("run did not reach a terminal state; last status: " + finalStatus);
+
+                            // Cancel is idempotent on a terminal run.
+                            HttpResponseMessage cancelResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/runs/" + runId + "/cancel", token, null, ct);
+                            if (cancelResp.StatusCode != HttpStatusCode.OK) throw new Exception("cancel should be 200, got " + (int)cancelResp.StatusCode);
+
+                            // Negative: no subjectId → 400.
+                            HttpResponseMessage bad = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/runs", token, "{}", ct);
+                            if (bad.StatusCode != HttpStatusCode.BadRequest) throw new Exception("missing subjectId should be 400, got " + (int)bad.StatusCode);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Threads_Crud_RoundTrip", "A conversation thread can be created, listed, read with its turns, renamed, and deleted (the switcher's API surface)",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            HttpResponseMessage createResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/threads", token, "{\"title\":\"My chat\"}", ct);
+                            if (createResp.StatusCode != HttpStatusCode.Created) throw new Exception("thread create failed: " + (int)createResp.StatusCode);
+                            string threadId = ExtractString(await createResp.Content.ReadAsStringAsync(ct), "id");
+                            if (String.IsNullOrEmpty(threadId)) throw new Exception("thread id missing");
+
+                            HttpResponseMessage listResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/threads", token, null, ct);
+                            if (!(await listResp.Content.ReadAsStringAsync(ct)).Contains(threadId)) throw new Exception("thread not in list");
+
+                            HttpResponseMessage getResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/threads/" + threadId, token, null, ct);
+                            string getBody = await getResp.Content.ReadAsStringAsync(ct);
+                            if (!getBody.Contains("\"thread\"") || !getBody.Contains("\"turns\"")) throw new Exception("thread detail should carry thread + turns (the rehydrate shape)");
+
+                            HttpResponseMessage renameResp = await Send(HttpMethod.Put, server.BaseUrl + "/v1.0/threads/" + threadId, token, "{\"title\":\"Renamed\"}", ct);
+                            if (renameResp.StatusCode != HttpStatusCode.OK || !(await renameResp.Content.ReadAsStringAsync(ct)).Contains("Renamed")) throw new Exception("rename failed");
+
+                            HttpResponseMessage delResp = await Send(HttpMethod.Delete, server.BaseUrl + "/v1.0/threads/" + threadId, token, null, ct);
+                            if (delResp.StatusCode != HttpStatusCode.NoContent) throw new Exception("delete should be 204, got " + (int)delResp.StatusCode);
+                            HttpResponseMessage after = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/threads/" + threadId, token, null, ct);
+                            if (after.StatusCode != HttpStatusCode.NotFound) throw new Exception("deleted thread should be 404, got " + (int)after.StatusCode);
+                        }),
+
                     new TestCaseDescriptor("Api", "TokenRevoke", "A revoked token is rejected",
                         executeAsync: async ct =>
                         {
