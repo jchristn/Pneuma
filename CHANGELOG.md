@@ -7,6 +7,14 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Ask-page model warm-up + summarized chat titles + composer refinements.** Opening an Ask/chat page (or
+  selecting a subject) now fires a best-effort `POST /v1.0/warmup` that issues a minimal completion to the
+  subject's answering model, so the first question isn't slow to first token (Ollama cold-load). A new
+  conversation is now re-titled by the model: once a turn's prompt + response exceeds 500 characters, the
+  answering model summarizes it into a short chat title shown in the Conversations list (otherwise the
+  first-question title stands). The Conversations list shows rename/delete on every row (no longer hover-only)
+  so deleting a conversation is always discoverable. The **Scope** control moved into the composer's input row
+  as a filter icon (same size as send/stop, positioned between them) instead of a separate row.
 - **Conversation thread switcher.** All three dashboards' Ask/chat surfaces gain a conversation switcher: a
   dropdown listing the subject's recent threads (title + last-activity) with select-to-rehydrate (a past
   conversation's turns — answers, citations, thinking, and per-turn stats — are reloaded into the chat),

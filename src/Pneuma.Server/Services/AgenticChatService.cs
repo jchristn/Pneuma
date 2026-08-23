@@ -42,6 +42,14 @@ namespace Pneuma.Server.Services
             "repeated information, and aggressively minimize length. Do not invent anything or answer the latest " +
             "question. Output only the summary.";
 
+        // System prompt used to summarize a new conversation's first turn into a short chat title.
+        private const string _TitleSummaryPrompt =
+            "Summarize the conversation into a short, specific title of at most 6 words. " +
+            "Reply with only the title — no quotes, no trailing punctuation, no preamble.";
+
+        // Minimum combined (prompt + response) length before a conversation is re-titled via the model.
+        private const int _TitleSummaryMinChars = 500;
+
         private const string _FallbackSystemPrompt =
             "You are Pneuma's knowledge assistant. Answer questions about the curated knowledge graph using the " +
             "provided tools to retrieve grounded facts. Prefer pneuma_search to find relevant nodes, then " +
@@ -125,17 +133,19 @@ namespace Pneuma.Server.Services
             }
 
             // Resolve or create the conversation thread this turn belongs to; its id is returned on the complete
-            // event so the client can continue the same conversation.
-            ChatThread thread = (String.IsNullOrWhiteSpace(threadId)
+            // event so the client can continue the same conversation. A freshly-created thread starts with a
+            // first-question title; once this turn's content is substantial it is re-titled via the model below.
+            ChatThread? existingThread = String.IsNullOrWhiteSpace(threadId)
                 ? null
-                : await _Db.ChatThreads.ReadAsync(tenantId, threadId!, token).ConfigureAwait(false))
-                ?? await _Db.ChatThreads.CreateAsync(new ChatThread
-                {
-                    TenantId = tenantId,
-                    SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
-                    UserId = rc.UserId,
-                    Title = MakeThreadTitle(turns)
-                }, token).ConfigureAwait(false);
+                : await _Db.ChatThreads.ReadAsync(tenantId, threadId!, token).ConfigureAwait(false);
+            bool newThread = existingThread == null;
+            ChatThread thread = existingThread ?? await _Db.ChatThreads.CreateAsync(new ChatThread
+            {
+                TenantId = tenantId,
+                SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
+                UserId = rc.UserId,
+                Title = MakeThreadTitle(turns)
+            }, token).ConfigureAwait(false);
 
             Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.system", token).ConfigureAwait(false);
             string systemPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackSystemPrompt : prompt!.Content;
@@ -366,6 +376,17 @@ namespace Pneuma.Server.Services
                 await emit(new { type = "delta", text = finalAnswer }, false, token).ConfigureAwait(false);
             }
 
+            // For a new conversation, once there is enough content (prompt + response over 500 characters),
+            // summarize it into a concise chat title via the model; otherwise the first-question title stands.
+            // Best-effort and bounded — a failure never affects the answer. Done before the complete event so the
+            // returned/persisted title is the summarized one.
+            if (newThread)
+            {
+                string firstQuestion = turns.Count > 0 ? (turns[turns.Count - 1].Content ?? String.Empty) : String.Empty;
+                string? summarizedTitle = await TrySummarizeTitleAsync(client, firstQuestion, finalAnswer, token).ConfigureAwait(false);
+                if (!String.IsNullOrWhiteSpace(summarizedTitle)) thread.Title = summarizedTitle;
+            }
+
             List<object> citations = await ResolveCitationsAsync(tenantId, citedLinkScores, token).ConfigureAwait(false);
 
             // The final inference stage carries the accumulated generation timing and tokens for this turn.
@@ -550,6 +571,43 @@ namespace Pneuma.Server.Services
         private static double ElapsedMs(long startTimestamp)
         {
             return (System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
+        /// <summary>
+        /// Summarize a new conversation's first turn (question + answer) into a concise title using the answering
+        /// model, but only once the combined content exceeds <see cref="_TitleSummaryMinChars"/>. Best-effort:
+        /// returns null when the threshold is not met or the model produces nothing usable.
+        /// </summary>
+        /// <param name="client">The answering model client (reused so no runner is re-resolved).</param>
+        /// <param name="question">The user's question.</param>
+        /// <param name="answer">The produced answer.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A short title, or null.</returns>
+        private async Task<string?> TrySummarizeTitleAsync(CompletionClientBase client, string question, string answer, CancellationToken token)
+        {
+            string combined = (question ?? String.Empty) + "\n\n" + (answer ?? String.Empty);
+            if (combined.Length <= _TitleSummaryMinChars) return null;
+            string input = combined.Length > 2000 ? combined.Substring(0, 2000) : combined;
+            try
+            {
+                ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.2, MaxTokens = 24, SystemPrompt = _TitleSummaryPrompt };
+                ChatResponse response = await client.ChatAsync(input, options, token).ConfigureAwait(false);
+                if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text))
+                {
+                    string title = ThinkParser.Strip(response.Text).Trim().Trim('"', '\'').Replace("\r", " ").Replace("\n", " ").Trim();
+                    if (title.Length > 80) title = title.Substring(0, 80).Trim();
+                    return String.IsNullOrWhiteSpace(title) ? null : title;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _Logging.Debug("[AgenticChatService] title summarization failed: " + e.Message);
+            }
+            return null;
         }
 
         /// <summary>Derive a short conversation title from the first user turn.</summary>

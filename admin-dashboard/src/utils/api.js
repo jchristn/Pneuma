@@ -349,6 +349,11 @@ class ApiClient {
     return this._request('DELETE', `/v1.0/threads/${encodeURIComponent(id)}`);
   }
 
+  // Warm the subject's answering model (best-effort) so the first question isn't slow to first token.
+  warmup(subjectId = null) {
+    return this._request('POST', '/v1.0/warmup', { body: subjectId ? { subjectId } : {} });
+  }
+
   // ---- Chat history + feedback ----------------------------------------
 
   listHistory(subjectId = null) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import LabelTagEditor from './LabelTagEditor';
 
@@ -41,26 +41,52 @@ export function buildScopeFilter(labels, tags) {
  * A compact, collapsible "scope" control that narrows retrieval to content ingested with the chosen labels
  * and tags. `labels` is a string[]; `tags` is a {key,value}[]; `onChange` receives the updated `{ labels, tags }`.
  */
-export default function ScopeFilter({ labels, tags, onChange, disabled = false }) {
+export default function ScopeFilter({ labels, tags, onChange, disabled = false, compact = false }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const active = scopeActiveCount(labels, tags);
+  const rootRef = useRef(null);
+
+  // Close on outside click / Escape (the panel floats over the composer in compact mode).
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
 
   return (
-    <div className={`scope-filter${open ? ' open' : ''}`}>
-      <button
-        type="button"
-        className={`scope-toggle${active > 0 ? ' has-active' : ''}`}
-        onClick={() => setOpen((o) => !o)}
-        disabled={disabled}
-        aria-expanded={open}
-      >
-        <FunnelIcon />
-        <span>{t('ask.scope', 'Scope')}</span>
-        {active > 0 ? <span className="scope-badge">{active}</span> : null}
-      </button>
+    <div className={`scope-filter${compact ? ' scope-compact' : ''}${open ? ' open' : ''}`} ref={rootRef}>
+      {compact ? (
+        <button
+          type="button"
+          className={`chat-send scope-icon-btn${active > 0 ? ' has-active' : ''}`}
+          onClick={() => setOpen((o) => !o)}
+          disabled={disabled}
+          aria-expanded={open}
+          aria-label={t('ask.scope', 'Scope')}
+          title={t('ask.scope', 'Scope')}
+        >
+          <FunnelIcon />
+          {active > 0 ? <span className="scope-dot" aria-hidden="true" /> : null}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={`scope-toggle${active > 0 ? ' has-active' : ''}`}
+          onClick={() => setOpen((o) => !o)}
+          disabled={disabled}
+          aria-expanded={open}
+        >
+          <FunnelIcon />
+          <span>{t('ask.scope', 'Scope')}</span>
+          {active > 0 ? <span className="scope-badge">{active}</span> : null}
+        </button>
+      )}
       {open ? (
-        <div className="scope-panel">
+        <div className={`scope-panel${compact ? ' scope-panel-up' : ''}`}>
           <p className="scope-hint">{t('ask.scopeHint', 'Limit answers to content ingested with these labels and tags.')}</p>
           <LabelTagEditor labels={labels} tags={tags} onChange={onChange} />
           {active > 0 ? (

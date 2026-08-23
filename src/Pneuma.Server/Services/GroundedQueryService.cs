@@ -188,6 +188,24 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
+        /// Warm the subject's answering model by sending a minimal completion, so the first real question does
+        /// not pay the model's cold-load cost (e.g. Ollama loading weights into memory). Best-effort and
+        /// bounded: resolves the runner, sends a tiny prompt, and swallows any failure.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject whose answering model to warm, or null for the tenant default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when a warm-up completion was issued to a resolved runner.</returns>
+        public async Task<bool> WarmupAsync(string tenantId, string? subjectId, CancellationToken token = default)
+        {
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
+            if (runner == null) return false;
+            await CompleteTextAsync(runner, "You are warming up. Reply with the single word: ok.", "ok", 1, token).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <summary>
         /// Run a one-shot completion using a subject's answering model (its inference model, or the tenant
         /// default). Used by the evaluation harness to judge a produced answer against a ground-truth answer.
         /// </summary>

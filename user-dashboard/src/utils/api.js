@@ -202,6 +202,11 @@ class ApiClient {
     return this._request('DELETE', `/v1.0/threads/${encodeURIComponent(id)}`);
   }
 
+  /** Warm the subject's answering model (best-effort) so the first question isn't slow to first token. */
+  async warmup(subjectId = null) {
+    return this._request('POST', '/v1.0/warmup', { body: subjectId ? { subjectId } : {} });
+  }
+
   // ---- Subjects --------------------------------------------------------
 
   /** List the subjects available to this user (tenant-scoped). */

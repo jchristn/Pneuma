@@ -66,11 +66,37 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question of the corpus", "Search"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query/stream", QueryStreamAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question and stream the answer (SSE)", "Search"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/warmup", WarmupAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Warm the answering model so the first question is fast", "Search"));
         }
 
         #endregion
 
         #region Private-Methods
+
+        private async Task WarmupAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await _Authz.AuthorizeAsync(rc, ResourceTypeEnum.GraphNode, OperationTypeEnum.Read, null, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 403, "Forbidden", "Not permitted.").ConfigureAwait(false);
+                return;
+            }
+
+            // Best-effort: an empty/tiny completion loads the model on its runner ahead of the first question.
+            QueryRequest? request = RouteHelper.ReadBody<QueryRequest>(ctx);
+            string tenantId = rc.TenantId ?? String.Empty;
+            bool warmed = false;
+            try
+            {
+                warmed = await _Query.WarmupAsync(tenantId, request?.SubjectId, ctx.Token).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                _Logging.Debug("[QueryRoutes] warmup failed: " + e.Message);
+            }
+            await RouteHelper.SendJsonAsync(ctx, 200, new { warmed }).ConfigureAwait(false);
+        }
 
         private async Task QueryAsync(HttpContextBase ctx)
         {

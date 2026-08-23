@@ -368,6 +368,11 @@ function AskView() {
     return () => { cancelled = true; };
   }, [apiClient]);
 
+  // Proactively warm the selected subject's answering model so the first question isn't slow to first token.
+  useEffect(() => {
+    if (subjectId) apiClient.warmup(subjectId).catch(() => {});
+  }, [apiClient, subjectId]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -671,9 +676,6 @@ function AskView() {
       {error ? <ErrorBanner message={error} /> : null}
 
       <div className="chat-composer">
-        <div className="scope-row">
-          <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
-        </div>
         <div className="chat-input-wrap">
           <textarea
             ref={textareaRef}
@@ -688,6 +690,7 @@ function AskView() {
             autoFocus
           />
           <button type="button" className="chat-send" onClick={handleSend} disabled={streaming || !input.trim() || !subjectId} aria-label={t('ask.submit', 'Send')}>➤</button>
+          <ScopeFilter compact labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
           <button type="button" className="chat-send chat-stop" onClick={handleStop} disabled={!streaming} aria-label={t('ask.stop', 'Stop')}>■</button>
         </div>
         <p className="chat-disclaimer">{t('ask.disclaimer', 'AI can make mistakes. Please verify all information.')}</p>

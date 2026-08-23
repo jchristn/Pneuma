@@ -347,7 +347,12 @@ export default function AskView() {
     if (!slug) { setSubject(null); setSubjectMissing(false); return undefined; }
     setSubjectMissing(false);
     apiClient.getSubjectBySlug(slug)
-      .then((s) => { if (!cancelled) setSubject(s); })
+      .then((s) => {
+        if (cancelled) return;
+        setSubject(s);
+        // Proactively warm this subject's answering model so the first question isn't slow to first token.
+        apiClient.warmup(s?.id || null).catch(() => {});
+      })
       .catch(() => { if (!cancelled) { setSubject(null); setSubjectMissing(true); } });
     return () => { cancelled = true; };
   }, [apiClient, slug]);
@@ -689,9 +694,6 @@ export default function AskView() {
       {error ? <div className="error-banner" role="alert">{error}</div> : null}
 
       <div className="chat-composer">
-        <div className="scope-row">
-          <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
-        </div>
         <div className="chat-input-wrap">
           <textarea
             ref={textareaRef}
@@ -705,6 +707,7 @@ export default function AskView() {
             autoFocus
           />
           <button type="button" className="chat-send" onClick={() => send(input)} disabled={streaming || !input.trim()} aria-label={t('ask.submit')}>➤</button>
+          <ScopeFilter compact labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
           <button type="button" className="chat-send chat-stop" onClick={handleStop} disabled={!streaming} aria-label={t('ask.stop', 'Stop')}>■</button>
         </div>
         <p className="chat-disclaimer">{t('ask.disclaimer', 'AI can make mistakes. Please verify all information.')}</p>
