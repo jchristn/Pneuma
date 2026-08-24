@@ -35,7 +35,7 @@
     },
     {
       "key": "subjectSlug",
-      "value": "chuck-d"
+      "value": "example-subject"
     },
     {
       "key": "turnId",
@@ -159,7 +159,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Chuck\",\n  \"lastName\": \"D\",\n  \"email\": \"subject@pneuma\",\n  \"password\": \"changeme\",\n  \"isTenantAdmin\": true\n}"
+              "raw": "{\n  \"firstName\": \"Sample\",\n  \"lastName\": \"User\",\n  \"email\": \"subject@pneuma\",\n  \"password\": \"changeme\",\n  \"isTenantAdmin\": true\n}"
             },
             "url": "{{baseUrl}}/v1.0/users"
           }
@@ -367,7 +367,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null\n}"
+              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects"
           }
@@ -406,7 +406,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Chuck_D\",\n  \"title\": \"Chuck D - Wikipedia\",\n  \"labels\": [\"biography\", \"music\"],\n  \"tags\": {\n    \"rights\": \"public\",\n    \"source\": \"wikipedia\"\n  }\n}"
+              "raw": "{\n  \"url\": \"https://example.com/about\",\n  \"title\": \"Example Subject - Overview\",\n  \"labels\": [\"reference\"],\n  \"tags\": {\n    \"rights\": \"public\",\n    \"source\": \"example\"\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links"
           }
@@ -423,7 +423,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"urls\": [\n    \"https://en.wikipedia.org/wiki/Chuck_D\",\n    \"https://en.wikipedia.org/wiki/Public_Enemy_(band)\"\n  ],\n  \"labels\": [\"music\"],\n  \"tags\": {\n    \"source\": \"wikipedia\"\n  }\n}"
+              "raw": "{\n  \"urls\": [\n    \"https://example.com/about\",\n    \"https://example.com/overview\"\n  ],\n  \"labels\": [\"reference\"],\n  \"tags\": {\n    \"source\": \"example\"\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links/bulk"
           }
@@ -540,7 +540,7 @@
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Chuck D\",\n  \"type\": \"Person\",\n  \"description\": \"Public Enemy front man\",\n  \"tagline\": \"Ask about Chuck D — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"chuck-d\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Chuck D's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\"\n}"
+              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"example-subject\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Example Subject's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\"\n}"
             }
           }
         },
@@ -590,7 +590,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"What themes recur in Chuck D's work?\",\n  \"maxResults\": 8,\n  \"metadataFilter\": {\n    \"requiredLabels\": [\"music\"],\n    \"excludedLabels\": [],\n    \"requiredTags\": [\n      { \"key\": \"rights\", \"condition\": \"Equals\", \"value\": \"public\" }\n    ],\n    \"excludedTags\": []\n  }\n}"
+              "raw": "{\n  \"question\": \"What themes recur in Example Subject's work?\",\n  \"maxResults\": 8,\n  \"metadataFilter\": {\n    \"requiredLabels\": [\"reference\"],\n    \"excludedLabels\": [],\n    \"requiredTags\": [\n      { \"key\": \"rights\", \"condition\": \"Equals\", \"value\": \"public\" }\n    ],\n    \"excludedTags\": []\n  }\n}"
             },
             "url": "{{baseUrl}}/v1.0/query"
           }

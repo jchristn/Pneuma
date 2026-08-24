@@ -57,8 +57,8 @@ completion_endpoint_id = endpoints["completion"][0]["id"]
 
 client.submit_link(
     subject_id,
-    url="https://example.com/track",
-    title="A Track",
+    url="https://example.com/article",
+    title="Overview article",
     # Optional operator-supplied metadata that rides along with every chunk.
     labels=["live", "1965"],
     tags={"source": "official", "rights": "cleared"},

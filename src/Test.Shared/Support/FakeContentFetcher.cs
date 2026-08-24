@@ -12,7 +12,7 @@ namespace Test.Shared.Support
 
         /// <summary>Instantiate with the given text as the fetched content.</summary>
         /// <param name="content">Content to return for any URL.</param>
-        public FakeContentFetcher(string content = "Public Enemy released the album It Takes a Nation of Millions in 1988.")
+        public FakeContentFetcher(string content = "Example Subject was founded in 2010 and is headquartered in Example City.")
         {
             _Bytes = Encoding.UTF8.GetBytes(content);
         }

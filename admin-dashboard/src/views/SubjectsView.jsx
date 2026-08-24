@@ -90,7 +90,7 @@ function SubjectsView() {
   ];
   const formFields = [
     // Line 1
-    { name: 'displayName', label: 'Display Name', required: true, tip: 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content you ingest is scoped to it.' },
+    { name: 'displayName', label: 'Display Name', required: true, tip: 'The name of the subject this archive is about (for example, a person, product, company, place, or topic). All content you ingest is scoped to it.' },
     { name: 'type', label: 'Type', type: 'text', placeholder: 'Person', default: 'Person', tip: 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.' },
     // Line 2
     { name: 'urlSlug', label: 'URL Slug', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify, tip: 'URL-safe slug used to reach this subject in the user dashboard (must be unique within the tenant). Auto-derived from the display name.' },

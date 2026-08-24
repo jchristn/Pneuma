@@ -32,18 +32,18 @@ namespace Test.Shared.Suites
                             {
                                 Nodes = new List<CandidateNode>
                                 {
-                                    new CandidateNode { Ref = "n1", NodeType = "Record", Name = "It Takes a Nation" },
-                                    new CandidateNode { Ref = "n2", NodeType = "Track", Name = "Bring the Noise" }
+                                    new CandidateNode { Ref = "n1", NodeType = "Collection", Name = "Example Collection" },
+                                    new CandidateNode { Ref = "n2", NodeType = "Work", Name = "Example Work" }
                                 },
                                 Edges = new List<CandidateEdge>
                                 {
-                                    new CandidateEdge { FromRef = "n1", ToRef = "n2", EdgeType = "HAS_TRACK" }
+                                    new CandidateEdge { FromRef = "n1", ToRef = "n2", EdgeType = "HAS_PART" }
                                 }
                             };
 
                             MergeResult result = await merger.MergeAsync(sub, "ten_x", "sub_x", source.Id, "job_x", ct);
                             if (result.NodeIds.Count < 2) throw new Exception("Expected at least 2 merged nodes");
-                            // 1 HAS_TRACK + 2 DERIVED_FROM_SOURCE provenance edges = 3
+                            // 1 HAS_PART + 2 DERIVED_FROM_SOURCE provenance edges = 3
                             if (graph.EdgeCount < 3) throw new Exception("Expected relationship + provenance edges, got " + graph.EdgeCount);
                         }),
 
@@ -55,14 +55,14 @@ namespace Test.Shared.Suites
 
                             CandidateSubgraph first = new CandidateSubgraph
                             {
-                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "a", NodeType = "Person", Name = "Chuck D", CanonicalName = "Chuck D" } }
+                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "a", NodeType = "Person", Name = "Example Person", CanonicalName = "Example Person" } }
                             };
                             await merger.MergeAsync(first, "ten_x", "sub_x", null, "job_1", ct);
                             int afterFirst = graph.NodeCount;
 
                             CandidateSubgraph second = new CandidateSubgraph
                             {
-                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "b", NodeType = "Person", Name = "Chuck D", CanonicalName = "Chuck D" } }
+                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "b", NodeType = "Person", Name = "Example Person", CanonicalName = "Example Person" } }
                             };
                             await merger.MergeAsync(second, "ten_x", "sub_x", null, "job_2", ct);
 
@@ -76,8 +76,8 @@ namespace Test.Shared.Suites
                             SubgraphMerger merger = new SubgraphMerger(graph);
                             CandidateSubgraph sub = new CandidateSubgraph
                             {
-                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "n1", NodeType = "Track", Name = "Song" } },
-                                Edges = new List<CandidateEdge> { new CandidateEdge { FromRef = "n1", ToRef = "missing", EdgeType = "HAS_TRACK" } }
+                                Nodes = new List<CandidateNode> { new CandidateNode { Ref = "n1", NodeType = "Work", Name = "Example Work" } },
+                                Edges = new List<CandidateEdge> { new CandidateEdge { FromRef = "n1", ToRef = "missing", EdgeType = "HAS_PART" } }
                             };
                             await merger.MergeAsync(sub, "ten_x", "sub_x", null, "job_x", ct);
                             if (graph.EdgeCount != 0) throw new Exception("Edge with an unresolved ref should have been skipped");

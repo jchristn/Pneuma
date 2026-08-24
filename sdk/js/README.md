@@ -58,8 +58,8 @@ const embeddingEndpointId = endpoints.embedding[0].id;
 const completionEndpointId = endpoints.completion[0].id;
 
 await client.submitLink(subject.id, {
-    url: 'https://example.com/track',
-    title: 'New single',
+    url: 'https://example.com/article',
+    title: 'Overview article',
     embeddingEndpointId,
     completionEndpointId,
     // Optional operator-supplied metadata that rides along with every chunk.

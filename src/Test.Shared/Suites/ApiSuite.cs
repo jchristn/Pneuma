@@ -78,7 +78,7 @@ namespace Test.Shared.Suites
                             // subject configured with it, then submit a link carrying only the URL.
                             string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Example Subject\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
                             string subjectBody = await subjectResp.Content.ReadAsStringAsync(ct);
                             string subjectId = ExtractString(subjectBody, "id");
                             if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
@@ -105,7 +105,7 @@ namespace Test.Shared.Suites
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
                             string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Example Subject\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
                             string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
                             if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
 
@@ -265,11 +265,11 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            HttpResponseMessage resp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"The Bomb Squad\",\"type\":\"Person\"}", ct);
+                            HttpResponseMessage resp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"The Example Project\",\"type\":\"Person\"}", ct);
                             if (resp.StatusCode != HttpStatusCode.Created) throw new Exception("subject create failed: " + (int)resp.StatusCode);
                             string body = await resp.Content.ReadAsStringAsync(ct);
                             string slug = ExtractString(body, "graphRootNodeId");
-                            if (slug != "the-bomb-squad") throw new Exception("expected slug 'the-bomb-squad', got '" + slug + "'");
+                            if (slug != "the-example-project") throw new Exception("expected slug 'the-example-project', got '" + slug + "'");
                         }),
 
                     new TestCaseDescriptor("Api", "Job_Stop_And_Log", "An ingestion job can be stopped and its log fetched",
@@ -442,7 +442,7 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Chuck D\",\"type\":\"Person\"}", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Example Subject\",\"type\":\"Person\"}", ct);
                             if (subjectResp.StatusCode != HttpStatusCode.Created) throw new Exception("subject create failed: " + (int)subjectResp.StatusCode);
 
                             string request = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_enumerate_subjects\",\"arguments\":{\"maxResults\":10,\"skip\":0}}}";
@@ -450,7 +450,7 @@ namespace Test.Shared.Suites
                             if (response.StatusCode != HttpStatusCode.OK) throw new Exception("tools/call not 200: " + (int)response.StatusCode);
                             string body = await response.Content.ReadAsStringAsync(ct);
                             if (!body.Contains("totalRecords")) throw new Exception("the enumeration result must carry totalRecords");
-                            if (!body.Contains("Chuck D")) throw new Exception("the enumeration should include the created subject summary");
+                            if (!body.Contains("Example Subject")) throw new Exception("the enumeration should include the created subject summary");
                         }),
 
                     new TestCaseDescriptor("Api", "Mcp_GetSubject_MatchesRestTwin", "pneuma_get_subject returns the same object as the REST subject endpoint",
@@ -459,7 +459,7 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Public Enemy\",\"type\":\"Person\"}", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Another Subject\",\"type\":\"Person\"}", ct);
                             string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
                             if (String.IsNullOrEmpty(subjectId)) throw new Exception("subject id missing");
 
@@ -495,12 +495,12 @@ namespace Test.Shared.Suites
                             await using TestServer server = await TestServer.CreateAsync(ct);
                             string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
 
-                            string request = "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{\"displayName\":\"Chuck D\",\"urlSlug\":\"chuck-d\",\"thinkingEnabled\":true}}}";
+                            string request = "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_subject\",\"arguments\":{\"displayName\":\"Example Subject\",\"urlSlug\":\"example-subject\",\"thinkingEnabled\":true}}}";
                             HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, request, ct);
                             if (response.StatusCode != HttpStatusCode.OK) throw new Exception("create call not 200: " + (int)response.StatusCode);
                             string body = await response.Content.ReadAsStringAsync(ct);
-                            if (!body.Contains("chuck-d")) throw new Exception("created subject should carry its slug; got: " + body);
-                            if (!body.Contains("Chuck D")) throw new Exception("created subject should carry its display name");
+                            if (!body.Contains("example-subject")) throw new Exception("created subject should carry its slug; got: " + body);
+                            if (!body.Contains("Example Subject")) throw new Exception("created subject should carry its display name");
                         }),
 
                     new TestCaseDescriptor("Api", "Mcp_CreateSubject_MissingDisplayName_Errors", "pneuma_create_subject without displayName returns an invalid-params error",

@@ -8,7 +8,7 @@ This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that o
 
 ## Use cases
 
-- **Subject living archives.** Give any kind of subject a curated, searchable knowledge graph of their work that they control — records, tracks, lyrics, events, collaborators, themes, and the relationships among them.
+- **Subject living archives.** Give any kind of subject a curated, searchable knowledge graph of the material about it that you control — documents, works, people, organizations, events, topics, and the relationships among them.
 - **Grounded fan experiences.** Back an "Ask" experience with retrieval that cites its sources, so answers come from the subject's corpus rather than open-web guesswork.
 - **Rights-aware publishing.** Attach rights and provenance metadata to every node and edge so retrieval and display can honor subject-owned, licensed, public-domain, and restricted material differently.
 

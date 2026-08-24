@@ -260,7 +260,7 @@ namespace Test.Shared.Suites
         private static async Task<Context> SeedJobAsync(DatabaseDriverBase db, FakeRecallDbClient recall, bool createCollection, System.Threading.CancellationToken ct, List<string>? labels = null, Dictionary<string, string>? tags = null)
         {
             Tenant tenant = await db.Tenants.CreateAsync(new Tenant { Name = "IngestTenant" }, ct);
-            Subject subject = await db.Subjects.CreateAsync(new Subject { TenantId = tenant.Id, DisplayName = "Chuck D" }, ct);
+            Subject subject = await db.Subjects.CreateAsync(new Subject { TenantId = tenant.Id, DisplayName = "Example Subject" }, ct);
             SubjectLink link = await db.SubjectLinks.CreateAsync(new SubjectLink
             {
                 TenantId = tenant.Id, SubjectId = subject.Id, Url = "https://example.com/artifact",

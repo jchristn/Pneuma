@@ -95,8 +95,8 @@ string completionEndpointId = endpoints.Completion[0].Id;
 // Submit a content link; this enqueues an ingestion job.
 SubjectLink link = await client.SubmitLinkAsync(subject.Id, new SubmitLinkRequest
 {
-    Url = "https://example.com/discography",
-    Title = "Discography",
+    Url = "https://example.com/article",
+    Title = "Overview article",
     EmbeddingEndpointId = embeddingEndpointId,
     CompletionEndpointId = completionEndpointId
 });

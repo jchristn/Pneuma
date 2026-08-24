@@ -268,8 +268,8 @@ function SubjectsView() {
       >
         <form onSubmit={handleSave}>
           {formError && <div className="form-error">{formError}</div>}
-          <div className="form-group" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}>
-            <label htmlFor="cd-name" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}>
+          <div className="form-group" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (for example, a person, product, company, place, or topic). All content ingested is scoped to it. Required.')}>
+            <label htmlFor="cd-name" title={t('subjects.displayNameTip', 'The name of the subject this archive is about (for example, a person, product, company, place, or topic). All content ingested is scoped to it. Required.')}>
               {t('subjects.displayName')} <span className="required-mark">*</span>
             </label>
             <input
@@ -277,7 +277,7 @@ function SubjectsView() {
               value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })}
               required
-              title={t('subjects.displayNameTip', 'The name of the subject this archive is about (e.g. "Ada Lovelace"). All content ingested is scoped to it. Required.')}
+              title={t('subjects.displayNameTip', 'The name of the subject this archive is about (for example, a person, product, company, place, or topic). All content ingested is scoped to it. Required.')}
             />
           </div>
           <div className="form-group" title={t('subjects.typeTip', 'A free-form category (Person, Product, Topic…). Descriptive only — it does not restrict what you can ingest.')}>

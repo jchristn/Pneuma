@@ -193,11 +193,13 @@ namespace Pneuma.Core.Database
             // phrase and the absence of a sentinel phrase unique to the current default — replace it with the current
             // default so newer guidance lands without wiping data or clobbering admin edits. Bumping a sentinel when
             // its default changes re-heals copies healed by an older pass.
-            // The music-specific default ontology is replaced with the domain-neutral one; the sentinel "any kind of
-            // subject" is unique to the new definition.
+            // The previous vertical-specific default ontology is replaced with the domain-neutral one; the sentinel
+            // "any kind of subject" is unique to the new definition. The expected prefix matches the old stored
+            // default so only unedited copies are healed.
             await HealPromptAsync(db, "ontology.definition", "The ontology describes a musical subject's world.", DefaultOntologyDefinitionPrompt, "any kind of subject", token).ConfigureAwait(false);
-            // The user-answer default dropped its music/celebrity-specific "a fan's question" opening; the sentinel
-            // "user's question about the subject" is unique to the new wording, re-healing older ("fan's") copies.
+            // The user-answer default dropped its previous vertical-specific opening; the sentinel
+            // "user's question about the subject" is unique to the new wording, re-healing older copies. The expected
+            // prefix matches the old stored default so only unedited copies are healed.
             await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, "user's question about the subject", token).ConfigureAwait(false);
             await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, "internal object kinds", token).ConfigureAwait(false);
         }

@@ -230,8 +230,8 @@ export default function SetupWizard({ onClose }) {
 
       {step === 1 && (
         <div className="wiz-panel wiz-grid">
-          <Field label="Display name" tip="What this subject is called. Everything you ingest here is scoped to it — e.g. 'Ada Lovelace' or 'Acme CRM'.">
-            <input value={subject.displayName} onChange={(e) => setSubject({ ...subject, displayName: e.target.value })} placeholder="Ada Lovelace" autoFocus />
+          <Field label="Display name" tip="What this subject is called. Everything you ingest here is scoped to it — a subject can be a person, product, company, place, or topic.">
+            <input value={subject.displayName} onChange={(e) => setSubject({ ...subject, displayName: e.target.value })} placeholder="Name of the subject" autoFocus />
           </Field>
           <Field label="Type" tip="A free-form category for the subject (Person, Product, Topic…). Purely descriptive; it does not restrict ingestion.">
             <input value={subject.type} onChange={(e) => setSubject({ ...subject, type: e.target.value })} placeholder="Person" />

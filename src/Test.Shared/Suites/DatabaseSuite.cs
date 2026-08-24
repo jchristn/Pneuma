@@ -423,7 +423,7 @@ namespace Test.Shared.Suites
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
                             Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "LinkFields" }, ct);
-                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Chuck D" }, ct);
+                            Subject s = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Example Subject" }, ct);
 
                             List<string> labels = new List<string> { "news", "2024" };
                             Dictionary<string, string> tags = new Dictionary<string, string> { { "author", "jane" }, { "rights", "public" } };
