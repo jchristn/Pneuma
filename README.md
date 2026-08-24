@@ -3,7 +3,7 @@
 
 <h1 align="center">Pneuma — breathing life into your information</h1>
 
-<p align="center"><strong>v0.1.0 · Alpha</strong></p>
+<p align="center"><strong>v0.1.0 · ALPHA</strong></p>
 
 > **This is alpha software.** Everything in Pneuma — APIs, database schemas, configuration, dashboards, and defaults — is subject to change without notice while the project is in its `0.x` series. Pneuma will adopt [semantic versioning](https://semver.org/) at its stable **1.0** release; until then, treat every build as a moving target and pin the exact version you deploy.
 
