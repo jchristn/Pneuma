@@ -940,7 +940,7 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .thread-confirm-text { flex: 1; font-size: 0.8rem; color: var(--color-text-secondary); }
 
 /* ---- Scope filter as an in-composer icon (between send and stop) ----------- */
-.scope-filter.scope-compact { display: inline-flex; }
+.scope-filter.scope-compact { display: inline-flex; width: auto; max-width: none; flex: 0 0 auto; }
 .scope-icon-btn { position: relative; }
 .scope-panel.scope-panel-up { top: auto; bottom: calc(100% + 8px); left: auto; right: 0; width: 320px; max-width: 86vw; }
 .scope-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--color-primary); }
