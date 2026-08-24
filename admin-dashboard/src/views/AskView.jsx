@@ -328,6 +328,7 @@ function AskView() {
   const [scopeTags, setScopeTags] = useState([]);
   // Conversation thread switcher: the open thread and a token that forces the switcher to reload its list.
   const [activeThreadId, setActiveThreadId] = useState(null);
+  const [activeThreadTitle, setActiveThreadTitle] = useState('');
   const [threadReload, setThreadReload] = useState(0);
 
   const abortRef = useRef(null);
@@ -404,7 +405,7 @@ function AskView() {
     if (term.startsWith('/')) {
       const cmd = term.slice(1).split(/\s+/)[0].toLowerCase();
       setInput('');
-      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setActiveThreadId(null); setMessages([]); setError(null); return; }
+      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setActiveThreadId(null); setActiveThreadTitle(''); setMessages([]); setError(null); return; }
       let info;
       if (cmd === 'help' || cmd === '?') {
         info = '**Commands**\n\n| Command | Description |\n|---|---|\n| `/help` or `/?` | Show this list |\n| `/clear` or `/new` | Start a new conversation |\n| `/context` | Show current context usage |\n| `/compact` | Compaction is automatic (informational) |';
@@ -479,6 +480,7 @@ function AskView() {
               if (evt.threadId) {
                 threadIdRef.current = evt.threadId;
                 setActiveThreadId(evt.threadId);
+                if (evt.threadTitle) setActiveThreadTitle(evt.threadTitle);
                 setThreadReload((n) => n + 1);
               }
               m.thinking = evt.thinking || '';
@@ -576,6 +578,7 @@ function AskView() {
       }
       threadIdRef.current = threadId;
       setActiveThreadId(threadId);
+      setActiveThreadTitle((data && data.thread && data.thread.title) || '');
       if (turns[0] && turns[0].subjectId) setSubjectId(turns[0].subjectId);
       setMessages(msgs);
       setError(null);
@@ -590,7 +593,7 @@ function AskView() {
       <div className="chat-view-head">
         <div>
           <h1 className="page-title">{t('nav.ask', 'Ask')}</h1>
-          <p className="page-subtitle">{t('ask.subtitle', 'Chat with the corpus. The assistant can search and traverse the knowledge graph to answer.')}</p>
+          <p className="page-subtitle">{activeThreadTitle || t('ask.subtitle', 'Chat with the corpus. The assistant can search and traverse the knowledge graph to answer.')}</p>
         </div>
         <div className="chat-head-actions">
           <label className="chat-subject-picker">

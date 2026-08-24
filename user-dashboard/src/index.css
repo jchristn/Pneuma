@@ -1255,7 +1255,7 @@ a.relationship-target:hover {
 .thread-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text-secondary); font-size: 0.82rem; cursor: pointer; }
 .thread-toggle:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 .thread-toggle:disabled { opacity: 0.6; cursor: default; }
-.thread-panel { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; width: 320px; max-width: 86vw; padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 6px; }
+.thread-panel { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; left: auto; width: 320px; max-width: 86vw; padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 6px; }
 .thread-new { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-primary); font-size: 0.85rem; cursor: pointer; }
 .thread-new:hover { background: var(--color-bg-accent); border-color: var(--color-primary); }
 .thread-error { font-size: 0.78rem; color: var(--color-danger); padding: 2px 4px; }

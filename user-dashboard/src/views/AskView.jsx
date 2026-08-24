@@ -332,6 +332,7 @@ export default function AskView() {
   const [scopeTags, setScopeTags] = useState([]);
   // Conversation thread switcher: the open thread and a token that forces the switcher to reload its list.
   const [activeThreadId, setActiveThreadId] = useState(null);
+  const [activeThreadTitle, setActiveThreadTitle] = useState('');
   const [threadReload, setThreadReload] = useState(0);
 
   const abortRef = useRef(null);
@@ -406,7 +407,7 @@ export default function AskView() {
     if (term.startsWith('/')) {
       const cmd = term.slice(1).split(/\s+/)[0].toLowerCase();
       setInput('');
-      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setActiveThreadId(null); setMessages([]); return; }
+      if (cmd === 'clear' || cmd === 'new') { threadIdRef.current = null; setActiveThreadId(null); setActiveThreadTitle(''); setMessages([]); return; }
       let info;
       if (cmd === 'help' || cmd === '?') {
         info = '**Commands**\n\n| Command | Description |\n|---|---|\n| `/help` or `/?` | Show this list |\n| `/clear` or `/new` | Start a new conversation |\n| `/context` | Show current context usage |';
@@ -478,8 +479,10 @@ export default function AskView() {
               m.turnId = evt.turnId || null;
               if (evt.threadId) {
                 threadIdRef.current = evt.threadId;
-                // Surface the (possibly newly-created) thread in the switcher and mark it active.
+                // Surface the (possibly newly-created) thread in the switcher and mark it active. The title may
+                // have been (re)summarized this turn, so reflect it live in the header.
                 setActiveThreadId(evt.threadId);
+                if (evt.threadTitle) setActiveThreadTitle(evt.threadTitle);
                 setThreadReload((n) => n + 1);
               }
               m.thinking = evt.thinking || '';
@@ -534,6 +537,7 @@ export default function AskView() {
     if (streaming) return;
     threadIdRef.current = null;
     setActiveThreadId(null);
+    setActiveThreadTitle('');
     setMessages([]);
     setError(null);
     setInput('');
@@ -578,6 +582,7 @@ export default function AskView() {
       }
       threadIdRef.current = threadId;
       setActiveThreadId(threadId);
+      setActiveThreadTitle((data && data.thread && data.thread.title) || '');
       setMessages(msgs);
       setError(null);
       setInput('');
@@ -632,7 +637,7 @@ export default function AskView() {
       <div className="chat-view-head">
         <div>
           <h1 className="page-title">{subject ? subject.displayName : t('nav.ask', 'Ask')}</h1>
-          <p className="page-subtitle">{subject?.tagline || t('ask.heroSubtitle')}</p>
+          <p className="page-subtitle">{activeThreadTitle || subject?.tagline || t('ask.heroSubtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
