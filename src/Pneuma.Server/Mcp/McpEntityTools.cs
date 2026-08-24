@@ -77,7 +77,17 @@ namespace Pneuma.Server.Mcp
             string tenantId = rc.TenantId ?? String.Empty;
             string? subjectId = GetOptionalString(arguments, "subjectId");
             List<ChatThread> threads = String.IsNullOrEmpty(tenantId) ? new List<ChatThread>() : await _Db.ChatThreads.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
-            return new { objects = threads };
+
+            EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
+            EnumerationResult<ChatThread> page = EnumerationHelper.Paginate(threads, query, t => t.LastActivityUtc, t => t.Title);
+
+            List<object> summaries = new List<object>();
+            foreach (ChatThread thread in page.Objects)
+            {
+                summaries.Add(new { id = thread.Id, subjectId = thread.SubjectId, title = thread.Title, lastActivityUtc = thread.LastActivityUtc });
+            }
+
+            return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
         }
 
         /// <summary>Enumerate chat feedback, optionally scoped to a subject.</summary>
@@ -90,7 +100,17 @@ namespace Pneuma.Server.Mcp
             string tenantId = rc.TenantId ?? String.Empty;
             string? subjectId = GetOptionalString(arguments, "subjectId");
             List<ChatFeedback> feedback = String.IsNullOrEmpty(tenantId) ? new List<ChatFeedback>() : await _Db.ChatFeedback.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
-            return new { objects = feedback };
+
+            EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
+            EnumerationResult<ChatFeedback> page = EnumerationHelper.Paginate(feedback, query, f => f.CreatedUtc, f => f.Comment);
+
+            List<object> summaries = new List<object>();
+            foreach (ChatFeedback item in page.Objects)
+            {
+                summaries.Add(new { id = item.Id, turnId = item.TurnId, subjectId = item.SubjectId, rating = item.Rating.ToString(), comment = item.Comment, createdUtc = item.CreatedUtc });
+            }
+
+            return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
         }
 
         /// <summary>Fetch a chat turn with its feedback, tool-call trace, and performance telemetry.</summary>
@@ -138,7 +158,17 @@ namespace Pneuma.Server.Mcp
             string tenantId = rc.TenantId ?? String.Empty;
             string? subjectId = GetOptionalString(arguments, "subjectId");
             List<EvalRun> runs = String.IsNullOrEmpty(tenantId) ? new List<EvalRun>() : await _Db.EvalRuns.EnumerateAsync(tenantId, subjectId, token).ConfigureAwait(false);
-            return new { objects = runs };
+
+            EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
+            EnumerationResult<EvalRun> page = EnumerationHelper.Paginate(runs, query, r => r.CreatedUtc, r => r.SubjectId);
+
+            List<object> summaries = new List<object>();
+            foreach (EvalRun run in page.Objects)
+            {
+                summaries.Add(new { id = run.Id, subjectId = run.SubjectId, status = run.Status.ToString(), category = run.Category, totalFacts = run.TotalFacts, pass = run.PassCount, partial = run.PartialCount, fail = run.FailCount, createdUtc = run.CreatedUtc });
+            }
+
+            return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
         }
 
         /// <summary>Fetch an evaluation run with its results.</summary>

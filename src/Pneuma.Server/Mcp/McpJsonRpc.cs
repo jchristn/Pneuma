@@ -5,6 +5,7 @@ namespace Pneuma.Server.Mcp
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Requests;
+    using Pneuma.Core.Serialization;
     using Pneuma.Server.Routes;
     using WatsonWebserver.Core;
 
@@ -50,6 +51,24 @@ namespace Pneuma.Server.Mcp
         /// <summary>True when the tool arguments request a streaming (SSE) response.</summary>
         /// <param name="arguments">The arguments element.</param>
         /// <returns>True when <c>stream</c> is present and true.</returns>
+        /// <summary>
+        /// Parse an optional <c>metadataFilter</c> object from tool arguments into a typed
+        /// <see cref="RetrievalFilter"/>. Returns null when the argument is absent, not an object, or empty of
+        /// predicates, so callers can pass it straight through to the retrieval path.
+        /// </summary>
+        /// <param name="arguments">The tool arguments element.</param>
+        /// <returns>The parsed filter, or null when none was supplied.</returns>
+        public static RetrievalFilter? FilterFromArguments(JsonElement arguments)
+        {
+            if (arguments.ValueKind != JsonValueKind.Object) return null;
+            if (!arguments.TryGetProperty("metadataFilter", out JsonElement filterElement)) return null;
+            if (filterElement.ValueKind != JsonValueKind.Object) return null;
+
+            RetrievalFilter? filter = Json.Deserialize<RetrievalFilter>(filterElement.GetRawText());
+            if (filter == null || filter.IsEmpty()) return null;
+            return filter;
+        }
+
         public static bool IsStreamRequested(JsonElement arguments)
         {
             return arguments.ValueKind == JsonValueKind.Object
@@ -80,6 +99,28 @@ namespace Pneuma.Server.Mcp
                 if (!String.IsNullOrWhiteSpace(search)) query.Search = search;
             }
             return query;
+        }
+
+        /// <summary>Build a paged enumeration payload (the <see cref="EnumerationResult{T}"/> envelope shape).</summary>
+        /// <param name="maxResults">The page size applied.</param>
+        /// <param name="skip">The number of records skipped.</param>
+        /// <param name="totalRecords">The exact total across all pages.</param>
+        /// <param name="recordsRemaining">Records remaining after this page.</param>
+        /// <param name="endOfResults">Whether this is the last page.</param>
+        /// <param name="objects">The page's objects (small summaries).</param>
+        /// <returns>The enumeration payload.</returns>
+        public static object BuildPage(int maxResults, int skip, long totalRecords, long recordsRemaining, bool endOfResults, System.Collections.Generic.List<object> objects)
+        {
+            return new
+            {
+                success = true,
+                maxResults,
+                skip,
+                totalRecords,
+                recordsRemaining,
+                endOfResults,
+                objects
+            };
         }
 
         /// <summary>Send a JSON-RPC success result.</summary>

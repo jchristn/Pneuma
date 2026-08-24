@@ -29,6 +29,9 @@ BACKEND_ALLOWLIST=(
   "src/Test.Shared/Suites/DatabaseSuite.cs"
   # A single cohesive class of MCP entity/report tool handlers (one method per tool).
   "src/Pneuma.Server/Mcp/McpEntityTools.cs"
+  # The declarative MCP tool catalog: one static class of tool-schema descriptors (the tools/list contract).
+  # Splitting the schema data across files would hurt discoverability of the single source of tool truth.
+  "src/Pneuma.Server/Mcp/McpToolCatalog.cs"
   # The ingestion pipeline's per-stage work in one region-organized class (metadata stamping already split out
   # into IngestionMetadata.cs); the stages share enough context that further splitting hurts readability.
   "src/Pneuma.Server/Services/IngestionStages.cs"

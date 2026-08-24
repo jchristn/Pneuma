@@ -199,12 +199,13 @@ namespace Pneuma.Server
             GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
             new QueryRoutes(_Authorization, groundedQuery, _ModelRunnerGate, _Logging).Register(_Server);
             new EvalRoutes(_Database, _Authorization, groundedQuery, _Logging).Register(_Server);
+            new FacetRoutes(_Database, _Authorization).Register(_Server);
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _Partio, _ModelHealth).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
-            AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging);
+            AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);
         }
 

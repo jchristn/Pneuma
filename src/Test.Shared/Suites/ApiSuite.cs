@@ -589,6 +589,107 @@ namespace Test.Shared.Suites
                             if (!body.Contains("\\\"count\\\"") && !body.Contains("count")) throw new Exception("search result should carry a bounded count");
                         }),
 
+                    new TestCaseDescriptor("Api", "Mcp_Search_AcceptsMetadataFilter", "pneuma_search accepts a metadataFilter argument",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            string request = "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_search\",\"arguments\":{\"query\":\"anything\",\"max\":5,\"metadataFilter\":{\"requiredLabels\":[\"news\"],\"requiredTags\":[{\"key\":\"rights\",\"condition\":\"Equals\",\"value\":\"public\"}]}}}}";
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, request, ct);
+                            if (response.StatusCode != HttpStatusCode.OK) throw new Exception("filtered search call not 200: " + (int)response.StatusCode);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (body.Contains("\"error\"")) throw new Exception("filtered search should not error: " + body);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_EvalFacts_And_Runs_WriteTools", "MCP eval write tools create/enumerate/delete facts and start/cancel/delete runs",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Example Subject\",\"type\":\"Topic\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+
+                            string createFact = "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_create_eval_fact\",\"arguments\":{\"subjectId\":\"" + subjectId + "\",\"question\":\"Q1\",\"expectedAnswer\":\"A1\",\"category\":\"cat\"}}}";
+                            string createBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, createFact, ct)).Content.ReadAsStringAsync(ct));
+                            string factId = ExtractString(createBody, "id");
+                            if (String.IsNullOrEmpty(factId)) throw new Exception("create eval fact should return the fact id: " + createBody);
+
+                            string enumFacts = "{\"jsonrpc\":\"2.0\",\"id\":41,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_enumerate_eval_facts\",\"arguments\":{\"subjectId\":\"" + subjectId + "\",\"maxResults\":10,\"skip\":0}}}";
+                            string enumBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, enumFacts, ct)).Content.ReadAsStringAsync(ct));
+                            if (!enumBody.Contains("totalRecords") || !enumBody.Contains("Q1")) throw new Exception("paged eval-fact enumeration should carry totalRecords and the fact: " + enumBody);
+
+                            string startRun = "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_start_eval_run\",\"arguments\":{\"subjectId\":\"" + subjectId + "\"}}}";
+                            string startBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, startRun, ct)).Content.ReadAsStringAsync(ct));
+                            string runId = ExtractString(startBody, "id");
+                            if (String.IsNullOrEmpty(runId)) throw new Exception("start eval run should return the run id: " + startBody);
+
+                            string cancelRun = "{\"jsonrpc\":\"2.0\",\"id\":43,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_cancel_eval_run\",\"arguments\":{\"id\":\"" + runId + "\"}}}";
+                            string cancelBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, cancelRun, ct)).Content.ReadAsStringAsync(ct));
+                            if (!cancelBody.Contains("Cancelled") && !cancelBody.Contains("Completed") && !cancelBody.Contains("Running") && !cancelBody.Contains("Pending")) throw new Exception("cancel should return the run's status: " + cancelBody);
+
+                            string delRun = "{\"jsonrpc\":\"2.0\",\"id\":44,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_delete_eval_run\",\"arguments\":{\"id\":\"" + runId + "\"}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, delRun, ct)).Content.ReadAsStringAsync(ct)).Contains("deleted")) throw new Exception("delete run should acknowledge");
+                            string delFact = "{\"jsonrpc\":\"2.0\",\"id\":45,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_delete_eval_fact\",\"arguments\":{\"id\":\"" + factId + "\"}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, delFact, ct)).Content.ReadAsStringAsync(ct)).Contains("deleted")) throw new Exception("delete fact should acknowledge");
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_Thread_Get_Delete", "MCP pneuma_get_thread returns turns and pneuma_delete_thread cascades",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            HttpResponseMessage createResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/threads", token, "{\"title\":\"MCP chat\"}", ct);
+                            string threadId = ExtractString(await createResp.Content.ReadAsStringAsync(ct), "id");
+
+                            string getThread = "{\"jsonrpc\":\"2.0\",\"id\":50,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_get_thread\",\"arguments\":{\"id\":\"" + threadId + "\"}}}";
+                            string getBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, getThread, ct)).Content.ReadAsStringAsync(ct));
+                            if (!getBody.Contains("thread") || !getBody.Contains("turns")) throw new Exception("MCP get_thread should carry thread + turns: " + getBody);
+
+                            string delThread = "{\"jsonrpc\":\"2.0\",\"id\":51,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_delete_thread\",\"arguments\":{\"id\":\"" + threadId + "\"}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, delThread, ct)).Content.ReadAsStringAsync(ct)).Contains("deleted")) throw new Exception("MCP delete_thread should acknowledge");
+                            HttpResponseMessage after = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/threads/" + threadId, token, null, ct);
+                            if (after.StatusCode != HttpStatusCode.NotFound) throw new Exception("deleted thread should be 404, got " + (int)after.StatusCode);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Facets_Discovery_Rest_And_Mcp", "Distinct labels/tags are discoverable over REST and MCP from a subject's links",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Example Subject\",\"type\":\"Topic\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/a\",\"labels\":[\"news\"],\"tags\":{\"rights\":\"public\"}}", ct);
+                            if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
+
+                            HttpResponseMessage labelsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/retrieval/labels", token, null, ct);
+                            if (labelsResp.StatusCode != HttpStatusCode.OK || !(await labelsResp.Content.ReadAsStringAsync(ct)).Contains("news")) throw new Exception("REST labels discovery should return the link's label");
+                            HttpResponseMessage tagsResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/retrieval/tags", token, null, ct);
+                            if (tagsResp.StatusCode != HttpStatusCode.OK || !(await tagsResp.Content.ReadAsStringAsync(ct)).Contains("rights")) throw new Exception("REST tags discovery should return the link's tag key");
+
+                            string mcpLabels = "{\"jsonrpc\":\"2.0\",\"id\":60,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_distinct_labels\",\"arguments\":{\"subjectId\":\"" + subjectId + "\"}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, mcpLabels, ct)).Content.ReadAsStringAsync(ct)).Contains("news")) throw new Exception("MCP distinct_labels should return the label");
+                            string mcpTags = "{\"jsonrpc\":\"2.0\",\"id\":61,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_distinct_tags\",\"arguments\":{\"subjectId\":\"" + subjectId + "\"}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, mcpTags, ct)).Content.ReadAsStringAsync(ct)).Contains("rights")) throw new Exception("MCP distinct_tags should return the tag key");
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_Ops_History_Settings_Health", "MCP ops tools page request history, redact settings, and page model-endpoint health",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string history = "{\"jsonrpc\":\"2.0\",\"id\":70,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_enumerate_request_history\",\"arguments\":{\"maxResults\":10,\"skip\":0}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, history, ct)).Content.ReadAsStringAsync(ct)).Contains("totalRecords")) throw new Exception("request-history enumeration should be paged (totalRecords)");
+
+                            string settings = "{\"jsonrpc\":\"2.0\",\"id\":71,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_get_settings\",\"arguments\":{}}}";
+                            string settingsBody = McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, settings, ct)).Content.ReadAsStringAsync(ct));
+                            if (!settingsBody.Contains("********")) throw new Exception("settings should be returned with secrets redacted: " + settingsBody);
+
+                            string health = "{\"jsonrpc\":\"2.0\",\"id\":72,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_enumerate_model_runner_health\",\"arguments\":{\"maxResults\":10,\"skip\":0}}}";
+                            if (!McpResultText(await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, health, ct)).Content.ReadAsStringAsync(ct)).Contains("totalRecords")) throw new Exception("model-runner health enumeration should be paged (totalRecords)");
+                        }),
+
                     new TestCaseDescriptor("Api", "Sse_ChunkerPreservesText", "The SSE delta chunker preserves the full answer and does not split words",
                         executeAsync: ct =>
                         {
@@ -646,6 +747,27 @@ namespace Test.Shared.Suites
                 if (body != null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
                 return await _Http.SendAsync(request, ct).ConfigureAwait(false);
             }
+        }
+
+        private static string McpResultText(string body)
+        {
+            // Unwrap an MCP tools/call envelope: { result: { content: [ { type:"text", text:"<serialized json>" } ] } }.
+            // Returns the inner tool-result JSON string (or the original body when it is not a tools/call envelope).
+            using (System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(body))
+            {
+                System.Text.Json.JsonElement root = doc.RootElement;
+                if (root.TryGetProperty("result", out System.Text.Json.JsonElement result)
+                    && result.TryGetProperty("content", out System.Text.Json.JsonElement content)
+                    && content.ValueKind == System.Text.Json.JsonValueKind.Array && content.GetArrayLength() > 0)
+                {
+                    System.Text.Json.JsonElement first = content[0];
+                    if (first.TryGetProperty("text", out System.Text.Json.JsonElement textElement) && textElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return textElement.GetString() ?? String.Empty;
+                    }
+                }
+            }
+            return body;
         }
 
         private static string ExtractString(string json, string field)

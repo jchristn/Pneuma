@@ -54,6 +54,8 @@ tools/call pneuma_enumerate_subjects { "maxResults": 50, "skip": 200 } → endOf
 tools/call pneuma_get_subject { "id": "sub_abc123" }                   → the full subject
 ```
 
+Every `pneuma_enumerate_*` tool follows this exact protocol — `pneuma_enumerate_subjects`, `pneuma_enumerate_jobs`, `pneuma_enumerate_links`, `pneuma_enumerate_threads`, `pneuma_enumerate_feedback`, `pneuma_enumerate_eval_runs`, `pneuma_enumerate_eval_facts`, `pneuma_enumerate_request_history`, and `pneuma_enumerate_model_runner_health` all take `maxResults`/`skip`/`order`, return the `EnumerationResult` envelope (`totalRecords`/`recordsRemaining`/`endOfResults`) with small summaries, and pair with a matching `pneuma_get_*` tool for the full object. Start at `skip: 0` and advance `skip` by your page size until `endOfResults` is `true`.
+
 ## Tools
 
 The current tool set is small and growing; `pneuma_capabilities` and `tools/list` are always the source of truth for what is available.
@@ -70,18 +72,49 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_ingestion_summary` | Summarize ingestion activity over time, broken down by pipeline stage: fixed-width time buckets with per-stage event counts plus overall per-stage totals. Optional `subjectId`, `fromUtc`/`toUtc` window, and `bucketMinutes` (1–1440, default 15). | IngestionJob / Read |
 | `pneuma_enumerate_links` | Page content-link summaries (id, url, title, status). | Subject / Read |
 | `pneuma_get_link` | Fetch one full content link by id. | Subject / Read |
-| `pneuma_search` | Full-text search the corpus (RecallDB) against the resolved default collection; bounded, ranked node summaries (a top-N query, not an enumeration). | GraphNode / Read |
+| `pneuma_search` | Full-text search the corpus (RecallDB) against the resolved default collection; bounded, ranked node summaries (a top-N query, not an enumeration). Accepts an optional `metadataFilter` to scope retrieval to specific labels/tags. | GraphNode / Read |
 | `pneuma_get_node` | Fetch one full knowledge-graph node by id. | GraphNode / Read |
 | `pneuma_get_neighbors` | Fetch a node's adjacent nodes as a bounded set of summaries. | GraphNode / Read |
-| `pneuma_query` | Ask a grounded question; returns a cited answer, supporting sources, and an `insufficientSupport` flag. | GraphNode / Read |
+| `pneuma_query` | Ask a grounded question; returns a cited answer, supporting sources, and an `insufficientSupport` flag. Accepts an optional `metadataFilter` to scope retrieval to specific labels/tags. | GraphNode / Read |
 | `pneuma_get_history_turn` | Fetch one chat turn with its feedback, tool-call trace, and per-stage performance telemetry (`id` required). | Subject / Read |
-| `pneuma_enumerate_threads` | Enumerate conversation threads, optional `subjectId`. | Subject / Read |
-| `pneuma_enumerate_feedback` | Enumerate chat feedback, optional `subjectId`. | Subject / Read |
+| `pneuma_enumerate_threads` | Enumerate conversation thread summaries (paged; `EnumerationResult` out), optional `subjectId`. Use `pneuma_get_thread` for a thread's full turns. | Subject / Read |
+| `pneuma_get_thread` | Fetch one conversation thread with its ordered turns (`id` required). | Subject / Read |
+| `pneuma_delete_thread` | Delete a conversation thread and cascade its turns + tool-call trace (`id` required). Irreversible. | Subject / Delete |
+| `pneuma_enumerate_feedback` | Enumerate chat-feedback summaries (paged; `EnumerationResult` out), optional `subjectId`. | Subject / Read |
 | `pneuma_analytics` | Per-subject chat analytics over a window (`subjectId?`, `days?` default 30): volume, latency percentiles, per-stage timing, feedback. | Subject / Read |
-| `pneuma_enumerate_eval_runs` | Enumerate RAG evaluation runs, optional `subjectId`. | Subject / Read |
+| `pneuma_enumerate_eval_runs` | Enumerate RAG evaluation-run summaries (paged; `EnumerationResult` out), optional `subjectId`. Use `pneuma_get_eval_run` for a run's full results. | Subject / Read |
 | `pneuma_get_eval_run` | Fetch one evaluation run with its per-fact results (`id` required). | Subject / Read |
+| `pneuma_enumerate_eval_facts` | Enumerate a subject's ground-truth evaluation facts (paged; `EnumerationResult` out; `subjectId` required). | Subject / Read |
+| `pneuma_create_eval_fact` | Create a ground-truth fact (`subjectId`, `question`, `expectedAnswer` required; `category?`). | Subject / Update |
+| `pneuma_delete_eval_fact` | Delete an evaluation fact by id (`id` required). | Subject / Delete |
+| `pneuma_start_eval_run` | Queue an evaluation run for a subject (`subjectId` required; `category?`). Returns the `Pending` run immediately; poll `pneuma_get_eval_run` for progress. | Subject / Update |
+| `pneuma_cancel_eval_run` | Cancel a queued or running evaluation run (`id` required). Idempotent on a finished run. | Subject / Update |
+| `pneuma_delete_eval_run` | Delete an evaluation run and its per-fact results (`id` required). Irreversible. | Subject / Delete |
+| `pneuma_distinct_labels` | Return a subject's distinct retrieval labels (`subjectId` required) — a bounded aggregate for building a `metadataFilter`, not an enumeration. | Subject / Read |
+| `pneuma_distinct_tags` | Return a subject's distinct retrieval tag keys and values (`subjectId` required) — a bounded aggregate for building a `metadataFilter`, not an enumeration. | Subject / Read |
+| `pneuma_enumerate_request_history` | Enumerate captured request-history summaries (paged; `EnumerationResult` out). Optional `tenantId`, `userId`, `method`, `pathContains`, `statusCode` filters. Use `pneuma_get_request_history` for a full entry. | System administrator only |
+| `pneuma_get_request_history` | Fetch one captured request-history entry with full detail (`id` required; secrets redacted at capture). | System administrator only |
+| `pneuma_request_history_summary` | Summarize request history over an optional filter (`tenantId?`, `method?`, `pathContains?`, `statusCode?`): totals, status-code breakdown, latency. | System administrator only |
+| `pneuma_get_settings` | Return the server settings with every secret field redacted. | System administrator only |
+| `pneuma_enumerate_model_runner_health` | Enumerate model-endpoint health summaries (embedding + completion; paged; `EnumerationResult` out). | ModelRunner / Read |
+| `pneuma_get_model_runner_health` | Fetch the health of one model endpoint by id (uptime, latency, last status; `id` required). | ModelRunner / Read |
 
 Further tools (ingest a link) follow the same contract as they land. The grounded-answer logic is shared with the REST `/v1.0/query` endpoint, so the two surfaces cannot drift.
+
+## Retrieval scoping (`metadataFilter`)
+
+`pneuma_search` and `pneuma_query` accept an optional `metadataFilter` object that narrows retrieval to chunks carrying specific labels and tags:
+
+```json
+{
+  "requiredLabels": ["string"],
+  "excludedLabels": ["string"],
+  "requiredTags": [ { "key": "string", "condition": "Equals", "value": "string" } ],
+  "excludedTags": [ { "key": "string", "condition": "Contains", "value": "string" } ]
+}
+```
+
+A chunk is eligible only when it carries **every** required label and satisfies **every** required tag condition, and **none** of the excluded labels or tag conditions match. `condition` is one of `Equals`, `NotEquals`, `Contains`, `StartsWith`, `EndsWith`, `GreaterThan`, `LessThan`, `IsNull`, `IsNotNull` (`value` is ignored for `IsNull`/`IsNotNull`). Discover the valid label and tag values for a subject with `pneuma_distinct_labels` and `pneuma_distinct_tags` before building a filter.
 
 ## Streaming
 

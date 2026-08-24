@@ -17,6 +17,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Server.Mcp;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
+    using Radiant;
     using SyslogLogging;
 
     /// <summary>
@@ -62,6 +63,7 @@ namespace Pneuma.Server.Services
         private readonly PneumaToolExecutor _Tools;
         private readonly Aes256Cipher _Cipher;
         private readonly LoggingModule _Logging;
+        private readonly TelemetryService? _Telemetry;
 
         #endregion
 
@@ -74,8 +76,9 @@ namespace Pneuma.Server.Services
         /// <param name="cipher">Cipher for decrypting model-runner keys.</param>
         /// <param name="maxToolIterations">Maximum tool-calling iterations before a final answer is forced (>= 1).</param>
         /// <param name="logging">Logging module.</param>
+        /// <param name="telemetry">Optional telemetry service; when supplied, each answer stage (prompt rewrite, compaction, model inference, each tool call) is wrapped in an OTLP span. Null disables answer-path tracing.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public AgenticChatService(DatabaseDriverBase db, GroundedQueryService query, PneumaToolExecutor tools, Aes256Cipher cipher, int maxToolIterations, LoggingModule logging)
+        public AgenticChatService(DatabaseDriverBase db, GroundedQueryService query, PneumaToolExecutor tools, Aes256Cipher cipher, int maxToolIterations, LoggingModule logging, TelemetryService? telemetry = null)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -88,6 +91,7 @@ namespace Pneuma.Server.Services
             _Cipher = cipher;
             _MaxIterations = Math.Max(1, maxToolIterations);
             _Logging = logging;
+            _Telemetry = telemetry;
         }
 
         #endregion
@@ -171,9 +175,14 @@ namespace Pneuma.Server.Services
             // Persisted tool-call trace for this turn (args/output/duration), surfaced later in the history view.
             List<ChatToolCall> toolCallRecords = new List<ChatToolCall>();
             long rewriteStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            string? rewrittenLastTurn = lastUserIndex >= 0
-                ? await _Query.RewriteQuestionAsync(tenantId, subject, turns[lastUserIndex].Content ?? String.Empty, token).ConfigureAwait(false)
-                : null;
+            string? rewrittenLastTurn = null;
+            if (lastUserIndex >= 0)
+            {
+                using (_Telemetry?.StartSpan("chat.prompt_rewrite"))
+                {
+                    rewrittenLastTurn = await _Query.RewriteQuestionAsync(tenantId, subject, turns[lastUserIndex].Content ?? String.Empty, token).ConfigureAwait(false);
+                }
+            }
             if (subject != null && !String.IsNullOrWhiteSpace(subject.PromptRewriteModel))
             {
                 perfStages.Add(new TurnPerformanceStage { Name = "prompt_rewrite", Kind = "inference", DurationMs = ElapsedMs(rewriteStart) });
@@ -201,7 +210,10 @@ namespace Pneuma.Server.Services
                 {
                     await emit(new { type = "compacting" }, false, token).ConfigureAwait(false);
                     long compactStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                    compactedSummary = await CompactAsync(tenantId, client, turns, token).ConfigureAwait(false);
+                    using (_Telemetry?.StartSpan("chat.compaction"))
+                    {
+                        compactedSummary = await CompactAsync(tenantId, client, turns, token).ConfigureAwait(false);
+                    }
                     perfStages.Add(new TurnPerformanceStage { Name = "compaction", Kind = "inference", DurationMs = ElapsedMs(compactStart) });
                     if (!String.IsNullOrWhiteSpace(compactedSummary))
                     {
@@ -262,28 +274,32 @@ namespace Pneuma.Server.Services
                             + "and summarize whatever relevant material was found."));
                     }
 
-                    ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-                    if (response == null || !response.Success)
+                    ToolChatStreamingResponse response;
+                    using (_Telemetry?.StartSpan("chat.inference"))
                     {
-                        _Logging.Warn("[AgenticChatService] chat request failed: " + (response?.Error ?? "no response"));
-                        if (!producedText)
+                        response = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+                        if (response == null || !response.Success)
                         {
-                            await emit(new { type = "error", message = "The assistant could not generate a response." }, true, token).ConfigureAwait(false);
-                            return;
-                        }
-                        break;
-                    }
-
-                    // Drain the stream fully; only then are the aggregate fields (ToolCalls, Usage, timing) populated.
-                    await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token).ConfigureAwait(false))
-                    {
-                        if (!String.IsNullOrEmpty(chunk.Text))
-                        {
-                            string visible = thinkParser.Feed(chunk.Text);
-                            if (!String.IsNullOrEmpty(visible))
+                            _Logging.Warn("[AgenticChatService] chat request failed: " + (response?.Error ?? "no response"));
+                            if (!producedText)
                             {
-                                producedText = true;
-                                await emit(new { type = "delta", text = visible }, false, token).ConfigureAwait(false);
+                                await emit(new { type = "error", message = "The assistant could not generate a response." }, true, token).ConfigureAwait(false);
+                                return;
+                            }
+                            break;
+                        }
+
+                        // Drain the stream fully; only then are the aggregate fields (ToolCalls, Usage, timing) populated.
+                        await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token).ConfigureAwait(false))
+                        {
+                            if (!String.IsNullOrEmpty(chunk.Text))
+                            {
+                                string visible = thinkParser.Feed(chunk.Text);
+                                if (!String.IsNullOrEmpty(visible))
+                                {
+                                    producedText = true;
+                                    await emit(new { type = "delta", text = visible }, false, token).ConfigureAwait(false);
+                                }
                             }
                         }
                     }
@@ -317,7 +333,11 @@ namespace Pneuma.Server.Services
                         await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = displayArgs }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                        ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, effectiveFilter, token).ConfigureAwait(false);
+                        ToolInvocationResult result;
+                        using (_Telemetry?.StartSpan("chat.tool." + (call.Name ?? "unknown")))
+                        {
+                            result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, effectiveFilter, token).ConfigureAwait(false);
+                        }
                         long toolDurationMs = (long)((System.Diagnostics.Stopwatch.GetTimestamp() - toolStartMs) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         string resultJson = result.Success ? Json.Serialize(result.Result) : Json.Serialize(new { error = result.Error });

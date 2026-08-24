@@ -5,9 +5,12 @@ namespace Pneuma.Server.Routes
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Security;
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Services;
+    using Pneuma.Server.Settings;
+    using SyslogLogging;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -39,10 +42,14 @@ namespace Pneuma.Server.Routes
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service for the grounded-answer tool.</param>
         /// <param name="gate">Model-runner concurrency gate applied to the grounded-answer tool.</param>
+        /// <param name="logging">Logging module (used by the eval management tools).</param>
+        /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
+        /// <param name="partio">Partio client used to enumerate model endpoints for the health tools.</param>
+        /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate)
+        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, IPartioClient partio, ModelHealthMonitor health)
         {
-            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate);
+            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate, logging, settings, partio, health);
         }
 
         #endregion

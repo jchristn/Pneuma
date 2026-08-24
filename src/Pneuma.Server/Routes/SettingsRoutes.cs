@@ -21,7 +21,7 @@ namespace Pneuma.Server.Routes
     {
         #region Private-Members
 
-        private const string SecretMask = "********";
+        private const string SecretMask = SettingsRedactor.SecretMask;
 
         private readonly AppSettings _Settings;
         private readonly AuthorizationService _Authz;
@@ -71,7 +71,7 @@ namespace Pneuma.Server.Routes
             }
 
             AppSettings masked = Json.Deserialize<AppSettings>(Json.Serialize(_Settings)) ?? new AppSettings();
-            MaskSecrets(masked);
+            SettingsRedactor.Mask(masked);
 
             SettingsEnvelope envelope = new SettingsEnvelope
             {
@@ -97,7 +97,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            RestoreMaskedSecrets(incoming);
+            SettingsRedactor.Restore(incoming, _Settings);
             incoming.SourceFilePath = _Settings.SourceFilePath;
 
             string path = String.IsNullOrWhiteSpace(_Settings.SourceFilePath) ? "pneuma.json" : _Settings.SourceFilePath!;
@@ -126,33 +126,6 @@ namespace Pneuma.Server.Routes
                 Meta = BuildMeta()
             };
             await RouteHelper.SendJsonAsync(ctx, 200, envelope).ConfigureAwait(false);
-        }
-
-        private void MaskSecrets(AppSettings s)
-        {
-            if (!String.IsNullOrEmpty(s.Auth.TokenSigningKey)) s.Auth.TokenSigningKey = SecretMask;
-            if (s.Auth.AdminApiKeys != null && s.Auth.AdminApiKeys.Count > 0) s.Auth.AdminApiKeys = new List<string> { SecretMask };
-            if (!String.IsNullOrEmpty(s.Database.Password)) s.Database.Password = SecretMask;
-            if (!String.IsNullOrEmpty(s.Integrations.RecallDb.BearerToken)) s.Integrations.RecallDb.BearerToken = SecretMask;
-            if (!String.IsNullOrEmpty(s.Integrations.Partio.BearerToken)) s.Integrations.Partio.BearerToken = SecretMask;
-            if (!String.IsNullOrEmpty(s.Integrations.LiteGraph.BearerToken)) s.Integrations.LiteGraph.BearerToken = SecretMask;
-            if (!String.IsNullOrEmpty(s.S3.AccessKey)) s.S3.AccessKey = SecretMask;
-            if (!String.IsNullOrEmpty(s.S3.SecretKey)) s.S3.SecretKey = SecretMask;
-            if (!String.IsNullOrEmpty(s.Seed.AdminPassword)) s.Seed.AdminPassword = SecretMask;
-        }
-
-        private void RestoreMaskedSecrets(AppSettings incoming)
-        {
-            if (incoming.Auth.TokenSigningKey == SecretMask) incoming.Auth.TokenSigningKey = _Settings.Auth.TokenSigningKey;
-            if (incoming.Auth.AdminApiKeys != null && incoming.Auth.AdminApiKeys.Count == 1 && incoming.Auth.AdminApiKeys[0] == SecretMask)
-                incoming.Auth.AdminApiKeys = _Settings.Auth.AdminApiKeys;
-            if (incoming.Database.Password == SecretMask) incoming.Database.Password = _Settings.Database.Password;
-            if (incoming.Integrations.RecallDb.BearerToken == SecretMask) incoming.Integrations.RecallDb.BearerToken = _Settings.Integrations.RecallDb.BearerToken;
-            if (incoming.Integrations.Partio.BearerToken == SecretMask) incoming.Integrations.Partio.BearerToken = _Settings.Integrations.Partio.BearerToken;
-            if (incoming.Integrations.LiteGraph.BearerToken == SecretMask) incoming.Integrations.LiteGraph.BearerToken = _Settings.Integrations.LiteGraph.BearerToken;
-            if (incoming.S3.AccessKey == SecretMask) incoming.S3.AccessKey = _Settings.S3.AccessKey;
-            if (incoming.S3.SecretKey == SecretMask) incoming.S3.SecretKey = _Settings.S3.SecretKey;
-            if (incoming.Seed.AdminPassword == SecretMask) incoming.Seed.AdminPassword = _Settings.Seed.AdminPassword;
         }
 
         private SettingsMeta BuildMeta()

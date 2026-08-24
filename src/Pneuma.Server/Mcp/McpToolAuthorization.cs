@@ -48,11 +48,32 @@ namespace Pneuma.Server.Mcp
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.GraphNode, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
                 case "pneuma_get_history_turn":
                 case "pneuma_enumerate_threads":
+                case "pneuma_get_thread":
                 case "pneuma_enumerate_feedback":
                 case "pneuma_analytics":
                 case "pneuma_enumerate_eval_runs":
                 case "pneuma_get_eval_run":
+                case "pneuma_enumerate_eval_facts":
+                case "pneuma_distinct_labels":
+                case "pneuma_distinct_tags":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_create_eval_fact":
+                case "pneuma_start_eval_run":
+                case "pneuma_cancel_eval_run":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Update, null, token).ConfigureAwait(false);
+                case "pneuma_delete_thread":
+                case "pneuma_delete_eval_fact":
+                case "pneuma_delete_eval_run":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Delete, null, token).ConfigureAwait(false);
+                case "pneuma_enumerate_model_runner_health":
+                case "pneuma_get_model_runner_health":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.ModelRunner, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_enumerate_request_history":
+                case "pneuma_get_request_history":
+                case "pneuma_request_history_summary":
+                case "pneuma_get_settings":
+                    // Observability/config surfaces mirror their REST twins, which are restricted to the system administrator.
+                    return rc.IsAdmin;
                 default:
                     return false;
             }

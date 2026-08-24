@@ -194,7 +194,8 @@ namespace Pneuma.Server.Mcp
 
             int max = ClampMax(arguments);
             string tenantId = rc.TenantId ?? String.Empty;
-            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, null, token: token).ConfigureAwait(false);
+            RetrievalFilter? requestFilter = McpJsonRpc.FilterFromArguments(arguments);
+            GroundedAnswer answer = await _Query.AnswerAsync(tenantId, question, max, null, null, requestFilter, token).ConfigureAwait(false);
 
             List<object> sources = new List<object>();
             foreach (GraphNode source in answer.Sources)
@@ -232,11 +233,12 @@ namespace Pneuma.Server.Mcp
 
             int max = ClampMax(arguments);
             string tenantId = rc.TenantId ?? String.Empty;
+            RetrievalFilter? requestFilter = McpJsonRpc.FilterFromArguments(arguments);
 
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, null, token: token).ConfigureAwait(false);
+                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, question, max, null, null, requestFilter, token).ConfigureAwait(false);
                 List<object> sourceSummaries = new List<object>();
                 foreach (GraphNode source in sources)
                 {

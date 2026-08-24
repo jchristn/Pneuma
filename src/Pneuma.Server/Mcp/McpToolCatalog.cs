@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -209,14 +209,15 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_search",
-                    description = "Full-text search the ingested corpus, returning a bounded, ranked set of graph-node summaries (id, name, type, score). This is a top-N query, not a full enumeration; raise 'max' to widen it.",
+                    description = "Full-text search the ingested corpus, returning a bounded, ranked set of graph-node summaries (id, name, type, score). This is a top-N query, not a full enumeration; raise 'max' to widen it. Pass an optional metadataFilter to scope retrieval to specific labels/tags (discover valid values with pneuma_distinct_labels / pneuma_distinct_tags).",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
                             query = new { type = "string", description = "Search query text." },
-                            max = new { type = "integer", description = "Maximum hits (clamped 1..100)." }
+                            max = new { type = "integer", description = "Maximum hits (clamped 1..100)." },
+                            metadataFilter = MetadataFilterSchema()
                         },
                         required = new[] { "query" }
                     }
@@ -246,7 +247,7 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_query",
-                    description = "Ask a grounded natural-language question of the corpus. Returns a cited answer, the supporting source-node summaries, whether the answer is grounded, and whether the corpus lacked enough support (insufficientSupport). Pass stream:true to receive the answer as a Server-Sent Events stream (delta events, the final event being the JSON-RPC result).",
+                    description = "Ask a grounded natural-language question of the corpus. Returns a cited answer, the supporting source-node summaries, whether the answer is grounded, and whether the corpus lacked enough support (insufficientSupport). Pass stream:true to receive the answer as a Server-Sent Events stream (delta events, the final event being the JSON-RPC result). Pass an optional metadataFilter to scope retrieval to specific labels/tags (discover valid values with pneuma_distinct_labels / pneuma_distinct_tags).",
                     inputSchema = new
                     {
                         type = "object",
@@ -254,7 +255,8 @@ namespace Pneuma.Server.Mcp
                         {
                             question = new { type = "string", description = "The natural-language question." },
                             max = new { type = "integer", description = "Maximum supporting sources (clamped 1..20)." },
-                            stream = new { type = "boolean", description = "When true, respond as an SSE stream of delta events ending with the JSON-RPC result." }
+                            stream = new { type = "boolean", description = "When true, respond as an SSE stream of delta events ending with the JSON-RPC result." },
+                            metadataFilter = MetadataFilterSchema()
                         },
                         required = new[] { "question" }
                     }
@@ -273,21 +275,33 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_enumerate_threads",
-                    description = "Enumerate conversation threads (most-recently-active first), optionally scoped by subjectId.",
+                    description = "Enumerate conversation threads as small summaries (most-recently-active first), paged. Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true. Use pneuma_get_thread for a thread's full turns. Optionally scope by subjectId.",
                     inputSchema = new
                     {
                         type = "object",
-                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Optional subject id to scope to." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." },
+                            order = new { type = "string", description = "asc or desc by last activity." }
+                        }
                     }
                 },
                 new
                 {
                     name = "pneuma_enumerate_feedback",
-                    description = "Enumerate chat feedback (thumbs up/down + comments), optionally scoped by subjectId.",
+                    description = "Enumerate chat feedback (thumbs up/down + comments) as small summaries, paged. Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true. Optionally scope by subjectId.",
                     inputSchema = new
                     {
                         type = "object",
-                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Optional subject id to scope to." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." },
+                            order = new { type = "string", description = "asc or desc by creation time." }
+                        }
                     }
                 },
                 new
@@ -307,11 +321,17 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_enumerate_eval_runs",
-                    description = "Enumerate RAG evaluation runs (newest first), optionally scoped by subjectId.",
+                    description = "Enumerate RAG evaluation runs as small summaries (newest first), paged. Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true. Use pneuma_get_eval_run for a run's full results. Optionally scope by subjectId.",
                     inputSchema = new
                     {
                         type = "object",
-                        properties = new { subjectId = new { type = "string", description = "Optional subject id to scope to." } }
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Optional subject id to scope to." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." },
+                            order = new { type = "string", description = "asc or desc by creation time." }
+                        }
                     }
                 },
                 new
@@ -324,7 +344,245 @@ namespace Pneuma.Server.Mcp
                         properties = new { id = new { type = "string", description = "Evaluation run id." } },
                         required = new[] { "id" }
                     }
+                },
+                new
+                {
+                    name = "pneuma_get_thread",
+                    description = "Fetch one conversation thread with its ordered turns.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Conversation thread id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_delete_thread",
+                    description = "Delete a conversation thread and cascade its turns and tool-call trace. Irreversible.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Conversation thread id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_eval_facts",
+                    description = "Enumerate a subject's evaluation facts as small summaries, paged. Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true. Requires subjectId.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id to enumerate facts for (required)." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." },
+                            order = new { type = "string", description = "asc or desc by creation time." }
+                        },
+                        required = new[] { "subjectId" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_create_eval_fact",
+                    description = "Create a ground-truth evaluation fact (question + expected answer) for a subject.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id (required)." },
+                            question = new { type = "string", description = "The question to ask (required)." },
+                            expectedAnswer = new { type = "string", description = "The expected correct answer (required)." },
+                            category = new { type = "string", description = "Optional category label for filtering runs." }
+                        },
+                        required = new[] { "subjectId", "question", "expectedAnswer" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_delete_eval_fact",
+                    description = "Delete an evaluation fact by id.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Evaluation fact id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_start_eval_run",
+                    description = "Queue an evaluation run for a subject; a background worker answers each fact through the real grounded pipeline and LLM-judges it. Returns the Pending run immediately — poll pneuma_get_eval_run for progress and results.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id to evaluate (required)." },
+                            category = new { type = "string", description = "Optional category to restrict the run to matching facts." }
+                        },
+                        required = new[] { "subjectId" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_cancel_eval_run",
+                    description = "Cancel a queued or running evaluation run. Idempotent — cancelling a finished run returns its current state.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Evaluation run id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_delete_eval_run",
+                    description = "Delete an evaluation run and its per-fact results. Irreversible.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Evaluation run id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_distinct_labels",
+                    description = "Return the distinct retrieval labels an operator has applied to a subject's content (a bounded aggregate, not an enumeration). Use these to build a metadataFilter for pneuma_search / pneuma_query.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { subjectId = new { type = "string", description = "Subject id (required)." } },
+                        required = new[] { "subjectId" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_distinct_tags",
+                    description = "Return the distinct retrieval tag keys and their values applied to a subject's content (a bounded aggregate, not an enumeration). Use these to build a metadataFilter for pneuma_search / pneuma_query.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { subjectId = new { type = "string", description = "Subject id (required)." } },
+                        required = new[] { "subjectId" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_request_history",
+                    description = "Enumerate captured request-history entries as small summaries, paged (system administrator only). Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true. Use pneuma_get_request_history for a full entry.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." },
+                            tenantId = new { type = "string", description = "Optional tenant id to scope to (null = all tenants)." },
+                            userId = new { type = "string", description = "Optional user id to scope to." },
+                            method = new { type = "string", description = "Optional exact HTTP method filter." },
+                            pathContains = new { type = "string", description = "Optional path substring filter." },
+                            statusCode = new { type = "integer", description = "Optional exact response status-code filter." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_request_history",
+                    description = "Fetch a single captured request-history entry with its full detail (system administrator only). Secrets are redacted at capture time.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Request-history entry id." } },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_request_history_summary",
+                    description = "Summarize request history over an optional filter — totals, status-code breakdown, and latency (system administrator only).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            tenantId = new { type = "string", description = "Optional tenant id to scope to (null = all tenants)." },
+                            method = new { type = "string", description = "Optional exact HTTP method filter." },
+                            pathContains = new { type = "string", description = "Optional path substring filter." },
+                            statusCode = new { type = "integer", description = "Optional exact response status-code filter." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_settings",
+                    description = "Return the server settings with every secret field redacted (system administrator only).",
+                    inputSchema = new { type = "object", properties = new { } }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_model_runner_health",
+                    description = "Enumerate model-endpoint health (embedding + completion), paged. Start with skip=0; the first result's totalRecords is the exact total. Advance skip by maxResults and call again until endOfResults is true.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_model_runner_health",
+                    description = "Fetch the health of a single model endpoint by id (uptime, latency, last status).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new { id = new { type = "string", description = "Model endpoint id." } },
+                        required = new[] { "id" }
+                    }
                 }
+            };
+        }
+
+        /// <summary>The JSON-Schema fragment describing an optional retrieval <c>metadataFilter</c> (labels + tag conditions).</summary>
+        /// <returns>The metadataFilter input-schema object.</returns>
+        private static object MetadataFilterSchema()
+        {
+            return new
+            {
+                type = "object",
+                description = "Optional retrieval scope. A chunk is eligible only when it carries every required label and satisfies every required tag condition, and none of the excluded labels/tag conditions match.",
+                properties = new
+                {
+                    requiredLabels = new { type = "array", items = new { type = "string" }, description = "Labels a chunk must all carry." },
+                    excludedLabels = new { type = "array", items = new { type = "string" }, description = "Labels that, if present, exclude a chunk." },
+                    requiredTags = new { type = "array", items = TagConditionSchema(), description = "Tag conditions a chunk must all satisfy." },
+                    excludedTags = new { type = "array", items = TagConditionSchema(), description = "Tag conditions that, if any matches, exclude a chunk." }
+                }
+            };
+        }
+
+        /// <summary>The JSON-Schema fragment for a single tag condition (key + operator + value).</summary>
+        /// <returns>The tag-condition input-schema object.</returns>
+        private static object TagConditionSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    key = new { type = "string", description = "Tag key." },
+                    condition = new { type = "string", description = "One of Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, LessThan, IsNull, IsNotNull." },
+                    value = new { type = "string", description = "Comparison value (ignored for IsNull/IsNotNull)." }
+                },
+                required = new[] { "key", "condition" }
             };
         }
 

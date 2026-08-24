@@ -7,6 +7,17 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Broader MCP write/management surface + facet discovery.** New MCP tools make the platform fully operable by
+  an agent, each RBAC-mapped exactly like its REST twin: conversation threads `pneuma_get_thread` /
+  `pneuma_delete_thread`; the eval harness `pneuma_enumerate_eval_facts` / `pneuma_create_eval_fact` /
+  `pneuma_delete_eval_fact` / `pneuma_start_eval_run` / `pneuma_cancel_eval_run` / `pneuma_delete_eval_run`;
+  retrieval-facet discovery `pneuma_distinct_labels` / `pneuma_distinct_tags`; and the admin/observability
+  surfaces `pneuma_enumerate_request_history` / `pneuma_get_request_history` / `pneuma_request_history_summary`,
+  `pneuma_get_settings` (secrets redacted), and `pneuma_enumerate_model_runner_health` /
+  `pneuma_get_model_runner_health` (the last four system-administrator only). Facet discovery is also exposed
+  over REST: `GET /v1.0/subjects/{id}/retrieval/labels` and `.../tags` return the distinct labels and tag
+  key/values an operator has applied to a subject's content (a bounded aggregate over its links), so the Ask
+  **Scope** filter and an agent's `metadataFilter` can pick real values.
 - **Conversations management view.** Every dashboard gains a dedicated **Conversations** page listing every
   conversation, separate from the in-Ask switcher. On the admin and creator dashboards it is a first-class
   table like every other: **Subject** and **User** filter dropdowns, sortable/paginated columns (title,
@@ -161,6 +172,14 @@ between releases, and the project will adopt semantic versioning at its stable 1
   is specified.
 
 ### Changed
+- **`metadataFilter` on the MCP retrieval tools, paged MCP enumerations, and answer-stage traces.** The MCP
+  `pneuma_search` and `pneuma_query` tools now accept an optional `metadataFilter` (required/excluded labels +
+  tag conditions), matching the REST `/v1.0/query` contract, so an agent can scope retrieval. The
+  `pneuma_enumerate_threads`, `pneuma_enumerate_feedback`, and `pneuma_enumerate_eval_runs` tools are now
+  properly **paged** (they return the `EnumerationResult` envelope with `totalRecords`/`endOfResults` and small
+  summaries) instead of returning the full set, and every enumerate tool's description spells out the paging
+  protocol. The agentic answer path now emits an **OTLP span per stage** (prompt rewrite, compaction, each model
+  inference, each tool call) when telemetry is enabled, complementing the per-stage metrics.
 - **Default ontology and prompts are now domain-neutral (horizontal).** The built-in ontology and default
   prompts, as well as example subjects in the docs/SDKs/Postman collection and tests, were previously tied to a
   single vertical; they are replaced with a generic, cross-domain set that fits any kind of subject —

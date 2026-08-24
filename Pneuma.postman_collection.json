@@ -565,6 +565,20 @@
           }
         },
         {
+          "name": "Subject Retrieval Labels",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/retrieval/labels"
+          }
+        },
+        {
+          "name": "Subject Retrieval Tags",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/retrieval/tags"
+          }
+        },
+        {
           "name": "Read Node",
           "request": {
             "method": "GET",

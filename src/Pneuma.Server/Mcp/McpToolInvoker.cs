@@ -6,9 +6,12 @@ namespace Pneuma.Server.Mcp
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Services;
+    using Pneuma.Server.Settings;
+    using SyslogLogging;
     using WatsonWebserver.Core;
 
     /// <summary>
@@ -25,6 +28,8 @@ namespace Pneuma.Server.Mcp
         private readonly AuthorizationService _Authz;
         private readonly McpEntityTools _Entities;
         private readonly McpGraphTools _GraphTools;
+        private readonly McpManagementTools _Management;
+        private readonly McpOpsTools _Ops;
         private readonly ModelRunnerGate _Gate;
 
         #endregion
@@ -40,8 +45,12 @@ namespace Pneuma.Server.Mcp
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
         /// <param name="gate">Model-runner concurrency gate applied to the grounded-answer tool.</param>
+        /// <param name="logging">Logging module (used by the eval management tools).</param>
+        /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
+        /// <param name="partio">Partio client used to enumerate model endpoints for the health tools.</param>
+        /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate)
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, IPartioClient partio, ModelHealthMonitor health)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -50,9 +59,15 @@ namespace Pneuma.Server.Mcp
             if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (query == null) throw new ArgumentNullException(nameof(query));
             if (gate == null) throw new ArgumentNullException(nameof(gate));
+            if (logging == null) throw new ArgumentNullException(nameof(logging));
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (partio == null) throw new ArgumentNullException(nameof(partio));
+            if (health == null) throw new ArgumentNullException(nameof(health));
             _Authz = authz;
             _Entities = new McpEntityTools(db);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
+            _Management = new McpManagementTools(db, query, logging);
+            _Ops = new McpOpsTools(db, settings, partio, health);
             _Gate = gate;
         }
 
@@ -148,8 +163,68 @@ namespace Pneuma.Server.Mcp
                     toolResult = await _Entities.GetEvalRunAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
+                case "pneuma_get_thread":
+                    toolResult = await _Management.GetThreadAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_delete_thread":
+                    toolResult = await _Management.DeleteThreadAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_eval_facts":
+                    toolResult = await _Management.EnumerateEvalFactsAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_create_eval_fact":
+                    toolResult = await _Management.CreateEvalFactAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_delete_eval_fact":
+                    toolResult = await _Management.DeleteEvalFactAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_start_eval_run":
+                    toolResult = await _Management.StartEvalRunAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_cancel_eval_run":
+                    toolResult = await _Management.CancelEvalRunAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_delete_eval_run":
+                    toolResult = await _Management.DeleteEvalRunAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_distinct_labels":
+                    toolResult = await _Management.DistinctLabelsAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_distinct_tags":
+                    toolResult = await _Management.DistinctTagsAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_request_history":
+                    toolResult = await _Ops.EnumerateRequestHistoryAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_request_history":
+                    toolResult = await _Ops.GetRequestHistoryAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_request_history_summary":
+                    toolResult = await _Ops.RequestHistorySummaryAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_settings":
+                    toolResult = _Ops.GetSettings();
+                    break;
+                case "pneuma_enumerate_model_runner_health":
+                    toolResult = await _Ops.EnumerateModelRunnerHealthAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_model_runner_health":
+                    toolResult = await _Ops.GetModelRunnerHealthAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
                 case "pneuma_search":
-                    toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, null, null, ctx.Token).ConfigureAwait(false);
+                    toolResult = await _GraphTools.SearchAsync(rc.TenantId ?? String.Empty, arguments, null, null, ctx.Token, McpJsonRpc.FilterFromArguments(arguments)).ConfigureAwait(false);
                     break;
                 case "pneuma_get_node":
                     toolResult = await _GraphTools.GetNodeAsync(rc.TenantId ?? String.Empty, ctx, id, arguments, ctx.Token).ConfigureAwait(false);
