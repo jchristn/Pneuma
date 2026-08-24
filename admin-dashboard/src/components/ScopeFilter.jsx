@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import LabelTagEditor from './LabelTagEditor';
 
@@ -47,15 +48,31 @@ export default function ScopeFilter({ labels, tags, onChange, disabled = false, 
   const active = scopeActiveCount(labels, tags);
   const rootRef = useRef(null);
 
-  // Close on outside click / Escape (the panel floats over the composer in compact mode).
   useEffect(() => {
     if (!open) return undefined;
-    const onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
     const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
-  }, [open]);
+    // Only the non-compact dropdown closes on an outside click; the compact modal manages its own dismissal
+    // (backdrop click / close / Escape), and its panel is portaled outside this element's subtree.
+    let onDoc = null;
+    if (!compact) {
+      onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+      document.addEventListener('mousedown', onDoc);
+    }
+    return () => { document.removeEventListener('keydown', onKey); if (onDoc) document.removeEventListener('mousedown', onDoc); };
+  }, [open, compact]);
+
+  const editor = (
+    <>
+      <p className="scope-hint">{t('ask.scopeHint', 'Limit answers to content ingested with these labels and tags.')}</p>
+      <LabelTagEditor labels={labels} tags={tags} onChange={onChange} />
+      {active > 0 ? (
+        <button type="button" className="scope-clear" onClick={() => onChange({ labels: [], tags: [] })}>
+          {t('ask.scopeClear', 'Clear scope')}
+        </button>
+      ) : null}
+    </>
+  );
 
   return (
     <div className={`scope-filter${compact ? ' scope-compact' : ''}${open ? ' open' : ''}`} ref={rootRef}>
@@ -85,17 +102,26 @@ export default function ScopeFilter({ labels, tags, onChange, disabled = false, 
           {active > 0 ? <span className="scope-badge">{active}</span> : null}
         </button>
       )}
-      {open ? (
-        <div className={`scope-panel${compact ? ' scope-panel-up' : ''}`}>
-          <p className="scope-hint">{t('ask.scopeHint', 'Limit answers to content ingested with these labels and tags.')}</p>
-          <LabelTagEditor labels={labels} tags={tags} onChange={onChange} />
-          {active > 0 ? (
-            <button type="button" className="scope-clear" onClick={() => onChange({ labels: [], tags: [] })}>
-              {t('ask.scopeClear', 'Clear scope')}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {/* Non-compact (hero): an inline dropdown. */}
+      {open && !compact ? <div className="scope-panel">{editor}</div> : null}
+      {/* Compact (composer): a standalone modal, portaled to the body so it is never clipped by the composer card. */}
+      {open && compact
+        ? createPortal(
+            <div className="scope-modal-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+              <div className="scope-modal" role="dialog" aria-modal="true" aria-label={t('ask.scope', 'Scope')}>
+                <div className="scope-modal-head">
+                  <span className="scope-modal-title">{t('ask.scopeTitle', 'Scope retrieval')}</span>
+                  <button type="button" className="scope-modal-close" onClick={() => setOpen(false)} aria-label={t('common.close', 'Close')}>✕</button>
+                </div>
+                {editor}
+                <div className="scope-modal-actions">
+                  <button type="button" className="scope-modal-done" onClick={() => setOpen(false)}>{t('common.done', 'Done')}</button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

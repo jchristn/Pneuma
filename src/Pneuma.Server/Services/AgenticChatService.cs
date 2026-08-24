@@ -4,6 +4,7 @@ namespace Pneuma.Server.Services
     using System.Collections.Generic;
     using System.Text;
     using System.Text.Json;
+    using System.Text.Json.Nodes;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
@@ -310,7 +311,11 @@ namespace Pneuma.Server.Services
                     foreach (ToolCall call in calls)
                     {
                         token.ThrowIfCancellationRequested();
-                        await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = call.ArgumentsJson }, false, token).ConfigureAwait(false);
+                        // Surface the effective retrieval scope on the trace for the retrieval tools: the filter is
+                        // applied server-side (a side channel), so annotate the displayed/persisted arguments with
+                        // the metadataFilter that actually constrained the search — otherwise it looks uncarried.
+                        string displayArgs = AugmentArgsWithFilter(call.ArgumentsJson, call.Name, effectiveFilter);
+                        await emit(new { type = "tool_call", id = call.Id, name = call.Name, arguments = displayArgs }, false, token).ConfigureAwait(false);
 
                         long toolStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
                         ToolInvocationResult result = await ExecuteToolAsync(rc, call, subjectId, citedLinkScores, effectiveFilter, token).ConfigureAwait(false);
@@ -326,7 +331,7 @@ namespace Pneuma.Server.Services
                             TenantId = tenantId,
                             SubjectId = String.IsNullOrWhiteSpace(subjectId) ? null : subjectId,
                             ToolName = call.Name ?? String.Empty,
-                            ArgumentsJson = Truncate(call.ArgumentsJson ?? String.Empty, 8192),
+                            ArgumentsJson = Truncate(displayArgs, 8192),
                             OutputJson = Truncate(resultJson, 8192),
                             Success = result.Success,
                             DurationMs = toolDurationMs,
@@ -608,6 +613,34 @@ namespace Pneuma.Server.Services
                 _Logging.Debug("[AgenticChatService] title summarization failed: " + e.Message);
             }
             return null;
+        }
+
+        /// <summary>
+        /// Annotate a retrieval tool's displayed/persisted arguments with the effective retrieval filter that was
+        /// applied server-side, so the conversation's tool trace shows the scope (labels/tags) the search actually
+        /// ran under. No-op for non-retrieval tools or an empty filter. Tool arguments are model-generated and
+        /// schemaless (not a fixed contract), so a JSON DOM merge is appropriate here.
+        /// </summary>
+        /// <param name="argsJson">The model-produced tool arguments JSON.</param>
+        /// <param name="toolName">The tool being called.</param>
+        /// <param name="filter">The effective filter applied to retrieval, or null.</param>
+        /// <returns>The arguments JSON, with a <c>metadataFilter</c> member added for retrieval tools.</returns>
+        private static string AugmentArgsWithFilter(string? argsJson, string? toolName, RetrievalFilter? filter)
+        {
+            string original = String.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson!;
+            if (filter == null || filter.IsEmpty()) return original;
+            if (!String.Equals(toolName, "pneuma_search", StringComparison.Ordinal) && !String.Equals(toolName, "pneuma_query", StringComparison.Ordinal)) return original;
+            try
+            {
+                JsonNode? node = JsonNode.Parse(original);
+                if (node is not JsonObject obj) return original;
+                obj["metadataFilter"] = JsonNode.Parse(Json.Serialize(filter));
+                return obj.ToJsonString();
+            }
+            catch (Exception)
+            {
+                return original;
+            }
         }
 
         /// <summary>Derive a short conversation title from the first user turn.</summary>
