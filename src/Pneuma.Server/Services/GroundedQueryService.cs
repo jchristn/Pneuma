@@ -446,6 +446,16 @@ namespace Pneuma.Server.Services
             ModelRunner? runner = await ResolveCompletionRunnerByIdAsync(subject.PromptRewriteModel!, token).ConfigureAwait(false);
             if (runner == null) return question;
             string systemPrompt = await MergePromptAsync(tenantId, "prompt.rewrite", subject.PromptRewritePrompt, token).ConfigureAwait(false);
+            // Ground the rewrite in the subject so vague questions ("tell me more about the side effects") resolve
+            // to it ("...of {subject}") rather than the rewrite model inventing a placeholder subject.
+            if (!String.IsNullOrWhiteSpace(subject.DisplayName))
+            {
+                systemPrompt = systemPrompt +
+                    "\n\nThe question is about the subject \"" + subject.DisplayName.Trim() + "\". Resolve vague or " +
+                    "pronoun references (e.g. \"it\", \"they\", \"the side effects\") to this subject. Never introduce a " +
+                    "placeholder or hypothetical name; if the subject is not explicitly named, assume the question is about \"" +
+                    subject.DisplayName.Trim() + "\".";
+            }
             string? rewritten = await CompleteTextAsync(runner, systemPrompt, question, 256, token).ConfigureAwait(false);
             return String.IsNullOrWhiteSpace(rewritten) ? question : rewritten!;
         }

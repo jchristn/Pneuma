@@ -1294,3 +1294,6 @@ a.relationship-target:hover {
 .scope-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .scope-modal-done { padding: 6px 14px; border: none; border-radius: 8px; background: var(--color-primary); color: #fff; cursor: pointer; font-size: 0.85rem; }
 .scope-modal-done:hover { background: var(--color-primary-hover, var(--color-primary)); }
+
+/* Make the conversation delete action read unmistakably as destructive (always visible, red). */
+.thread-actions .thread-danger { color: var(--color-danger); }

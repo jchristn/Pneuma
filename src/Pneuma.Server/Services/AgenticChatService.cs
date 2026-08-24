@@ -139,7 +139,6 @@ namespace Pneuma.Server.Services
             ChatThread? existingThread = String.IsNullOrWhiteSpace(threadId)
                 ? null
                 : await _Db.ChatThreads.ReadAsync(tenantId, threadId!, token).ConfigureAwait(false);
-            bool newThread = existingThread == null;
             ChatThread thread = existingThread ?? await _Db.ChatThreads.CreateAsync(new ChatThread
             {
                 TenantId = tenantId,
@@ -381,14 +380,15 @@ namespace Pneuma.Server.Services
                 await emit(new { type = "delta", text = finalAnswer }, false, token).ConfigureAwait(false);
             }
 
-            // For a new conversation, once there is enough content (prompt + response over 500 characters),
-            // summarize it into a concise chat title via the model; otherwise the first-question title stands.
-            // Best-effort and bounded — a failure never affects the answer. Done before the complete event so the
-            // returned/persisted title is the summarized one.
-            if (newThread)
+            // Auto-title the conversation from its content once there is enough of it (over 500 characters across
+            // the prompts + responses), on whichever turn first crosses that threshold — as long as the operator
+            // has not renamed the thread (its title still matches the auto first-question baseline). This replaces
+            // the first-question title with a concise, model-written summary; a manual rename freezes it. Done
+            // before the complete event so the returned/persisted title is the summarized one. Best-effort.
+            string autoTitleBaseline = MakeThreadTitle(turns);
+            if (String.IsNullOrWhiteSpace(thread.Title) || String.Equals(thread.Title, autoTitleBaseline, StringComparison.Ordinal))
             {
-                string firstQuestion = turns.Count > 0 ? (turns[turns.Count - 1].Content ?? String.Empty) : String.Empty;
-                string? summarizedTitle = await TrySummarizeTitleAsync(client, firstQuestion, finalAnswer, token).ConfigureAwait(false);
+                string? summarizedTitle = await TrySummarizeTitleAsync(client, turns, finalAnswer, token).ConfigureAwait(false);
                 if (!String.IsNullOrWhiteSpace(summarizedTitle)) thread.Title = summarizedTitle;
             }
 
@@ -579,18 +579,31 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
-        /// Summarize a new conversation's first turn (question + answer) into a concise title using the answering
-        /// model, but only once the combined content exceeds <see cref="_TitleSummaryMinChars"/>. Best-effort:
-        /// returns null when the threshold is not met or the model produces nothing usable.
+        /// Summarize the conversation so far (all prompts + responses, including this turn's answer) into a
+        /// concise title using the answering model, but only once the combined content exceeds
+        /// <see cref="_TitleSummaryMinChars"/>. Best-effort: returns null when the threshold is not met or the
+        /// model produces nothing usable.
         /// </summary>
         /// <param name="client">The answering model client (reused so no runner is re-resolved).</param>
-        /// <param name="question">The user's question.</param>
-        /// <param name="answer">The produced answer.</param>
+        /// <param name="turns">The conversation turns (oldest first) up to and including this turn's question.</param>
+        /// <param name="answer">This turn's produced answer (not yet in <paramref name="turns"/>).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A short title, or null.</returns>
-        private async Task<string?> TrySummarizeTitleAsync(CompletionClientBase client, string question, string answer, CancellationToken token)
+        private async Task<string?> TrySummarizeTitleAsync(CompletionClientBase client, List<ChatTurn> turns, string answer, CancellationToken token)
         {
-            string combined = (question ?? String.Empty) + "\n\n" + (answer ?? String.Empty);
+            StringBuilder transcript = new StringBuilder();
+            if (turns != null)
+            {
+                foreach (ChatTurn turn in turns)
+                {
+                    if (String.IsNullOrWhiteSpace(turn.Content)) continue;
+                    string role = String.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User";
+                    transcript.Append(role).Append(": ").AppendLine(turn.Content);
+                }
+            }
+            if (!String.IsNullOrWhiteSpace(answer)) transcript.Append("Assistant: ").AppendLine(answer);
+
+            string combined = transcript.ToString();
             if (combined.Length <= _TitleSummaryMinChars) return null;
             string input = combined.Length > 2000 ? combined.Substring(0, 2000) : combined;
             try
