@@ -64,7 +64,7 @@ const en = {
       resultCount_one: '{{count}} result',
       resultCount_other: '{{count}} results',
       emptyTitle: 'Start exploring',
-      emptyBody: 'Try a name, a song, an event, or a theme. You’ll get a representative set of nodes to dive into.',
+      emptyBody: 'Try a name, a title, an event, or a topic. You’ll get a representative set of nodes to dive into.',
       noResultsTitle: 'No matches',
       noResultsBody: 'We couldn’t find anything for “{{query}}”. Try a different or broader term.',
       searching: 'Searching the archive…'

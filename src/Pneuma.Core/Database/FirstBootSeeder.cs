@@ -164,34 +164,7 @@ namespace Pneuma.Core.Database
                 "canonical names so the same person/work/place is not duplicated, and set a confidence for each node and " +
                 "edge. Only assert what the source supports.", token).ConfigureAwait(false);
 
-            await SeedPromptAsync(db, "ontology.definition", "Ontology Definition",
-                "The ontology describes a musical subject's world. Define entities (nodes) and how they relate (edges) " +
-                "in natural language; an administrator may rewrite this to reshape the graph without any code change.\n\n" +
-                "Node types:\n" +
-                "- Subject: the subject the archive is about.\n" +
-                "- Person: a collaborator, producer, influence, or other individual.\n" +
-                "- Organization: a label, band (e.g. Public Enemy), venue operator, or media outlet.\n" +
-                "- Discography: the container for a subject's released body of work.\n" +
-                "- Record: an album, EP, or single.\n" +
-                "- Track: an individual song.\n" +
-                "- Lyrics: the lyric content of a track.\n" +
-                "- Work: a non-musical creative work such as a book, essay, or artwork.\n" +
-                "- Event: a concert, interview, broadcast, or public appearance.\n" +
-                "- Place: a venue, city, or location.\n" +
-                "- Theme: a recurring topic or motif (e.g. activism, media critique).\n" +
-                "- CulturalMoment: a historical or cultural moment the work engages with.\n" +
-                "- Source: the artifact a claim came from (used for provenance).\n" +
-                "- Media: a retrievable media asset (audio, video, image).\n\n" +
-                "Relationship types (edges), written FROM -> TO:\n" +
-                "- HAS_DISCOGRAPHY (Subject -> Discography), CONTAINS_RECORD (Discography -> Record), " +
-                "HAS_TRACK (Record -> Track), HAS_LYRICS (Track -> Lyrics).\n" +
-                "- PERFORMED_BY (Work -> Person/Subject), PRODUCED_BY (Work -> Person), COLLABORATED_WITH (Person -> Person), " +
-                "MEMBER_OF (Person -> Organization), RELEASED_ON (Record -> Organization).\n" +
-                "- PERFORMED_AT (Event -> Place), OCCURRED_ON (Event -> CulturalMoment), ABOUT_THEME (any -> Theme), " +
-                "REFERENCES_MOMENT (any -> CulturalMoment), INFLUENCED_BY (any -> Person/Work), HAS_MEDIA (any -> Media), " +
-                "MENTIONS (any -> any).\n\n" +
-                "When information is present but does not fit an existing type, prefer the closest listed type rather than " +
-                "inventing an unrelated one.", token).ConfigureAwait(false);
+            await SeedPromptAsync(db, "ontology.definition", "Ontology Definition", DefaultOntologyDefinitionPrompt, token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "cell.summarize", "Cell Summarization",
                 "Summarize the following content faithfully and concisely, preserving names, dates, places, and claims. " +
@@ -215,20 +188,56 @@ namespace Pneuma.Core.Database
                 "missing_evidence|hallucination|incomplete|wrong|none\"}. Pass = fully correct; Partial = partially " +
                 "correct or incomplete; Fail = incorrect or unsupported.", token).ConfigureAwait(false);
 
-            // Self-heal the two answering prompts on existing deployments (e.g. the local docker Postgres volume,
-            // which is seeded once and never re-seeded): if an unedited default is still stored — recognized by its
-            // opening phrase and the absence of a sentinel phrase from the current default — replace it with the
-            // current default so newer guidance lands without wiping data or clobbering admin edits. The sentinel is
-            // the newest rule added ("internal object kinds"), so bumping it re-heals prompts healed by an older pass.
-            await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, "internal object kinds", token).ConfigureAwait(false);
+            // Self-heal still-default prompts on existing deployments (e.g. the local docker Postgres volume, which
+            // is seeded once and never re-seeded): if an unedited default is still stored — recognized by its opening
+            // phrase and the absence of a sentinel phrase unique to the current default — replace it with the current
+            // default so newer guidance lands without wiping data or clobbering admin edits. Bumping a sentinel when
+            // its default changes re-heals copies healed by an older pass.
+            // The music-specific default ontology is replaced with the domain-neutral one; the sentinel "any kind of
+            // subject" is unique to the new definition.
+            await HealPromptAsync(db, "ontology.definition", "The ontology describes a musical subject's world.", DefaultOntologyDefinitionPrompt, "any kind of subject", token).ConfigureAwait(false);
+            // The user-answer default dropped its music/celebrity-specific "a fan's question" opening; the sentinel
+            // "user's question about the subject" is unique to the new wording, re-healing older ("fan's") copies.
+            await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, "user's question about the subject", token).ConfigureAwait(false);
             await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, "internal object kinds", token).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Default, domain-neutral ontology definition (Prompts key "ontology.definition"). Describes generic,
+        /// horizontal node and edge types that fit any kind of subject (person, organization, product, place,
+        /// event, topic, or work). An administrator may rewrite it to reshape the graph without a code change.
+        /// </summary>
+        private const string DefaultOntologyDefinitionPrompt =
+            "The ontology describes the world of any kind of subject — a person, organization, product, place, " +
+            "event, topic, or body of work. Define entities (nodes) and how they relate (edges) in natural " +
+            "language; an administrator may rewrite this to reshape the graph without any code change.\n\n" +
+            "Node types:\n" +
+            "- Subject: the subject the archive is about.\n" +
+            "- Person: an individual — a collaborator, contributor, official, influence, or other named person.\n" +
+            "- Organization: a company, institution, group, team, agency, publisher, or other named body.\n" +
+            "- Work: a discrete created or published work — a document, article, book, report, product, release, " +
+            "recording, film, dataset, or artwork.\n" +
+            "- Collection: a container that groups related works (a series, catalog, product line, or body of work).\n" +
+            "- Event: something that happened at a point in time — a meeting, release, announcement, incident, or milestone.\n" +
+            "- Place: a location — a city, region, address, venue, or facility.\n" +
+            "- Topic: a recurring theme, concept, subject-matter area, or motif.\n" +
+            "- Source: the artifact a claim came from (used for provenance).\n" +
+            "- Media: a retrievable media asset (audio, video, image, or document).\n\n" +
+            "Relationship types (edges), written FROM -> TO:\n" +
+            "- HAS_PART (Collection/Work -> Work): containment or composition (a collection contains a work; a work has a part).\n" +
+            "- CREATED_BY (Work -> Person/Organization), CONTRIBUTED_TO (Person/Organization -> Work), " +
+            "PUBLISHED_BY (Work/Collection -> Organization).\n" +
+            "- AFFILIATED_WITH (Person -> Organization), COLLABORATED_WITH (Person -> Person).\n" +
+            "- LOCATED_AT (Event/Organization -> Place), OCCURRED_ON (Event -> Event/date).\n" +
+            "- ABOUT (any -> Topic), INFLUENCED_BY (any -> any), HAS_MEDIA (any -> Media), MENTIONS (any -> any).\n\n" +
+            "When information is present but does not fit an existing type, prefer the closest listed type rather " +
+            "than inventing an unrelated one.";
 
         /// <summary>
         /// Default grounded-answer prompt for the user-facing "ask" path (Prompts key "user.answer").
         /// </summary>
         private const string DefaultUserAnswerPrompt =
-            "You are answering a fan's question about a subject using only the provided source excerpts from Pneuma's " +
+            "You are answering a user's question about the subject using only the provided source excerpts from Pneuma's " +
             "curated corpus. Each source is a numbered excerpt like [1], [2]. Ground every statement in these sources and, " +
             "where useful, refer to them by their bracketed number or a short quotation. Never expose internal identifiers — " +
             "do not print node ids, GUIDs, or other database keys (for example, never write \"(node e125fc8a-...)\"). Never " +

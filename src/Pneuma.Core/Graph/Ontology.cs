@@ -11,28 +11,21 @@ namespace Pneuma.Core.Graph
 
         /// <summary>The subject the archive is about.</summary>
         public const string NodeSubject = "Subject";
-        /// <summary>A person: collaborator, producer, influence.</summary>
+        /// <summary>An individual: a collaborator, contributor, official, influence, or other named person.</summary>
         public const string NodePerson = "Person";
-        /// <summary>An organization: label, band, venue-as-org, media outlet.</summary>
+        /// <summary>An organization: a company, institution, group, team, agency, publisher, or other named body.</summary>
         public const string NodeOrganization = "Organization";
-        /// <summary>Container for a subject's released body of work.</summary>
-        public const string NodeDiscography = "Discography";
-        /// <summary>An album, EP, or single.</summary>
-        public const string NodeRecord = "Record";
-        /// <summary>A song.</summary>
-        public const string NodeTrack = "Track";
-        /// <summary>Lyric content for a track.</summary>
-        public const string NodeLyrics = "Lyrics";
-        /// <summary>A generic creative work (book, artwork, essay).</summary>
+        /// <summary>A discrete created or published work: a document, article, book, report, product, release,
+        /// recording, film, dataset, or artwork.</summary>
         public const string NodeWork = "Work";
-        /// <summary>A concert, interview, broadcast, or appearance.</summary>
+        /// <summary>A container that groups related works (a series, catalog, product line, or body of work).</summary>
+        public const string NodeCollection = "Collection";
+        /// <summary>Something that happened at a point in time: a meeting, release, announcement, incident, or milestone.</summary>
         public const string NodeEvent = "Event";
-        /// <summary>A place or venue.</summary>
+        /// <summary>A location: a city, region, address, venue, or facility.</summary>
         public const string NodePlace = "Place";
-        /// <summary>A topic or motif.</summary>
-        public const string NodeTheme = "Theme";
-        /// <summary>A historical or cultural context node.</summary>
-        public const string NodeCulturalMoment = "CulturalMoment";
+        /// <summary>A recurring theme, concept, subject-matter area, or motif.</summary>
+        public const string NodeTopic = "Topic";
         /// <summary>A provenance anchor: the artifact a claim came from.</summary>
         public const string NodeSource = "Source";
 
@@ -42,39 +35,31 @@ namespace Pneuma.Core.Graph
         /// <summary>A chunk of a source document. Legacy node type — chunks are no longer stored in the
         /// graph (they live only in RecallDB); retained so any pre-existing chunk nodes still resolve.</summary>
         public const string NodeChunk = "Chunk";
-        /// <summary>A retrievable media asset.</summary>
+        /// <summary>A retrievable media asset (audio, video, image, or document).</summary>
         public const string NodeMedia = "Media";
 
         #endregion
 
         #region Edge-Types
 
-        /// <summary>Subject has a discography.</summary>
-        public const string EdgeHasDiscography = "HAS_DISCOGRAPHY";
-        /// <summary>Discography contains a record.</summary>
-        public const string EdgeContainsRecord = "CONTAINS_RECORD";
-        /// <summary>Record has a track.</summary>
-        public const string EdgeHasTrack = "HAS_TRACK";
-        /// <summary>Track has lyrics.</summary>
-        public const string EdgeHasLyrics = "HAS_LYRICS";
-        /// <summary>Work performed by a person/subject.</summary>
-        public const string EdgePerformedBy = "PERFORMED_BY";
-        /// <summary>Work produced by a person.</summary>
-        public const string EdgeProducedBy = "PRODUCED_BY";
+        /// <summary>Containment or composition: a collection contains a work, or a work has a part (container -&gt; part).</summary>
+        public const string EdgeHasPart = "HAS_PART";
+        /// <summary>A work was created/authored by a person or organization.</summary>
+        public const string EdgeCreatedBy = "CREATED_BY";
+        /// <summary>A person or organization contributed to a work.</summary>
+        public const string EdgeContributedTo = "CONTRIBUTED_TO";
+        /// <summary>A work or collection was published/released by an organization.</summary>
+        public const string EdgePublishedBy = "PUBLISHED_BY";
+        /// <summary>A person is affiliated with an organization (membership, employment, role).</summary>
+        public const string EdgeAffiliatedWith = "AFFILIATED_WITH";
         /// <summary>Collaboration between people.</summary>
         public const string EdgeCollaboratedWith = "COLLABORATED_WITH";
-        /// <summary>Membership in an organization.</summary>
-        public const string EdgeMemberOf = "MEMBER_OF";
-        /// <summary>Released on a label/organization.</summary>
-        public const string EdgeReleasedOn = "RELEASED_ON";
-        /// <summary>Event performed at a place.</summary>
-        public const string EdgePerformedAt = "PERFORMED_AT";
-        /// <summary>Event occurred on a date/moment.</summary>
+        /// <summary>An event or organization is located at a place.</summary>
+        public const string EdgeLocatedAt = "LOCATED_AT";
+        /// <summary>An event occurred on a date or in relation to another event.</summary>
         public const string EdgeOccurredOn = "OCCURRED_ON";
-        /// <summary>Entity is about a theme.</summary>
-        public const string EdgeAboutTheme = "ABOUT_THEME";
-        /// <summary>References a cultural moment.</summary>
-        public const string EdgeReferencesMoment = "REFERENCES_MOMENT";
+        /// <summary>An entity is about a topic.</summary>
+        public const string EdgeAbout = "ABOUT";
         /// <summary>Influenced by another entity.</summary>
         public const string EdgeInfluencedBy = "INFLUENCED_BY";
         /// <summary>Derived from a provenance source.</summary>

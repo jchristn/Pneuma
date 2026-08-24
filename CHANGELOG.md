@@ -161,6 +161,17 @@ between releases, and the project will adopt semantic versioning at its stable 1
   is specified.
 
 ### Changed
+- **Default ontology and prompts are now domain-neutral (horizontal).** The built-in ontology and the default
+  prompts were music/artist-specific (node types like Discography/Record/Track/Lyrics, edges like
+  HAS_TRACK/PERFORMED_BY/RELEASED_ON, an `ontology.definition` prompt describing "a musical subject's world",
+  and a `user.answer` prompt that answered "a fan's question"). They are replaced with a generic, cross-domain
+  set that fits any kind of subject — Subject/Person/Organization/Work/Collection/Event/Place/Topic/Source/Media
+  nodes and HAS_PART/CREATED_BY/CONTRIBUTED_TO/PUBLISHED_BY/AFFILIATED_WITH/COLLABORATED_WITH/LOCATED_AT/
+  OCCURRED_ON/ABOUT/INFLUENCED_BY edges — and the answer prompt now answers "a user's question about the
+  subject". Existing deployments self-heal the `ontology.definition` and `user.answer` prompts on next boot
+  (sentinel-guarded, admin edits preserved); the change ships in the server image, so `docker/` deployments
+  pick it up on rebuild. The runtime graph merge already accepts whatever types the ontology defines, so no
+  data migration is required.
 - **Cells are the graph's unit of source content; chunks live only in RecallDB.** Ingestion no longer
   creates a `Chunk` node per chunk. Instead the graph-merge stage materializes a `Cell` node per extracted
   semantic cell (carrying its text, linked to its `Source` via `HAS_CELL`), and each chunk is stored only as
