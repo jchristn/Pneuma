@@ -53,3 +53,9 @@ appsettings.*.local.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Local-only sample corpora (kept on disk, not in the repo)
+sample-data-sets/
+
+# Internal planning docs (not part of the public repo)
+ASSISTANTHUB_FEATURES.md

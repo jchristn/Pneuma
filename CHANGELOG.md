@@ -7,6 +7,14 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Conversations management view.** Every dashboard gains a dedicated **Conversations** page listing every
+  conversation, separate from the in-Ask switcher. On the admin and creator dashboards it is a first-class
+  table like every other: **Subject** and **User** filter dropdowns, sortable/paginated columns (title,
+  subject, user, id, last activity), a per-row **context menu** (Open / Rename / Delete), and the standard
+  table chrome (page-size, first/prev/next, jump-to-page, total count, refresh). The user dashboard gets the
+  same list reachable from a top-bar **Conversations** button, and every dashboard's in-Ask switcher links to
+  the full list ("View all conversations →"). Opening a row rehydrates that conversation in Ask
+  (`?thread=<id>` deep link).
 - **Ask-page model warm-up + summarized chat titles + composer refinements.** Opening an Ask/chat page (or
   selecting a subject) now fires a best-effort `POST /v1.0/warmup` that issues a minimal completion to the
   subject's answering model, so the first question isn't slow to first token (Ollama cold-load). A new
@@ -95,25 +103,6 @@ between releases, and the project will adopt semantic versioning at its stable 1
   `GET /v1.0/history/{id}`; the admin and creator History detail modals render a stage-details table and drive
   their timing bars from real per-stage data. Perf events are pruned with their subject's retention window and
   removed on subject cascade.
-
-### Changed
-- **Cells are the graph's unit of source content; chunks live only in RecallDB.** Ingestion no longer
-  creates a `Chunk` node per chunk. Instead the graph-merge stage materializes a `Cell` node per extracted
-  semantic cell (carrying its text, linked to its `Source` via `HAS_CELL`), and each chunk is stored only as
-  a RecallDB document whose `litegraphNodeId` points back at its originating cell node (falling back to the
-  source). Retrieval hits still resolve to a graph node for structure and neighbor expansion, but the graph
-  is no longer inflated with one node per chunk. Legacy `Chunk`/`HAS_CHUNK` types are retained so any
-  pre-existing chunk nodes still resolve; cascade deletion removes cell nodes by the job's `assertedByJob`
-  tag as before.
-- **Retrieval store migrated from Verbex to RecallDB.** Verbex is removed entirely. RecallDB (Postgres +
-  pgvector, `:8600`) is now the retrieval store for both vector and full-text search, hidden behind the
-  same `IVectorRepository` / `IInvertedIndex` interfaces plus a new `ICollectionStore`. Vectors are no
-  longer stored on LiteGraph nodes — each chunk is stored in RecallDB as one document carrying its content,
-  embedding, and provenance tags (`litegraphNodeId` round-trips on hits so retrieval still resolves to the
-  chunk's graph node). Cascade deletion removes a job's documents by its `jobId` tag. Pneuma operates under
-  a dedicated RecallDB tenant (`pneuma`), ensured at startup.
-
-### Added
 - **Subject-scoped chat controls (thinking, prompts, slug, retention).** Subjects (schema v6) gained
   `urlSlug`, `thinkingEnabled`, `systemPrompt`, `ontologyClassifyPrompt`, `ontologyDefinitionPrompt`,
   `historyRetentionDays` (clamped ≥ 1), and a `deletionStatus`, all editable via REST (`PUT
@@ -133,6 +122,12 @@ between releases, and the project will adopt semantic versioning at its stable 1
   cascade (links, jobs, events, artifacts, graph, index, history, feedback) in a background worker; the
   subject is marked *Deleting* (greyed in the UI) until removed, and interrupted deletions resume on
   startup. The dashboards show a dismissible "deleting in the background — you may close this window" notice.
+- **Duplicate row action.** Config-heavy admin tables (Model Runners, Subjects, Collections, Roles, Prompts)
+  gain a **Duplicate** action that opens the create form pre-filled from the selected record (name/key/slug
+  auto-suffixed so it doesn't collide) — copy a definition, tweak one field, save.
+- **Ingestion "View Performance".** The admin Ingestion Jobs action menu gains **View Performance**, a
+  per-stage bar chart sized by each stage's duration with discrete timings and share-of-total; the creator
+  dashboard's ingestion detail modal shows the same "Time per stage" bars.
 - **Ingestion Queue / Jobs subject filter.** Both admin pages gained a subject dropdown (`?subjectId=` on
   `GET /v1.0/jobs`).
 - **Richer table-atom ingestion.** DocumentAtom tables are now flattened to one valid markdown cell per
@@ -143,58 +138,6 @@ between releases, and the project will adopt semantic versioning at its stable 1
   (`sdk/csharp`) gained the new subject fields, `GetSubjectBySlugAsync`, and history/feedback models +
   `ListHistoryAsync` / `GetHistoryTurnAsync` / `ListFeedbackAsync` / `SubmitFeedbackAsync`. Positive and
   negative tests were added for the DB layer, the MCP tools, and the SDK smoke harness.
-
-### Fixed
-- **Answers no longer leak internal object kinds (e.g. "(source: Cell)").** The grounded-answer context that
-  is sent to the model previously prefixed each source with its internal graph node type and name
-  (`[1] (Cell) cell_9f3a…: …`), which the model would echo back to readers as "(source: Cell)". Sources are now
-  presented as bare numbered excerpts (`[1] …`), and the system-level answering prompts (`user.answer`,
-  `assistant.system`) plus the default subject system prompt (admin + creator create-subject forms) explicitly
-  forbid naming internal object kinds/storage labels. Existing deployments self-heal the two prompts on next
-  boot (sentinel-guarded), and the change ships to `docker/` and `docker/factory/` on image rebuild.
-- **Row action menus stay on-screen.** The row `⋯` action menu (every table in the admin and creator
-  dashboards) dropped straight down from the trigger and ran off the bottom of the viewport for the last rows;
-  it now flips above the trigger (or clamps and scrolls) so it is always fully visible.
-- **Duplicate row action.** Config-heavy admin tables (Model Runners, Subjects, Collections, Roles, Prompts)
-  gain a **Duplicate** action that opens the create form pre-filled from the selected record (name/key/slug
-  auto-suffixed so it doesn't collide) — copy a definition, tweak one field, save.
-- **Ingestion "View Performance".** The admin Ingestion Jobs action menu gains **View Performance**, a
-  per-stage bar chart sized by each stage's duration with discrete timings and share-of-total; the creator
-  dashboard's ingestion detail modal shows the same "Time per stage" bars.
-- **Chat-turn detail: timing KPIs as horizontal bars.** The history-turn detail modal (admin + creator) now
-  renders the duration KPIs (TTFT, thinking, generation, time-to-last-token, pipeline wall) and the recorded
-  pipeline stages as horizontal bars, AssistantHub-style, keeping only the scalar metrics (throughput, tokens,
-  context) as compact cards.
-- **`/context` renders a formatted table.** The in-chat `/context` command (all three dashboards) now shows a
-  Markdown table — model (where surfaced), context window, context used with percentage, prompt/completion
-  tokens, and turn count — matching how `/help` renders.
-- **Structured retrieval-filter editor (labels + tags).** The subject's default retrieval filter — previously
-  a raw-JSON textbox on the create/edit subject form in both the admin and creator dashboards — is now a
-  structured editor: labels (`List<string>`) render as one textbox per row with a delete icon and an add
-  icon on the last row; tags (`Dictionary<string,string>`) render as side-by-side key/value textboxes with
-  the same delete/add affordances. `RetrievalFilter` gained `requiredLabels`/`excludedLabels` (matched
-  against each chunk's `label` tag, populated at ingestion from the source document type) alongside the
-  existing `requiredTags`/`excludedTags`, and the per-request `metadataFilter` shares the shape.
-- **Analytics readability + per-stage latency-over-time.** The Analytics view now humanizes stage names
-  (snake_case → Title Case, `tool:` prefixes surfaced), adds a timeframe selector, and renders a stacked bar
-  chart of per-stage latency per day (bucketed) in addition to the existing per-stage averages.
-- **Richer chat-turn measurements.** The history-turn detail modal (admin + creator) now reports
-  time-to-last-token, pipeline wall time, and both generation-only and overall throughput, matching the depth
-  of AssistantHub's turn instrumentation.
-- **Feedback modal focus.** Clicking thumbs-up/down in Ask (all three dashboards) now moves focus straight to
-  the "Share more feedback" textbox.
-- **`/help` and `/?` render an in-chat command menu.** The slash-command help now renders as a Markdown table
-  inside the conversation window rather than a single "Commands" line.
-- **Grafana dashboards split by domain.** The single "Pneuma Observability" dashboard is replaced by five
-  per-domain dashboards (Overview, HTTP, Ingestion, Chat & Retrieval, Integrations), provisioned by default.
-- **Admin dashboard nav labels.** The Analytics and Evaluation nav entries showed raw i18n keys
-  (`nav.analytics`, `nav.eval`); the missing translations are added.
-- **Fresh-install migration for the queue-duration column.** The `ingestionjobevents.queuedurationms`
-  column (and the new subject columns) were being created in both the baseline schema and a migration,
-  which failed on a fresh SQLite/MySQL database with a duplicate-column error. Baseline `CREATE` statements
-  are now the original v1 shape and the versioned migrations are the sole source of later columns.
-
-### Added (earlier)
 - **Per-tenant LiteGraph isolation.** Each Pneuma tenant now gets its own isolated LiteGraph tenant and
   graph, created and hydrated when the tenant is provisioned; the LiteGraph tenant/graph GUIDs are recorded
   on the Pneuma tenant record (`LiteGraphTenantGuid`/`LiteGraphGraphGuid`, schema v4). All graph operations
@@ -216,6 +159,72 @@ between releases, and the project will adopt semantic versioning at its stable 1
 - **Collection-scoped search.** `GET /v1.0/search` and `GET /v1.0/subjects/{id}/search` accept an optional
   `collection` query parameter; grounded query/chat and MCP search resolve a default collection when none
   is specified.
+
+### Changed
+- **Cells are the graph's unit of source content; chunks live only in RecallDB.** Ingestion no longer
+  creates a `Chunk` node per chunk. Instead the graph-merge stage materializes a `Cell` node per extracted
+  semantic cell (carrying its text, linked to its `Source` via `HAS_CELL`), and each chunk is stored only as
+  a RecallDB document whose `litegraphNodeId` points back at its originating cell node (falling back to the
+  source). Retrieval hits still resolve to a graph node for structure and neighbor expansion, but the graph
+  is no longer inflated with one node per chunk. Legacy `Chunk`/`HAS_CHUNK` types are retained so any
+  pre-existing chunk nodes still resolve; cascade deletion removes cell nodes by the job's `assertedByJob`
+  tag as before.
+- **Retrieval store migrated from Verbex to RecallDB.** Verbex is removed entirely. RecallDB (Postgres +
+  pgvector, `:8600`) is now the retrieval store for both vector and full-text search, hidden behind the
+  same `IVectorRepository` / `IInvertedIndex` interfaces plus a new `ICollectionStore`. Vectors are no
+  longer stored on LiteGraph nodes — each chunk is stored in RecallDB as one document carrying its content,
+  embedding, and provenance tags (`litegraphNodeId` round-trips on hits so retrieval still resolves to the
+  chunk's graph node). Cascade deletion removes a job's documents by its `jobId` tag. Pneuma operates under
+  a dedicated RecallDB tenant (`pneuma`), ensured at startup.
+- **Structured retrieval-filter editor (labels + tags).** The subject's default retrieval filter — previously
+  a raw-JSON textbox on the create/edit subject form in both the admin and creator dashboards — is now a
+  structured editor: labels (`List<string>`) render as one textbox per row with a delete icon and an add
+  icon on the last row; tags (`Dictionary<string,string>`) render as side-by-side key/value textboxes with
+  the same delete/add affordances. `RetrievalFilter` gained `requiredLabels`/`excludedLabels` (matched
+  against each chunk's `label` tag, populated at ingestion from the source document type) alongside the
+  existing `requiredTags`/`excludedTags`, and the per-request `metadataFilter` shares the shape.
+- **Chat-turn detail: timing KPIs as horizontal bars.** The history-turn detail modal (admin + creator) now
+  renders the duration KPIs (TTFT, thinking, generation, time-to-last-token, pipeline wall) and the recorded
+  pipeline stages as horizontal bars, AssistantHub-style, keeping only the scalar metrics (throughput, tokens,
+  context) as compact cards.
+- **Richer chat-turn measurements.** The history-turn detail modal (admin + creator) now reports
+  time-to-last-token, pipeline wall time, and both generation-only and overall throughput, matching the depth
+  of AssistantHub's turn instrumentation.
+- **Analytics readability + per-stage latency-over-time.** The Analytics view now humanizes stage names
+  (snake_case → Title Case, `tool:` prefixes surfaced), adds a timeframe selector, and renders a stacked bar
+  chart of per-stage latency per day (bucketed) in addition to the existing per-stage averages.
+- **`/context` renders a formatted table.** The in-chat `/context` command (all three dashboards) now shows a
+  Markdown table — model (where surfaced), context window, context used with percentage, prompt/completion
+  tokens, and turn count — matching how `/help` renders.
+- **`/help` and `/?` render an in-chat command menu.** The slash-command help now renders as a Markdown table
+  inside the conversation window rather than a single "Commands" line.
+- **Feedback modal focus.** Clicking thumbs-up/down in Ask (all three dashboards) now moves focus straight to
+  the "Share more feedback" textbox.
+- **Grafana dashboards split by domain.** The single "Pneuma Observability" dashboard is replaced by five
+  per-domain dashboards (Overview, HTTP, Ingestion, Chat & Retrieval, Integrations), provisioned by default.
+
+### Fixed
+- **Ask answers no longer invent a placeholder subject name.** A vague follow-up ("Tell me more about the
+  side effects") could be rewritten by the query-rewrite step into a question about a hypothetical
+  "medication X", which the model then answered as if real. The rewrite step is now grounded in the subject's
+  display name and explicitly forbidden from introducing a placeholder or hypothetical name, so vague and
+  pronoun references resolve to the actual subject.
+- **Answers no longer leak internal object kinds (e.g. "(source: Cell)").** The grounded-answer context that
+  is sent to the model previously prefixed each source with its internal graph node type and name
+  (`[1] (Cell) cell_9f3a…: …`), which the model would echo back to readers as "(source: Cell)". Sources are now
+  presented as bare numbered excerpts (`[1] …`), and the system-level answering prompts (`user.answer`,
+  `assistant.system`) plus the default subject system prompt (admin + creator create-subject forms) explicitly
+  forbid naming internal object kinds/storage labels. Existing deployments self-heal the two prompts on next
+  boot (sentinel-guarded), and the change ships to `docker/` and `docker/factory/` on image rebuild.
+- **Row action menus stay on-screen.** The row `⋯` action menu (every table in the admin and creator
+  dashboards) dropped straight down from the trigger and ran off the bottom of the viewport for the last rows;
+  it now flips above the trigger (or clamps and scrolls) so it is always fully visible.
+- **Admin dashboard nav labels.** The Analytics and Evaluation nav entries showed raw i18n keys
+  (`nav.analytics`, `nav.eval`); the missing translations are added.
+- **Fresh-install migration for the queue-duration column.** The `ingestionjobevents.queuedurationms`
+  column (and the new subject columns) were being created in both the baseline schema and a migration,
+  which failed on a fresh SQLite/MySQL database with a duplicate-column error. Baseline `CREATE` statements
+  are now the original v1 shape and the versioned migrations are the sole source of later columns.
 
 ## [0.1.0] - 2026-08-18
 
