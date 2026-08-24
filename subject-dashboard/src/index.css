@@ -1366,3 +1366,6 @@ select {
   padding: 40px 16px; text-align: center; color: var(--text-secondary);
   border: 1px dashed var(--border-color); border-radius: 10px;
 }
+
+/* Compact monospace conversation ID cell in the Conversations table. */
+.mono-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--text-secondary); }

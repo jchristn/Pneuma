@@ -1004,3 +1004,6 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   padding: 40px 16px; text-align: center; color: var(--color-text-secondary);
   border: 1px dashed var(--color-border); border-radius: 10px;
 }
+
+/* Compact monospace conversation ID cell in the Conversations table. */
+.mono-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--color-text-secondary); }
