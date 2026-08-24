@@ -29,6 +29,9 @@ BACKEND_ALLOWLIST=(
   "src/Test.Shared/Suites/DatabaseSuite.cs"
   # A single cohesive class of MCP entity/report tool handlers (one method per tool).
   "src/Pneuma.Server/Mcp/McpEntityTools.cs"
+  # The ingestion pipeline's per-stage work in one region-organized class (metadata stamping already split out
+  # into IngestionMetadata.cs); the stages share enough context that further splitting hurts readability.
+  "src/Pneuma.Server/Services/IngestionStages.cs"
 )
 
 # Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the
@@ -44,6 +47,12 @@ FRONTEND_ALLOWLIST=(
   "subject-dashboard/src/views/SubjectsView.jsx"
   # The subject-dashboard content-links view (table + submit/bulk/detail modal orchestration).
   "subject-dashboard/src/views/LinksView.jsx"
+  # The Evaluation views: one cohesive orchestration (facts table + start/cancel + live-progress SSE modal +
+  # filtered results modal + bulk delete) per dashboard.
+  "admin-dashboard/src/views/EvalView.jsx"
+  "subject-dashboard/src/views/EvalView.jsx"
+  # The admin dashboard's single hand-rolled REST client (one method per endpoint across the full admin surface).
+  "admin-dashboard/src/utils/api.js"
 )
 
 violations=0

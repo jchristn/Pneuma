@@ -87,6 +87,17 @@ const en = {
       copyId: 'Copy node ID',
       view: 'View'
     },
+    conversations: {
+      title: 'Conversations',
+      subtitle: 'All of your conversations across every subject.',
+      empty: 'No conversations yet. Ask a subject a question to start one.',
+      open: 'Open conversation',
+      unknownSubject: 'Unknown subject',
+      subjectMissing: 'This conversation’s subject is unavailable',
+      loadError: 'Failed to load conversations.',
+      renameError: 'Rename failed.',
+      deleteError: 'Delete failed.'
+    },
     threads: {
       title: 'Conversations',
       new: 'New conversation',

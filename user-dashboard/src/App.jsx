@@ -6,6 +6,7 @@ import Shell from './components/Shell.jsx';
 import NodeView from './views/NodeView.jsx';
 import AskView from './views/AskView.jsx';
 import HomeView from './views/HomeView.jsx';
+import ConversationsView from './views/ConversationsView.jsx';
 import NotFoundView from './views/NotFoundView.jsx';
 
 function FullScreenLoader() {
@@ -52,6 +53,7 @@ export default function App() {
       >
         <Route path="/" element={<HomeView />} />
         <Route path="/ask" element={<Navigate to="/" replace />} />
+        <Route path="/conversations" element={<ConversationsView />} />
         <Route path="/node/:id" element={<NodeView />} />
         <Route path="/:slug" element={<AskView />} />
         <Route path="*" element={<NotFoundView />} />

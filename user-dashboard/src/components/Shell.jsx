@@ -29,6 +29,9 @@ export default function Shell() {
           </button>
 
           <div className="app-header-actions">
+            <button type="button" className="icon-button" onClick={() => navigate('/conversations')} aria-label={t('conversations.title', 'Conversations')} title={t('conversations.title', 'Conversations')}>
+              <Icon name="chat" size={18} />
+            </button>
             {user?.displayName ? <span className="user-chip" title={user.email}>{user.displayName}</span> : null}
             <LanguageSelector />
             <ThemeToggle />

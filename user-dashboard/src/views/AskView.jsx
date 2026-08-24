@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import Modal from '../components/Modal.jsx';
@@ -318,6 +318,7 @@ export default function AskView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
 
   const [subject, setSubject] = useState(null);
   const [subjectMissing, setSubjectMissing] = useState(false);
@@ -590,6 +591,13 @@ export default function AskView() {
       setError(err?.message || t('ask.error', 'The assistant failed to respond.'));
     }
   }, [apiClient, streaming, t]);
+
+  // Deep link from the Conversations view: /{slug}?thread=<id> rehydrates that conversation once the subject
+  // has resolved. The ref guard keeps it from reloading the already-open thread.
+  useEffect(() => {
+    const tid = searchParams.get('thread');
+    if (tid && subject && tid !== threadIdRef.current) loadThread(tid);
+  }, [searchParams, subject, loadThread]);
 
   // A slug that resolves to no subject: guide the user back to the subject picker.
   if (slug && subjectMissing) {
