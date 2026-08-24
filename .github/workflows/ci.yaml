@@ -69,6 +69,69 @@ jobs:
       - name: Automated suite against PostgreSQL
         run: dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 --configuration Release
 
+  mysql-live:
+    name: Backend against live MySQL
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: pneumapassword
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -ppneumapassword"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      # The four-provider contract suite reads these to target a live provider (see TestDatabase).
+      PNEUMA_TEST_DB_TYPE: Mysql
+      PNEUMA_TEST_DB_HOST: 127.0.0.1
+      PNEUMA_TEST_DB_PORT: "3306"
+      PNEUMA_TEST_DB_USER: root
+      PNEUMA_TEST_DB_PASSWORD: pneumapassword
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Automated suite against MySQL
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 --configuration Release
+
+  sqlserver-live:
+    name: Backend against live SQL Server
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Pneuma_password1"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Pneuma_password1 -Q 'SELECT 1' -b"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # The four-provider contract suite reads these to target a live provider (see TestDatabase).
+      PNEUMA_TEST_DB_TYPE: SqlServer
+      PNEUMA_TEST_DB_HOST: 127.0.0.1
+      PNEUMA_TEST_DB_PORT: "1433"
+      PNEUMA_TEST_DB_USER: sa
+      PNEUMA_TEST_DB_PASSWORD: "Pneuma_password1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Automated suite against SQL Server
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 --configuration Release
+
   dashboards:
     name: Dashboard build & test
     runs-on: ubuntu-latest

@@ -20,6 +20,9 @@ namespace Test.Shared
                 {
                     SecuritySuite.Build(),
                     DatabaseSuite.Build(),
+                    AuthDatabaseSuite.Build(),
+                    RbacDatabaseSuite.Build(),
+                    OpsDatabaseSuite.Build(),
                     GraphSuite.Build(),
                     IngestionSuite.Build(),
                     ExternalServicesSuite.Build(),

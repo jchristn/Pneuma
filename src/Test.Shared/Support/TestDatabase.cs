@@ -53,21 +53,28 @@ namespace Test.Shared.Support
             int port = IntEnvOr("PNEUMA_TEST_DB_PORT", DefaultPort(type));
             string user = EnvOr("PNEUMA_TEST_DB_USER", DefaultUser(type));
             string password = EnvOr("PNEUMA_TEST_DB_PASSWORD", "postgres");
+            string? schema = Environment.GetEnvironmentVariable("PNEUMA_TEST_DB_SCHEMA");
+            string? explicitDatabase = Environment.GetEnvironmentVariable("PNEUMA_TEST_DB_NAME");
 
             settings.Hostname = host;
             settings.Port = port;
             settings.Username = user;
             settings.Password = password;
+            if (!String.IsNullOrWhiteSpace(schema)) settings.Schema = schema;
 
-            // Isolate each case in its own database created via the provider's maintenance database.
+            // Isolate each case in its own database, created through a maintenance connection. The maintenance
+            // database defaults to the provider's built-in admin database (postgres/mysql/master); a supplied
+            // database name (--database / PNEUMA_TEST_DB_NAME) overrides which database the admin connection
+            // targets to issue CREATE DATABASE, for servers where the default admin database is not reachable.
+            string maintenanceDatabase = String.IsNullOrWhiteSpace(explicitDatabase) ? MaintenanceDatabase(type) : explicitDatabase;
             string databaseName = "pneuma_test_" + Guid.NewGuid().ToString("N");
-            await CreateDatabaseAsync(type, host, port, user, password, databaseName, token).ConfigureAwait(false);
+            await CreateDatabaseAsync(type, host, port, user, password, databaseName, schema, maintenanceDatabase, token).ConfigureAwait(false);
             settings.DatabaseName = databaseName;
 
             return settings;
         }
 
-        private static async Task CreateDatabaseAsync(DatabaseTypeEnum type, string host, int port, string user, string password, string databaseName, CancellationToken token)
+        private static async Task CreateDatabaseAsync(DatabaseTypeEnum type, string host, int port, string user, string password, string databaseName, string? schema, string maintenanceDatabase, CancellationToken token)
         {
             DatabaseSettings maintenance = new DatabaseSettings
             {
@@ -76,7 +83,8 @@ namespace Test.Shared.Support
                 Port = port,
                 Username = user,
                 Password = password,
-                DatabaseName = MaintenanceDatabase(type)
+                Schema = String.IsNullOrWhiteSpace(schema) ? null : schema,
+                DatabaseName = maintenanceDatabase
             };
 
             DatabaseDriverBase driver = DatabaseDriverFactory.Create(maintenance);
