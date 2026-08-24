@@ -222,7 +222,7 @@ services:
   # ------------------------------------------------------------------
   recalldb-server:
     container_name: 'recalldb-server'
-    image: 'jchristn77/recalldb-server:latest'
+    image: 'jchristn77/recalldb-server:v0.2.1'
     ports:
       - '8600:8600'
     environment:
@@ -248,7 +248,7 @@ services:
 
   recalldb-dashboard:
     container_name: 'recalldb-dashboard'
-    image: 'jchristn77/recalldb-dashboard:latest'
+    image: 'jchristn77/recalldb-dashboard:v0.2.1'
     ports:
       - '8601:8601'
     environment:
