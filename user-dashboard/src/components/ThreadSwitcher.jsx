@@ -73,7 +73,7 @@ function relativeTime(iso, t) {
  * @param {number} props.reloadToken - bump to force a reload (e.g. after a new thread is created).
  * @param {boolean} props.disabled - disable the control while streaming.
  */
-export default function ThreadSwitcher({ apiClient, subjectId = null, activeThreadId = null, onSelect, onNew, reloadToken = 0, disabled = false }) {
+export default function ThreadSwitcher({ apiClient, subjectId = null, activeThreadId = null, onSelect, onNew, onViewAll = null, reloadToken = 0, disabled = false }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [threads, setThreads] = useState([]);
@@ -164,6 +164,11 @@ export default function ThreadSwitcher({ apiClient, subjectId = null, activeThre
             <PlusIcon />
             <span>{t('threads.new', 'New conversation')}</span>
           </button>
+          {onViewAll ? (
+            <button type="button" className="thread-viewall" onClick={() => { setOpen(false); onViewAll(); }}>
+              {t('threads.viewAll', 'View all conversations →')}
+            </button>
+          ) : null}
           {error ? <div className="thread-error">{error}</div> : null}
           <div className="thread-list">
             {loading ? (

@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import SearchBox from '../components/SearchBox.jsx';
 import Modal from '../components/Modal.jsx';
@@ -319,6 +319,7 @@ export default function AskView() {
   const { apiClient } = useAuth();
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [subject, setSubject] = useState(null);
   const [subjectMissing, setSubjectMissing] = useState(false);
@@ -630,7 +631,7 @@ export default function AskView() {
             size="large"
           />
           <div className="scope-row scope-row-hero">
-            <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
+            <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} onViewAll={() => navigate('/conversations')} reloadToken={threadReload} disabled={streaming} />
             <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />
           </div>
           {error ? <div className="error-banner" role="alert">{error}</div> : null}
@@ -648,7 +649,7 @@ export default function AskView() {
           <p className="page-subtitle">{activeThreadTitle || subject?.tagline || t('ask.heroSubtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
+          <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} onViewAll={() => navigate('/conversations')} reloadToken={threadReload} disabled={streaming} />
           <Link className="button button-secondary" to="/">{t('ask.backToSubjects', 'Subjects')}</Link>
           <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
             {t('ask.newChat', 'New chat')}

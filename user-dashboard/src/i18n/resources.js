@@ -101,6 +101,7 @@ const en = {
     threads: {
       title: 'Conversations',
       new: 'New conversation',
+      viewAll: 'View all conversations →',
       empty: 'No conversations yet.',
       untitled: 'Untitled',
       rename: 'Rename',

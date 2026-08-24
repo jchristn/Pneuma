@@ -29,8 +29,9 @@ export default function Shell() {
           </button>
 
           <div className="app-header-actions">
-            <button type="button" className="icon-button" onClick={() => navigate('/conversations')} aria-label={t('conversations.title', 'Conversations')} title={t('conversations.title', 'Conversations')}>
-              <Icon name="chat" size={18} />
+            <button type="button" className="button button-ghost header-conversations" onClick={() => navigate('/conversations')} title={t('conversations.title', 'Conversations')}>
+              <Icon name="chat" size={16} />
+              <span>{t('conversations.title', 'Conversations')}</span>
             </button>
             {user?.displayName ? <span className="user-chip" title={user.email}>{user.displayName}</span> : null}
             <LanguageSelector />

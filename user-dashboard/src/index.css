@@ -1319,3 +1319,9 @@ a.relationship-target:hover {
 .conv-rename-input { flex: 1; }
 .button-danger { background: var(--color-danger); color: #fff; border-color: transparent; }
 .button-danger:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* "View all conversations" link inside the switcher dropdown + compact table action buttons. */
+.thread-viewall { display: block; width: 100%; text-align: left; padding: 6px 10px; border: none; background: transparent; color: var(--color-primary); font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.thread-viewall:hover { text-decoration: underline; }
+.conv-btn { padding: 6px 12px; font-size: 13px; }
+.header-conversations { padding: 8px 12px; }

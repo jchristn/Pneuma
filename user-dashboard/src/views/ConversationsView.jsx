@@ -153,8 +153,12 @@ export default function ConversationsView() {
                       </div>
                     ) : (
                       <div className="conv-actions">
-                        <button type="button" className="icon-button" title={t('threads.rename', 'Rename')} aria-label={t('threads.rename', 'Rename')} onClick={() => beginRename(thread)}><Icon name="edit" size={16} /></button>
-                        <button type="button" className="icon-button conv-delete" title={t('common.delete', 'Delete')} aria-label={t('common.delete', 'Delete')} onClick={() => { setRenamingId(null); setConfirmId(thread.id); }}><Icon name="trash" size={16} /></button>
+                        <button type="button" className="button button-secondary conv-btn" onClick={() => beginRename(thread)}>
+                          <Icon name="edit" size={14} /><span>{t('threads.rename', 'Rename')}</span>
+                        </button>
+                        <button type="button" className="button button-danger conv-btn" onClick={() => { setRenamingId(null); setConfirmId(thread.id); }}>
+                          <Icon name="trash" size={14} /><span>{t('common.delete', 'Delete')}</span>
+                        </button>
                       </div>
                     )}
                   </>
