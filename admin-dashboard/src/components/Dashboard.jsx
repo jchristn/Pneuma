@@ -22,6 +22,7 @@ import LinksView from '../views/LinksView';
 import CollectionsView from '../views/CollectionsView';
 import SearchView from '../views/SearchView';
 import AskView from '../views/AskView';
+import ConversationsView from '../views/ConversationsView';
 import TenantsView from '../views/TenantsView';
 import UsersView from '../views/UsersView';
 import CredentialsView from '../views/CredentialsView';
@@ -48,6 +49,7 @@ const VIEWS = {
   collections: CollectionsView,
   search: SearchView,
   ask: AskView,
+  conversations: ConversationsView,
   tenants: TenantsView,
   users: UsersView,
   credentials: CredentialsView,

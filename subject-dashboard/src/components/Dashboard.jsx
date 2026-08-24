@@ -6,6 +6,7 @@ import SubjectsView from '../views/SubjectsView';
 import LinksView from '../views/LinksView';
 import IngestionView from '../views/IngestionView';
 import AskView from '../views/AskView';
+import ConversationsView from '../views/ConversationsView';
 import RequestHistoryView from '../views/RequestHistoryView';
 import HistoryView from '../views/HistoryView';
 import AnalyticsView from '../views/AnalyticsView';
@@ -31,6 +32,8 @@ function Dashboard() {
         return <IngestionView />;
       case 'ask':
         return <AskView />;
+      case 'conversations':
+        return <ConversationsView />;
       case 'history':
         return <HistoryView />;
       case 'analytics':

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -315,6 +316,8 @@ function StatsInfo({ stats }) {
 function AskView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -588,6 +591,12 @@ function AskView() {
     }
   }, [apiClient, streaming, t]);
 
+  // Deep-link support: opening a conversation from the Conversations view rehydrates the thread here.
+  useEffect(() => {
+    const tid = searchParams.get('thread');
+    if (tid && tid !== threadIdRef.current) loadThread(tid);
+  }, [searchParams, loadThread]);
+
   return (
     <div className="view chat-view">
       <div className="chat-view-head">
@@ -611,7 +620,7 @@ function AskView() {
               ))}
             </select>
           </label>
-          <ThreadSwitcher apiClient={apiClient} subjectId={subjectId || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} reloadToken={threadReload} disabled={streaming} />
+          <ThreadSwitcher apiClient={apiClient} subjectId={subjectId || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} onViewAll={() => navigate('/dashboard/conversations')} reloadToken={threadReload} disabled={streaming} />
           {messages.length > 0 ? (
             <button type="button" className="button button-secondary" onClick={handleNewChat} disabled={streaming}>
               {t('ask.newChat', 'New chat')}

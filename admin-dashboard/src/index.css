@@ -960,3 +960,47 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 
 /* Make the conversation delete action read unmistakably as destructive (always visible, red). */
 .thread-actions .thread-danger { color: var(--color-danger); }
+
+/* ---- Conversations management view ---------------------------------- */
+.conv-view { display: flex; flex-direction: column; }
+.conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.conv-item {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 10px;
+  background: var(--color-surface);
+}
+.conv-main {
+  flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px;
+  text-align: left; background: none; border: none; padding: 0; cursor: pointer; color: inherit;
+}
+.conv-title {
+  font-weight: 600; color: var(--color-text); font-size: 0.95rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.conv-main:hover .conv-title { color: var(--color-primary); }
+.conv-meta { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--color-text-secondary); }
+.conv-subject { color: var(--color-text-secondary); }
+.conv-dot { color: var(--color-text-secondary); }
+.conv-time { color: var(--color-text-secondary); }
+.conv-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.conv-confirm-text { font-size: 0.85rem; color: var(--color-text-secondary); margin-right: 4px; }
+.conv-rename { display: flex; align-items: center; gap: 6px; flex: 1 1 100%; }
+.conv-rename-input {
+  flex: 1 1 auto; min-width: 0; padding: 7px 10px; font-size: 0.9rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-surface-alt); color: var(--color-text);
+}
+.conv-rename-input:focus { outline: none; border-color: var(--color-primary); }
+.conv-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; font-size: 0.85rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-surface-alt); color: var(--color-text); cursor: pointer;
+}
+.conv-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+.conv-btn:disabled { opacity: 0.55; cursor: default; }
+.conv-btn-danger { color: var(--color-danger); border-color: var(--color-danger); }
+.conv-btn-danger:hover:not(:disabled) { color: #fff; background: var(--color-danger); border-color: var(--color-danger); }
+.conv-empty {
+  padding: 40px 16px; text-align: center; color: var(--color-text-secondary);
+  border: 1px dashed var(--color-border); border-radius: 10px;
+}

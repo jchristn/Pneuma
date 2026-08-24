@@ -23,11 +23,23 @@ const en = {
       links: 'Links',
       ingestion: 'Ingestion',
       ask: 'Ask',
+      conversations: 'Conversations',
       observability: 'Observability',
       requestHistory: 'Request History',
       apiExplorer: 'API Explorer',
       settings: 'Settings',
       content: 'Content'
+    },
+    conversations: {
+      title: 'Conversations',
+      subtitle: 'All of your conversations across every subject.',
+      empty: 'No conversations yet. Ask a subject a question to start one.',
+      unknownSubject: 'Unknown subject',
+      open: 'Open conversation',
+      openAction: 'Open',
+      loadError: 'Failed to load conversations.',
+      renameError: 'Rename failed.',
+      deleteError: 'Delete failed.'
     },
     ask: {
       subtitle: 'Ask a grounded question of your archive; the answer streams as it is generated.',

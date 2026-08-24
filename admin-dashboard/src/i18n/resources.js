@@ -63,6 +63,7 @@ const en = {
       groupSystem: 'System',
       home: 'Home',
       ask: 'Ask',
+      conversations: 'Conversations',
       subjects: 'Subjects',
       links: 'Links',
       collections: 'Collections',
