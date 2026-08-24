@@ -21,6 +21,37 @@ Point Pneuma at a set of sources about a subject — documents, web pages, and o
 
 Pneuma is the **intelligence layer** — ingestion, ontology, graph, retrieval, provenance, rights awareness, and RBAC. It is infrastructure you build on, not a finished end-user product.
 
+## Screenshots
+
+<details>
+<summary>Click to expand a quick tour of the admin dashboard.</summary>
+
+<br />
+
+**Overview.** The admin home surfaces the current state of a deployment — tenants, users, subjects, links, and queued/failed ingestion jobs — above a live request-activity chart (success vs. failed) with selectable time ranges.
+
+<img src="assets/ss1.png" alt="Admin dashboard Overview: deployment stat tiles and a live request-activity chart" width="100%" />
+
+<br />
+
+**Per-subject configuration.** Each subject has its own settings: display name and URL slug, embedding/inference models (and optional reranking/prompt-rewrite models), a fixed-dimensionality collection, a chat-history retention window, a show-thinking toggle, and per-subject prompt overrides (system, reranking, prompt-rewrite, and ontology classification/definition) that layer on top of the global defaults.
+
+<img src="assets/ss2.png" alt="Edit subject modal: models, retention, thinking toggle, and per-subject prompt overrides" width="100%" />
+
+<br />
+
+**Ingestion & links.** The Links view lists every content link and its ingestion status (Ingested / Failed, with the last error), filterable by subject and paginated like every other table — each row is a source that flowed through the document → graph → search pipeline.
+
+<img src="assets/ss3.png" alt="Links view: content links with per-subject ingestion status and errors" width="100%" />
+
+<br />
+
+**Grounded Q&A.** The Ask surface answers questions from the curated corpus and shows its work: an expandable tool-call trace (each `pneuma_search` / `pneuma_get_node` call with timing) above a grounded, Markdown-formatted answer, with the conversation switcher for managing threads.
+
+<img src="assets/ss4.png" alt="Ask view: agentic tool-call trace above a grounded, cited answer" width="100%" />
+
+</details>
+
 ## Use cases
 
 Pneuma is aimed at **developers, data engineers, and AI engineers** who need structured, grounded knowledge out of unstructured sources:
