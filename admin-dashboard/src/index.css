@@ -782,8 +782,10 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .hd-count { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; color: #fff; background: var(--color-primary); border-radius: 9px; }
 
 .hd-timing { display: flex; flex-direction: column; gap: 7px; }
-.hd-timing-row { display: grid; grid-template-columns: max-content 1fr max-content; align-items: center; gap: 12px; }
-.hd-timing-label { font-size: 0.78rem; color: var(--color-text-secondary); white-space: nowrap; }
+/* Fixed side columns (uniform across the independent per-row grids) so every bar's track starts and ends
+   at the same x; both are wide enough — and nowrap — so labels and timings never wrap. */
+.hd-timing-row { display: grid; grid-template-columns: 168px 1fr 104px; align-items: center; gap: 12px; }
+.hd-timing-label { font-size: 0.78rem; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hd-timing-track { height: 12px; background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
 .hd-timing-fill { display: block; height: 100%; border-radius: 6px; }
 .hd-timing-value { font-size: 0.78rem; color: var(--color-text); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

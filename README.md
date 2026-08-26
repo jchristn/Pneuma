@@ -204,17 +204,17 @@ Enumerations are **bounded and paged** (`EnumerationResult` envelope: advance `s
 
 ```
                        ┌───────────────────────────────┐
-                       │  Dashboards (React / Vite)     │
-                       │  admin 3010 · subject 3011 ·   │
-                       │  user 3012                     │
+                       │  Dashboards (React / Vite)    │
+                       │  admin 3010 · subject 3011 ·  │
+                       │  user 3012                    │
                        └───────────────┬───────────────┘
                                        │ HTTP
                                        ▼
                        ┌───────────────────────────────┐
-                       │  Pneuma Server (C# / Watson)   │
-                       │  REST /v1.0  +  MCP /mcp        │
-                       │  Port 8080                     │
-                       └──┬─────┬─────┬─────┬─────┬─────┘
+                       │  Pneuma Server (C# / Watson)  │
+                       │  REST /v1.0  +  MCP /mcp      │
+                       │  Port 8080                    │
+                       └──┬─────┬─────┬─────┬─────┬────┘
               ┌───────────┘     │     │     │     └───────────┐
               ▼                 ▼     ▼     ▼                 ▼
      ┌────────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────┐
