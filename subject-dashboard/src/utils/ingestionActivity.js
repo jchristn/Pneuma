@@ -1,6 +1,8 @@
 // Shared helpers for the Ingestion Activity chart: the ordered pipeline-stage list, a stable per-stage
 // color map (works in light/dark), and normalization of the backend summary into chart buckets.
 
+import { getRangeWindow } from './activity';
+
 // Pipeline stages in execution order (mirrors the backend IngestionStageEnum). Also the bottom-to-top
 // stacking order for the stacked bars and the legend order.
 export const INGESTION_STAGES = [
@@ -34,22 +36,36 @@ export function stageLabel(stage) {
   return String(stage || '').replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
-// Normalize the ingestion summary response into an ordered list of buckets, each with a
-// { stageName: count } map. The backend already gap-fills and orders buckets across the range.
-export function normalizeIngestionBuckets(summary) {
+// Normalize the ingestion summary into a fixed-width grid for the selected range — the SAME window/slice
+// grid the Request Activity chart uses (getRangeWindow: bucketMs × sliceCount) — so both charts always
+// render the same number of buckets for a given range, regardless of how the backend bucketed the data.
+// Backend buckets are snapped into the grid cell they fall into and their per-stage counts summed.
+export function normalizeIngestionBuckets(summary, rangeId = 'day') {
+  const range = getRangeWindow(rangeId);
   const raw = summary?.buckets || summary?.Buckets || [];
-  return raw.map((b) => {
-    const stages = {};
+
+  const cells = new Map();
+  for (const b of raw) {
+    const ts = b.bucketStartUtc || b.BucketStartUtc;
+    if (!ts) continue;
+    const key = Math.floor(new Date(ts).getTime() / range.bucketMs) * range.bucketMs;
+    let cell = cells.get(key);
+    if (!cell) { cell = {}; cells.set(key, cell); }
     for (const s of (b.stages || b.Stages || [])) {
       const name = s.stage || s.Stage;
       const count = Number(s.count ?? s.Count ?? 0);
-      if (name) stages[name] = count;
+      if (name) cell[name] = (cell[name] || 0) + count;
     }
+  }
+
+  return Array.from({ length: range.sliceCount }, (_, index) => {
+    const startMs = range.startMs + index * range.bucketMs;
+    const stages = cells.get(startMs) || {};
     return {
-      startUtc: b.bucketStartUtc || b.BucketStartUtc,
-      endUtc: b.bucketEndUtc || b.BucketEndUtc,
+      startUtc: new Date(startMs).toISOString(),
+      endUtc: new Date(startMs + range.bucketMs).toISOString(),
       stages,
-      total: Number(b.totalCount ?? b.TotalCount ?? Object.values(stages).reduce((a, c) => a + c, 0))
+      total: Object.values(stages).reduce((a, c) => a + c, 0)
     };
   });
 }

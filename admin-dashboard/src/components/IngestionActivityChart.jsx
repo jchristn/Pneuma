@@ -18,7 +18,7 @@ function IngestionActivityChart({ summary, rangeId = 'day', onBucketClick }) {
   const { t } = useTranslation();
   const [hover, setHover] = useState(null);
 
-  const buckets = useMemo(() => normalizeIngestionBuckets(summary), [summary]);
+  const buckets = useMemo(() => normalizeIngestionBuckets(summary, rangeId), [summary, rangeId]);
   const stages = useMemo(() => stagesPresent(buckets), [buckets]);
   const maxCount = Math.max(1, ...buckets.map((b) => b.total));
 

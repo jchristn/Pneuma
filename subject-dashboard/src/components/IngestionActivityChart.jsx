@@ -37,7 +37,7 @@ function computeYTicks(max) {
  */
 function IngestionActivityChart({ summary, rangeId = 'day' }) {
   const [hover, setHover] = useState(null);
-  const buckets = normalizeIngestionBuckets(summary);
+  const buckets = normalizeIngestionBuckets(summary, rangeId);
   const stages = stagesPresent(buckets);
 
   if (!summary || buckets.length === 0 || stages.length === 0) {

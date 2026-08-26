@@ -148,7 +148,7 @@ function HomeView() {
 
   const copyIngestionChart = async () => {
     const svg = ingChartRef.current?.querySelector('svg');
-    const present = stagesPresent(normalizeIngestionBuckets(ingestion));
+    const present = stagesPresent(normalizeIngestionBuckets(ingestion, rangeId));
     const result = await copyChartPng(svg, {
       title: t('home.ingestionActivity', 'Ingestion Activity'),
       xLabel: 'Time',
