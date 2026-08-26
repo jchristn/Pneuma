@@ -178,8 +178,8 @@ services:
   # ------------------------------------------------------------------
   partio-server:
     container_name: 'partio-server'
-    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed), by digest for reproducibility.
-    image: 'jchristn77/partio-server:v0.4.0@sha256:5ac2901e35bfe1d399d6b91fde1b53cd8d1466fe5af034220b9ae19af16f8a10'
+    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed).
+    image: 'jchristn77/partio-server:v0.4.0'
     ports:
       - '8400:8400'
     depends_on:
@@ -200,8 +200,8 @@ services:
 
   partio-dashboard:
     container_name: 'partio-dashboard'
-    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed), by digest for reproducibility.
-    image: 'jchristn77/partio-dashboard:v0.4.0@sha256:6a57070c5da8b54974f9ae2342e6f23245ec9e549277246ef1362b8800bfc7f9'
+    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed).
+    image: 'jchristn77/partio-dashboard:v0.4.0'
     ports:
       - '8401:8401'
     environment:
