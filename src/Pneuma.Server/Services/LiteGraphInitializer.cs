@@ -144,7 +144,8 @@ namespace Pneuma.Server.Services
                     LastName = "Admin",
                     Email = _DefaultUserEmail,
                     Password = "password",
-                    Active = true
+                    Active = true,
+                    IsTenantAdmin = true
                 };
                 string createBody = await SendAsync(client, HttpMethod.Put, listUrl, JsonSerializer.Serialize(request, _RequestJson), token).ConfigureAwait(false);
                 string? created = GetStringProperty(createBody, "GUID", "Guid", "guid");
