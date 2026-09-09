@@ -112,7 +112,10 @@ namespace Pneuma.Server.Services
                 Model = model,
                 Endpoint = _OllamaBaseUrl,
                 ApiFormat = "Ollama",
-                Active = true
+                Active = true,
+                // The default local model runs one inference at a time (MaxConcurrentRequests = 1); allow a
+                // bounded queue so ingestion embed/process bursts wait for a slot instead of bouncing off 429.
+                MaxQueueDepth = 16
             };
         }
 

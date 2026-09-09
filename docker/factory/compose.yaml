@@ -178,8 +178,8 @@ services:
   # ------------------------------------------------------------------
   partio-server:
     container_name: 'partio-server'
-    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed).
-    image: 'jchristn77/partio-server:v0.4.0'
+    # Pinned to the Partio 0.5.0 release (adds per-endpoint MaxQueueDepth request queueing).
+    image: 'jchristn77/partio-server:v0.5.0'
     ports:
       - '8400:8400'
     depends_on:
@@ -200,8 +200,8 @@ services:
 
   partio-dashboard:
     container_name: 'partio-dashboard'
-    # Pinned to the Partio 0.4.0 release (adds /v1.0/summarize, /v1.0/chunk, /v1.0/embed).
-    image: 'jchristn77/partio-dashboard:v0.4.0'
+    # Pinned to the Partio 0.5.0 release (adds per-endpoint MaxQueueDepth request queueing).
+    image: 'jchristn77/partio-dashboard:v0.5.0'
     ports:
       - '8401:8401'
     environment:

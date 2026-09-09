@@ -36,6 +36,14 @@ namespace Pneuma.Core.Integrations.Models
         public int MaxConcurrentRequests { get; set; } = 1;
 
         /// <summary>
+        /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>
+        /// upstream calls are in flight. Paired with Partio's endpoint <c>MaxQueueDepth</c> property; minimum 0
+        /// (Partio clamps). Default 0 — requests over the concurrency limit are rejected immediately with 429
+        /// rather than queued; a queued request that waits past the endpoint timeout returns 504.
+        /// </summary>
+        public int MaxQueueDepth { get; set; } = 0;
+
+        /// <summary>
         /// Maximum context window (in tokens) of this completion model. Partio has no discrete field for it,
         /// so it round-trips via the endpoint's extensible <c>contextSize</c> tag. Drives automatic chat
         /// conversation compression once the message history approaches the window. 0 disables compression.

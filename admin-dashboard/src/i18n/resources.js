@@ -364,6 +364,7 @@ const en = {
       endpoint: 'Endpoint URL',
       apiFormat: 'API Format',
       maxConcurrency: 'Max Concurrency',
+      maxQueueDepth: 'Max Queue Depth',
       contextSize: 'Context Size',
       health: 'Health',
       healthPending: 'Pending',

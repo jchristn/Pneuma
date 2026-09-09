@@ -35,6 +35,13 @@ namespace Pneuma.Core.Requests
         public int MaxConcurrentRequests { get; set; } = 1;
 
         /// <summary>
+        /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>
+        /// upstream calls are in flight. Minimum 0 (Partio clamps). Default 0 — over-limit requests are rejected
+        /// immediately rather than queued.
+        /// </summary>
+        public int MaxQueueDepth { get; set; } = 0;
+
+        /// <summary>
         /// Maximum context window (in tokens) of a completion model. Drives automatic chat conversation
         /// compression once the message history approaches the window. 0 disables compression.
         /// </summary>

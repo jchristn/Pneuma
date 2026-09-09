@@ -34,6 +34,9 @@ namespace Pneuma.Core.Responses
         /// <summary>Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1. Default 2.</summary>
         public int MaxConcurrentRequests { get; set; } = 2;
 
+        /// <summary>Maximum number of requests that may queue for a slot once the concurrency limit is reached (0 = no queueing; over-limit requests are rejected immediately).</summary>
+        public int MaxQueueDepth { get; set; } = 0;
+
         /// <summary>Completion model context window in tokens (0 = unset). Drives automatic chat compression.</summary>
         public int ContextSize { get; set; } = 0;
 

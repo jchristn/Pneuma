@@ -298,6 +298,7 @@ namespace Pneuma.Core.Integrations.Implementations
                         Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
                         Active = active,
                         MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
+                        MaxQueueDepth = GetIntProperty(item, 0, "MaxQueueDepth", "maxQueueDepth"),
                         ContextSize = GetTagInt(item, "contextSize")
                     });
                 }
@@ -319,6 +320,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
                 Active = active,
                 MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
+                MaxQueueDepth = GetIntProperty(item, 0, "MaxQueueDepth", "maxQueueDepth"),
                 ContextSize = GetTagInt(item, "contextSize")
             };
         }
@@ -357,6 +359,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 ApiKey = endpoint.ApiKey,
                 Active = endpoint.Active,
                 MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests),
+                MaxQueueDepth = Math.Max(0, endpoint.MaxQueueDepth),
                 Tags = tags
             };
         }
