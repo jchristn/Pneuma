@@ -27,7 +27,9 @@ namespace Pneuma.Server.Services
         #region Private-Members
 
         // Per-probe wall-clock ceiling: a wedged upstream fails as a timed-out check instead of hanging the request.
-        private static readonly TimeSpan _ProbeTimeout = TimeSpan.FromSeconds(30);
+        // Reasoning models (e.g. gpt-oss:20b) can spend many seconds "thinking" before emitting a token, so this
+        // is generous enough that a genuinely working reasoning endpoint is not misreported as a timeout.
+        private static readonly TimeSpan _ProbeTimeout = TimeSpan.FromSeconds(60);
 
         private readonly IPartioClient _Partio;
         private readonly GroundedQueryService _Query;
@@ -71,13 +73,38 @@ namespace Pneuma.Server.Services
         {
             if (String.IsNullOrWhiteSpace(endpointId)) return null;
 
-            PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
-            if (completion != null) return await ValidateCompletionAsync(completion, token).ConfigureAwait(false);
+            try
+            {
+                PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
+                if (completion != null) return await ValidateCompletionAsync(completion, token).ConfigureAwait(false);
 
-            PartioEndpoint? embedding = await _Partio.ReadEndpointAsync("embedding", endpointId, token).ConfigureAwait(false);
-            if (embedding != null) return await ValidateEmbeddingAsync(embedding, token).ConfigureAwait(false);
+                PartioEndpoint? embedding = await _Partio.ReadEndpointAsync("embedding", endpointId, token).ConfigureAwait(false);
+                if (embedding != null) return await ValidateEmbeddingAsync(embedding, token).ConfigureAwait(false);
 
-            return null;
+                return null;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                // An error while resolving or probing the endpoint (including upstream/provider errors such as a
+                // bad Authorization header) should read as a failed validation with the real reason, not a broken
+                // "validation could not be run" for the whole request.
+                _Logging.Warn("[ModelRunnerValidationService] validation of endpoint " + endpointId + " failed: " + e.Message);
+                return new ModelEndpointValidationDto
+                {
+                    EndpointId = endpointId,
+                    Type = "Unknown",
+                    CheckedUtc = DateTime.UtcNow,
+                    Ok = false,
+                    Checks = new List<ModelEndpointValidationCheck>
+                    {
+                        new ModelEndpointValidationCheck { Name = "Validate", Ok = false, Error = e.Message }
+                    }
+                };
+            }
         }
 
         #endregion
@@ -134,15 +161,28 @@ namespace Pneuma.Server.Services
                     ChatCompletionOptions options = new ChatCompletionOptions
                     {
                         Temperature = 0.0,
-                        MaxTokens = 16,
+                        // Reasoning models (e.g. gpt-oss:20b) spend their token budget "thinking" before emitting a
+                        // visible answer, so a tiny cap gets fully consumed by reasoning and returns empty visible
+                        // text. Give enough budget to both reason and answer.
+                        MaxTokens = 512,
                         SystemPrompt = "You are a health probe. Reply with exactly the single word: OK"
                     };
                     ChatResponse response = await client.ChatAsync("Reply with exactly: OK", options, cts.Token).ConfigureAwait(false);
                     check.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
-                    if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text))
+
+                    // A reasoning model spends tokens "thinking" (often in a <think> block) before its visible
+                    // answer, so the probe passes on ANY generated output — reasoning or visible text — not just a
+                    // non-empty final answer. rawText includes any think block, so it is non-empty whenever the
+                    // model produced anything at all.
+                    string rawText = response?.Text ?? String.Empty;
+                    string visibleText = ThinkStrip(rawText);
+
+                    if (response != null && response.Success && !String.IsNullOrWhiteSpace(rawText))
                     {
                         check.Ok = true;
-                        check.Detail = "Model replied: " + Trim(ThinkStrip(response.Text), 120);
+                        check.Detail = !String.IsNullOrWhiteSpace(visibleText)
+                            ? "Model replied: " + Trim(visibleText, 120)
+                            : "Model produced reasoning output (no visible text) — the endpoint responds.";
                     }
                     else
                     {
@@ -178,7 +218,8 @@ namespace Pneuma.Server.Services
                         Tools = new List<ToolDefinition> { BuildProbeTool() },
                         ToolChoice = "auto",
                         Temperature = 0.0,
-                        MaxTokens = 128
+                        // Headroom so a reasoning model can think before emitting the tool call.
+                        MaxTokens = 512
                     };
 
                     ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, cts.Token).ConfigureAwait(false);
