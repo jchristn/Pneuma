@@ -14,7 +14,14 @@ namespace Pneuma.Core.Integrations
     {
         #region Private-Members
 
-        private static readonly HttpClient _Http = new HttpClient();
+        // Connection pooling is shared through one handler (avoids socket exhaustion), but every client gets its
+        // OWN HttpClient. PolyPrompt applies the endpoint's API key as an Authorization header on the client's
+        // DefaultRequestHeaders; a single shared HttpClient would accumulate one key per endpoint and throw
+        // "Authorization does not support multiple values" as soon as a second keyed endpoint was used.
+        private static readonly SocketsHttpHandler _Handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+        };
 
         #endregion
 
@@ -32,20 +39,25 @@ namespace Pneuma.Core.Integrations
             if (runner == null) throw new ArgumentNullException(nameof(runner));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
 
+            // Fresh HttpClient per client (pooled through the shared handler) so each endpoint's Authorization
+            // header is isolated from the others.
+            HttpClient http = new HttpClient(_Handler, disposeHandler: false);
+
             CompletionClientBase client;
             switch (runner.Provider)
             {
                 case ModelRunnerProviderEnum.OpenAI:
                 case ModelRunnerProviderEnum.OpenAICompatible:
-                    client = new OpenAiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, _Http);
+                    client = new OpenAiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
                     break;
                 case ModelRunnerProviderEnum.Gemini:
-                    client = new GeminiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, _Http);
+                    client = new GeminiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
                     break;
                 case ModelRunnerProviderEnum.Ollama:
-                    client = new OllamaClient(runner.BaseUrl, apiKey ?? String.Empty, logging, _Http);
+                    client = new OllamaClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
                     break;
                 default:
+                    http.Dispose();
                     throw new NotSupportedException("Unsupported model runner provider: " + runner.Provider);
             }
 
