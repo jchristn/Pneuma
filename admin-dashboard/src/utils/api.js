@@ -294,6 +294,12 @@ class ApiClient {
     return this._request('GET', `/v1.0/model-runners/${encodeURIComponent(id)}/health`);
   }
 
+  // Actively validate a model endpoint end to end (completion + tool calling, or embedding). Returns a
+  // validation result with per-check outcomes.
+  validateModelRunner(id) {
+    return this._request('POST', `/v1.0/model-runners/${encodeURIComponent(id)}/validate`);
+  }
+
   // Enqueue ingestion for many URLs at once for a single subject.
   bulkSubmitLinks(subjectId, body) {
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });

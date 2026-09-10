@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ResourceView from '../components/ResourceView';
 import StatusPill from '../components/StatusPill';
+import Modal from '../components/Modal';
 import { HealthHistogram, HealthDetailModal } from '../components/HealthHistogram';
 
 const TYPES = ['Embedding', 'Completion'];
@@ -15,11 +16,74 @@ function typeTone(type) {
   return 'neutral';
 }
 
+function ValidationModal({ state, onClose, onRetry }) {
+  const { t } = useTranslation();
+  const { loading, data, error, name } = state;
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+
+  const footer = (
+    <>
+      <button type="button" className="button-secondary" onClick={onRetry} disabled={loading}>
+        {loading ? t('modelRunners.validateRunning') : t('common.retry', 'Retry')}
+      </button>
+      <button type="button" className="button-primary" onClick={onClose}>{t('common.close')}</button>
+    </>
+  );
+
+  return (
+    <Modal title={t('modelRunners.validateTitle', { name })} size="lg" onClose={onClose} footer={footer}>
+      {loading && <p className="confirm-text">{t('modelRunners.validateRunning')}</p>}
+      {!loading && error && (
+        <div className="error-message" style={{ marginBottom: '1rem' }}>
+          {t('modelRunners.validateError')}: {error}
+        </div>
+      )}
+      {!loading && data && (
+        <>
+          <div style={{ marginBottom: '1rem' }}>
+            <StatusPill
+              label={data.ok ? t('modelRunners.validatePassed') : t('modelRunners.validateFailed')}
+              tone={data.ok ? 'success' : 'danger'}
+            />
+          </div>
+          <dl className="kv-grid" style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'contents' }}><dt>{t('modelRunners.type')}</dt><dd>{data.type || '—'}</dd></div>
+            <div style={{ display: 'contents' }}><dt>{t('modelRunners.model')}</dt><dd>{data.model || '—'}</dd></div>
+            <div style={{ display: 'contents' }}><dt>{t('modelRunners.endpoint')}</dt><dd className="wrap">{data.endpoint || '—'}</dd></div>
+            <div style={{ display: 'contents' }}><dt>{t('modelRunners.apiFormat')}</dt><dd>{data.apiFormat || '—'}</dd></div>
+          </dl>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t('modelRunners.validateCheck')}</th>
+                <th>{t('modelRunners.validateResult')}</th>
+                <th>{t('modelRunners.validateDetail')}</th>
+                <th style={{ textAlign: 'right' }}>{t('modelRunners.validateDuration')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {checks.map((c, i) => (
+                <tr key={i}>
+                  <td>{c.name}</td>
+                  <td><StatusPill label={c.ok ? 'Pass' : 'Fail'} tone={c.ok ? 'success' : 'danger'} /></td>
+                  <td className="wrap">{c.ok ? (c.detail || '—') : (c.error || '—')}</td>
+                  <td style={{ textAlign: 'right' }}>{c.durationMs != null ? `${Math.round(c.durationMs)} ms` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 function ModelRunnersView() {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
   const [health, setHealth] = useState({});
   const [healthModal, setHealthModal] = useState(null);
+  const [validation, setValidation] = useState(null);
   const mounted = useRef(true);
 
   const loadHealth = useCallback(async () => {
@@ -53,6 +117,17 @@ function ModelRunnersView() {
       if (mounted.current) setHealthModal((m) => (m && m.id === row.id ? { ...m, loading: false } : m));
     }
   }, [apiClient, health]);
+
+  const runValidation = useCallback(async (row) => {
+    const label = row.name || row.model || row.id;
+    setValidation({ id: row.id, name: label, loading: true, data: null, error: null });
+    try {
+      const data = await apiClient.validateModelRunner(row.id);
+      if (mounted.current) setValidation((v) => (v && v.id === row.id ? { ...v, loading: false, data } : v));
+    } catch (err) {
+      if (mounted.current) setValidation((v) => (v && v.id === row.id ? { ...v, loading: false, error: err?.message || 'Validation failed' } : v));
+    }
+  }, [apiClient]);
 
   const renderHealth = (row) => {
     if (row.active === false) return <StatusPill label="Inactive" tone="neutral" />;
@@ -114,10 +189,19 @@ function ModelRunnersView() {
         idField="id"
         duplicable
         duplicateTransform={(r) => ({ ...r, name: r.name ? `${r.name} (copy)` : '' })}
+        extraActions={[
+          { key: 'validate', label: t('modelRunners.validate'), tip: t('modelRunners.validateTip'), onClick: runValidation }
+        ]}
       />
       {healthModal && (
         <HealthDetailModal title={healthModal.title} health={healthModal.data} loading={healthModal.loading}
           onClose={() => setHealthModal(null)} />
+      )}
+      {validation && (
+        <ValidationModal state={validation} onClose={() => setValidation(null)} onRetry={() => {
+          const row = { id: validation.id, name: validation.name };
+          runValidation(row);
+        }} />
       )}
     </>
   );

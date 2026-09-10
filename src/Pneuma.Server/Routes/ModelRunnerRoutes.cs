@@ -26,6 +26,7 @@ namespace Pneuma.Server.Routes
         private readonly IPartioClient _Partio;
         private readonly AuthorizationService _Authz;
         private readonly ModelHealthMonitor _Health;
+        private readonly ModelRunnerValidationService _Validation;
 
         #endregion
 
@@ -35,14 +36,17 @@ namespace Pneuma.Server.Routes
         /// <param name="partio">Partio client.</param>
         /// <param name="authz">Authorization service.</param>
         /// <param name="health">Model health monitor providing per-base-URL health status.</param>
-        public ModelRunnerRoutes(IPartioClient partio, AuthorizationService authz, ModelHealthMonitor health)
+        /// <param name="validation">Model runner validation service (active end-to-end endpoint checks).</param>
+        public ModelRunnerRoutes(IPartioClient partio, AuthorizationService authz, ModelHealthMonitor health, ModelRunnerValidationService validation)
         {
             if (partio == null) throw new ArgumentNullException(nameof(partio));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (health == null) throw new ArgumentNullException(nameof(health));
+            if (validation == null) throw new ArgumentNullException(nameof(validation));
             _Partio = partio;
             _Authz = authz;
             _Health = health;
+            _Validation = validation;
         }
 
         #endregion
@@ -63,6 +67,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Health of all model endpoints (deduplicated by base URL)", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}/health", HealthByIdAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Health of a single model endpoint", "ModelRunners"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/model-runners/{id}/validate", ValidateAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Actively validate a model endpoint end to end (completion + tool calling, or embedding)", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a model endpoint", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/model-runners/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
@@ -170,6 +176,21 @@ namespace Pneuma.Server.Routes
 
             ModelEndpointHealthDto status = _Health.BuildStatus(endpoint.Id, endpoint.Name, display, endpoint.Endpoint);
             await RouteHelper.SendJsonAsync(ctx, 200, status).ConfigureAwait(false);
+        }
+
+        private async Task ValidateAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+
+            string id = RouteHelper.Param(ctx, "id");
+            ModelEndpointValidationDto? result = await _Validation.ValidateAsync(id, ctx.Token).ConfigureAwait(false);
+            if (result == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
+                return;
+            }
+            await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
         }
 
         private async Task UpdateAsync(HttpContextBase ctx)

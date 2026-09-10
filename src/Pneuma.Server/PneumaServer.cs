@@ -192,11 +192,12 @@ namespace Pneuma.Server
             new IngestionJobRoutes(_Database, _Authorization, cascade).Register(_Server);
             new IngestionEndpointRoutes(_Partio, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);
-            new ModelRunnerRoutes(_Partio, _Authorization, _ModelHealth).Register(_Server);
+            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
+            ModelRunnerValidationService modelValidation = new ModelRunnerValidationService(_Partio, groundedQuery, _Authentication.Cipher, _Logging);
+            new ModelRunnerRoutes(_Partio, _Authorization, _ModelHealth, modelValidation).Register(_Server);
             new PromptRoutes(_Database, _Authorization).Register(_Server);
             new GraphRoutes(_Database, _Authorization, _GraphFactory).Register(_Server);
             new SearchRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory).Register(_Server);
-            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
             new QueryRoutes(_Authorization, groundedQuery, _ModelRunnerGate, _Logging).Register(_Server);
             new EvalRoutes(_Database, _Authorization, groundedQuery, _Logging).Register(_Server);
             new FacetRoutes(_Database, _Authorization).Register(_Server);
