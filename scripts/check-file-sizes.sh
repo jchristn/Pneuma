@@ -56,6 +56,9 @@ FRONTEND_ALLOWLIST=(
   "subject-dashboard/src/views/EvalView.jsx"
   # The admin dashboard's single hand-rolled REST client (one method per endpoint across the full admin surface).
   "admin-dashboard/src/utils/api.js"
+  # The admin dashboard's i18n string bundle: one flat resource object of UI translations that grows with the
+  # UI surface. Splitting it across files would fragment the single translation source.
+  "admin-dashboard/src/i18n/resources.js"
 )
 
 violations=0
