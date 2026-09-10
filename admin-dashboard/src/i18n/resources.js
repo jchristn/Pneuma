@@ -27,6 +27,8 @@ const en = {
       execute: 'Execute',
       copy: 'Copy',
       copied: 'Copied',
+      show: 'Show',
+      hide: 'Hide',
       confirm: 'Confirm',
       search: 'Search',
       clear: 'Clear',
@@ -368,7 +370,18 @@ const en = {
       contextSize: 'Context Size',
       health: 'Health',
       healthPending: 'Pending',
-      healthDetailHint: 'Health status and recent history (click for details)'
+      healthDetailHint: 'Health status and recent history (click for details)',
+      validate: 'Validate',
+      validateTip: 'Send live test requests to this endpoint — a completion and a tool-calling round-trip for completion models, or an embedding request for embedding models — and show the results.',
+      validateTitle: 'Validate — {{name}}',
+      validateRunning: 'Running validation…',
+      validatePassed: 'All checks passed',
+      validateFailed: 'One or more checks failed',
+      validateError: 'Validation could not be run',
+      validateCheck: 'Check',
+      validateResult: 'Result',
+      validateDetail: 'Detail',
+      validateDuration: 'Duration'
     },
     prompts: {
       title: 'Prompts',

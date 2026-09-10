@@ -30,10 +30,10 @@ namespace Pneuma.Core.Integrations.Models
 
         /// <summary>
         /// Maximum number of concurrent requests Partio will send to this endpoint. Paired with Partio's
-        /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 1 — a single
-        /// unshared inference per request finishes fastest on a local model and avoids upstream timeouts.
+        /// endpoint <c>MaxConcurrentRequests</c> property; minimum 1 (Partio clamps). Default 2 to match
+        /// Partio's own canonical default so a create followed by a read does not flip the value.
         /// </summary>
-        public int MaxConcurrentRequests { get; set; } = 1;
+        public int MaxConcurrentRequests { get; set; } = 2;
 
         /// <summary>
         /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>
@@ -44,9 +44,10 @@ namespace Pneuma.Core.Integrations.Models
         public int MaxQueueDepth { get; set; } = 0;
 
         /// <summary>
-        /// Maximum context window (in tokens) of this completion model. Partio has no discrete field for it,
-        /// so it round-trips via the endpoint's extensible <c>contextSize</c> tag. Drives automatic chat
-        /// conversation compression once the message history approaches the window. 0 disables compression.
+        /// Maximum context window (in tokens) of this completion model. A first-class Partio endpoint field
+        /// (<c>ContextSize</c>); reads fall back to the legacy <c>contextSize</c> tag for endpoints created
+        /// before the field existed. Drives automatic chat conversation compression once the message history
+        /// approaches the window. 0 disables compression.
         /// </summary>
         public int ContextSize { get; set; } = 0;
     }

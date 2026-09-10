@@ -30,9 +30,9 @@ namespace Pneuma.Core.Requests
 
         /// <summary>
         /// Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1 (Partio clamps).
-        /// Default 1.
+        /// Default 2 to match Partio's canonical default.
         /// </summary>
-        public int MaxConcurrentRequests { get; set; } = 1;
+        public int MaxConcurrentRequests { get; set; } = 2;
 
         /// <summary>
         /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>

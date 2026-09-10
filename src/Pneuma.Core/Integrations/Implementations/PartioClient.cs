@@ -6,6 +6,7 @@ namespace Pneuma.Core.Integrations.Implementations
     using System.Net.Http;
     using System.Text;
     using System.Text.Json;
+    using System.Text.Json.Nodes;
     using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
@@ -250,9 +251,16 @@ namespace Pneuma.Core.Integrations.Implementations
             if (String.IsNullOrWhiteSpace(type)) throw new ArgumentNullException(nameof(type));
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
-            string json = JsonSerializer.Serialize(BuildEndpointBody(endpoint, _TenantId), _RequestJson);
-            string? body = await SendAsync(HttpMethod.Put, _BaseUrl + "/v1.0/endpoints/" + type + "/" + id, json, false, token).ConfigureAwait(false);
-            return ParseSingleEndpoint(body ?? "{}") ?? endpoint;
+
+            // Partio's update is a full replace, not a merge: any field omitted from the body is reset to its
+            // default (health-check config, MaximumTimeoutMs, Labels, Tokenization) or wiped (ApiKey, other
+            // services' Tags/Labels). So GET the current endpoint, overwrite ONLY the fields Pneuma manages, and
+            // PUT the merged object back — preserving everything Pneuma doesn't own.
+            JsonObject body = await ReadEndpointNodeAsync(type, id, token).ConfigureAwait(false) ?? new JsonObject();
+            ApplyManagedFields(body, endpoint, _TenantId);
+            string json = body.ToJsonString(_RequestJson);
+            string? respBody = await SendAsync(HttpMethod.Put, _BaseUrl + "/v1.0/endpoints/" + type + "/" + id, json, false, token).ConfigureAwait(false);
+            return ParseSingleEndpoint(respBody ?? "{}") ?? endpoint;
         }
 
         /// <inheritdoc />
@@ -299,7 +307,7 @@ namespace Pneuma.Core.Integrations.Implementations
                         Active = active,
                         MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
                         MaxQueueDepth = GetIntProperty(item, 0, "MaxQueueDepth", "maxQueueDepth"),
-                        ContextSize = GetTagInt(item, "contextSize")
+                        ContextSize = GetIntProperty(item, GetTagInt(item, "contextSize"), "ContextSize", "contextSize")
                     });
                 }
             }
@@ -344,11 +352,6 @@ namespace Pneuma.Core.Integrations.Implementations
 
         private static object BuildEndpointBody(PartioEndpoint endpoint, string? tenantId)
         {
-            // Partio has no discrete context-window field, so the model's context size round-trips via the
-            // endpoint's extensible Tags. Only emit the tag when a positive value is set.
-            Dictionary<string, string> tags = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (endpoint.ContextSize > 0) tags["contextSize"] = endpoint.ContextSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
             return new
             {
                 TenantId = String.IsNullOrWhiteSpace(tenantId) ? null : tenantId,
@@ -360,8 +363,88 @@ namespace Pneuma.Core.Integrations.Implementations
                 Active = endpoint.Active,
                 MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests),
                 MaxQueueDepth = Math.Max(0, endpoint.MaxQueueDepth),
-                Tags = tags
+                ContextSize = Math.Max(0, endpoint.ContextSize)
             };
+        }
+
+        /// <summary>
+        /// GET an endpoint and return its raw JSON object (unwrapping a "Data" envelope when present), or null
+        /// if it does not exist. Used by <see cref="UpdateEndpointAsync"/> so the merge can preserve fields
+        /// Pneuma does not manage.
+        /// </summary>
+        private async Task<JsonObject?> ReadEndpointNodeAsync(string type, string id, CancellationToken token)
+        {
+            string? body = await SendAsync(HttpMethod.Get, _BaseUrl + "/v1.0/endpoints/" + type + "/" + id, null, true, token).ConfigureAwait(false);
+            if (String.IsNullOrWhiteSpace(body)) return null;
+            if (JsonNode.Parse(body) is not JsonObject obj) return null;
+            if (!obj.ContainsKey("Id") && !obj.ContainsKey("id"))
+            {
+                JsonNode? data = obj.ContainsKey("Data") ? obj["Data"] : (obj.ContainsKey("data") ? obj["data"] : null);
+                if (data is JsonObject)
+                {
+                    obj.Remove("Data");
+                    obj.Remove("data");
+                    return (JsonObject)data;
+                }
+            }
+            return obj;
+        }
+
+        /// <summary>
+        /// Overwrite the fields Pneuma manages onto an existing endpoint JSON object, leaving every other field
+        /// (health-check settings, other services' Tags/Labels, tokenization, etc.) untouched. The API key is
+        /// only written when supplied; a blank key means "leave the stored key unchanged".
+        /// </summary>
+        private static void ApplyManagedFields(JsonObject body, PartioEndpoint endpoint, string? tenantId)
+        {
+            SetPascal(body, "Name", "name", JsonValue.Create(endpoint.Name));
+            SetPascal(body, "Model", "model", JsonValue.Create(endpoint.Model));
+            SetPascal(body, "Endpoint", "endpoint", JsonValue.Create(endpoint.Endpoint));
+            SetPascal(body, "ApiFormat", "apiFormat", JsonValue.Create(endpoint.ApiFormat));
+            SetPascal(body, "Active", "active", JsonValue.Create(endpoint.Active));
+            SetPascal(body, "MaxConcurrentRequests", "maxConcurrentRequests", JsonValue.Create(Math.Max(1, endpoint.MaxConcurrentRequests)));
+            SetPascal(body, "MaxQueueDepth", "maxQueueDepth", JsonValue.Create(Math.Max(0, endpoint.MaxQueueDepth)));
+            SetPascal(body, "ContextSize", "contextSize", JsonValue.Create(Math.Max(0, endpoint.ContextSize)));
+
+            if (!String.IsNullOrEmpty(endpoint.ApiKey))
+            {
+                SetPascal(body, "ApiKey", "apiKey", JsonValue.Create(endpoint.ApiKey));
+            }
+
+            // Seed the tenant only when configured and the stored endpoint has none; otherwise preserve it.
+            if (!String.IsNullOrWhiteSpace(tenantId) && !HasNonEmptyString(body, "TenantId", "tenantId"))
+            {
+                SetPascal(body, "TenantId", "tenantId", JsonValue.Create(tenantId));
+            }
+
+            // Migrate off the legacy Tags["contextSize"] smuggling now that ContextSize is a first-class field,
+            // without disturbing any other tags (e.g. another service's tool-calling metadata).
+            RemoveTag(body, "contextSize");
+        }
+
+        private static void SetPascal(JsonObject body, string pascal, string camel, JsonNode? value)
+        {
+            if (!String.Equals(pascal, camel, StringComparison.Ordinal)) body.Remove(camel);
+            body[pascal] = value;
+        }
+
+        private static bool HasNonEmptyString(JsonObject body, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                if (body.TryGetPropertyValue(name, out JsonNode? node) && node is JsonValue value
+                    && value.TryGetValue(out string? str) && !String.IsNullOrWhiteSpace(str))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void RemoveTag(JsonObject body, string tagKey)
+        {
+            JsonNode? tags = body.ContainsKey("Tags") ? body["Tags"] : (body.ContainsKey("tags") ? body["tags"] : null);
+            if (tags is JsonObject tagsObj) tagsObj.Remove(tagKey);
         }
 
         private async Task<string?> SendAsync(HttpMethod method, string url, string? json, bool nullOn404, CancellationToken token)

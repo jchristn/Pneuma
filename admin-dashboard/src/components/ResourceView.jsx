@@ -11,10 +11,36 @@ import ConfirmModal from './ConfirmModal';
 import JsonViewer, { JsonBlock } from './JsonViewer';
 import ErrorBanner from './ErrorBanner';
 import CopyButton from './CopyButton';
+import Icon from './Icon';
 
 function getId(item, idField) {
   if (idField && item[idField] !== undefined) return item[idField];
   return item.id ?? item.guid ?? item.Id ?? item.GUID ?? item.GUID ?? item.userId ?? item.name;
+}
+
+function PasswordField({ field, value, common, labelClass, tip, fullClass }) {
+  const { t } = useTranslation();
+  const [reveal, setReveal] = useState(false);
+  const hasValue = !!(value ?? '');
+  return (
+    <div className={`field${fullClass}`}>
+      <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
+      <div className="password-field">
+        <input {...common} type={reveal ? 'text' : 'password'} />
+        <button
+          type="button"
+          className="password-toggle"
+          onClick={() => setReveal((r) => !r)}
+          disabled={field.readOnly}
+          title={reveal ? t('common.hide') : t('common.show')}
+          aria-label={reveal ? t('common.hide') : t('common.show')}
+        >
+          <Icon name={reveal ? 'eye-off' : 'eye'} />
+        </button>
+        {hasValue && <CopyButton value={value} title={t('common.copy')} />}
+      </div>
+    </div>
+  );
 }
 
 function FieldInput({ field, value, onChange }) {
@@ -90,6 +116,11 @@ function FieldInput({ field, value, onChange }) {
         <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
         <textarea {...common} rows={field.rows || 6} />
       </div>
+    );
+  }
+  if (field.type === 'password') {
+    return (
+      <PasswordField field={field} value={value} common={common} labelClass={labelClass} tip={tip} fullClass={fullClass} />
     );
   }
   return (
