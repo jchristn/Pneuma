@@ -6,6 +6,7 @@ import CopyButton from './CopyButton';
 import logo from '../assets/logo.png';
 
 const GITHUB_URL = 'https://github.com/jchristn/pneuma';
+const DISCORD_URL = 'https://discord.gg/tRAN8HgvK5';
 
 function Topbar({ onToggleSidebar }) {
   const { t } = useTranslation();
@@ -38,6 +39,9 @@ function Topbar({ onToggleSidebar }) {
         </button>
         <a className="icon-button" href={GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label={t('topbar.github')} title="Open the Pneuma source repository on GitHub (new tab).">
           <Icon name="github" />
+        </a>
+        <a className="icon-button" href={DISCORD_URL} target="_blank" rel="noopener noreferrer" aria-label={t('topbar.discord', 'Discord')} title="Join the Pneuma community on Discord (new tab).">
+          <Icon name="discord" />
         </a>
         <button type="button" className="icon-button" onClick={logout} aria-label={t('topbar.logout')} title="Sign out and return to the login screen.">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
