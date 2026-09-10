@@ -20,7 +20,6 @@ function ValidationModal({ state, onClose, onRetry }) {
   const { t } = useTranslation();
   const { loading, data, error, name } = state;
   const checks = Array.isArray(data?.checks) ? data.checks : [];
-  const anyWarn = checks.some((c) => c.warning);
 
   const footer = (
     <>
@@ -43,10 +42,8 @@ function ValidationModal({ state, onClose, onRetry }) {
         <>
           <div style={{ marginBottom: '1rem' }}>
             <StatusPill
-              label={data.ok
-                ? (anyWarn ? t('modelRunners.validatePassedWarnings', 'Passed with warnings') : t('modelRunners.validatePassed'))
-                : t('modelRunners.validateFailed')}
-              tone={data.ok ? (anyWarn ? 'warning' : 'success') : 'danger'}
+              label={data.ok ? t('modelRunners.validatePassed') : t('modelRunners.validateFailed')}
+              tone={data.ok ? 'success' : 'danger'}
             />
           </div>
           <dl className="kv-grid" style={{ marginBottom: '1rem' }}>
@@ -70,8 +67,8 @@ function ValidationModal({ state, onClose, onRetry }) {
                   <td>{c.name}</td>
                   <td>
                     <StatusPill
-                      label={c.warning ? 'Warn' : (c.ok ? 'Pass' : 'Fail')}
-                      tone={c.warning ? 'warning' : (c.ok ? 'success' : 'danger')}
+                      label={c.warning ? 'N/A' : (c.ok ? 'Pass' : 'Fail')}
+                      tone={c.warning ? 'neutral' : (c.ok ? 'success' : 'danger')}
                     />
                   </td>
                   <td className="wrap">{c.warning ? (c.detail || c.error || '—') : (c.ok ? (c.detail || '—') : (c.error || '—'))}</td>
