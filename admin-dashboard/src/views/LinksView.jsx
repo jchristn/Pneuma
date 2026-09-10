@@ -35,6 +35,8 @@ function LinksView() {
   const [artifactLoading, setArtifactLoading] = useState(false);
   // The failed link whose ingestion job is pending a restart confirmation.
   const [restartTarget, setRestartTarget] = useState(null);
+  // The link whose ingestion is pending a reingest confirmation (available for any link, not just failed).
+  const [reingestTarget, setReingestTarget] = useState(null);
 
   // Load the subject list once for the filter dropdown and the create form.
   useEffect(() => {
@@ -163,9 +165,48 @@ function LinksView() {
     }
   }, [apiClient]);
 
+  // Reingesting re-runs a link's ingestion pipeline by requeuing its most recent job. Unlike Restart Job
+  // (failed links only), reingest is offered for any link. Surfaces a notice when there is no job to reingest.
+  const reingestLink = useCallback(async (link) => {
+    const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
+    const latest = runs.length > 0 ? runs[runs.length - 1] : null;
+    const job = latest?.job || latest?.Job || null;
+    const jobId = job?.id || job?.Id;
+    if (!jobId) {
+      setReingestTarget(null);
+      setArtifactNotice(t('links.reingestNoJob', 'This link has no ingestion job to reingest.'));
+      return;
+    }
+    await apiClient.restartJob(jobId);
+    setReingestTarget(null);
+    setRefreshKey((k) => k + 1);
+  }, [apiClient, t]);
+
+  // Bulk-reingest every selected link (each requeues its most recent ingestion job).
+  const bulkReingest = useCallback(async (items) => {
+    for (const link of items) {
+      const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
+      const latest = runs.length > 0 ? runs[runs.length - 1] : null;
+      const job = latest?.job || latest?.Job || null;
+      const jobId = job?.id || job?.Id;
+      if (jobId) await apiClient.restartJob(jobId);
+    }
+  }, [apiClient]);
+
   const linkBulkActions = useCallback((selectedItems) => {
     const failedCount = selectedItems.filter(isLinkFailed).length;
     return [
+      {
+        key: 'reingest',
+        label: t('links.reingestMultiple', 'Reingest Links'),
+        tip: t('links.bulkReingestTip', { count: selectedItems.length, defaultValue: `Reingest ${selectedItems.length} link(s) from the beginning.` }),
+        confirm: {
+          title: t('links.reingestMultiple', 'Reingest Links'),
+          message: t('links.bulkReingestConfirm', { count: selectedItems.length, defaultValue: `Reingest ${selectedItems.length} selected link(s) from the beginning?` }),
+          confirmLabel: t('links.reingest', 'Reingest Link')
+        },
+        run: bulkReingest
+      },
       {
         key: 'restart',
         label: t('links.restartJob', 'Restart Job'),
@@ -181,7 +222,7 @@ function LinksView() {
         run: bulkRestartFailed
       }
     ];
-  }, [t, bulkRestartFailed]);
+  }, [t, bulkRestartFailed, bulkReingest]);
 
   const toolbar = (
     <div className="filter-bar">
@@ -219,6 +260,7 @@ function LinksView() {
         idField="id"
         bulkActions={linkBulkActions}
         extraActions={[
+          { key: 'reingest', label: t('links.reingest', 'Reingest Link'), tip: 'Re-run this link’s ingestion pipeline from the beginning.', onClick: (item) => setReingestTarget(item) },
           { key: 'restartJob', label: t('links.restartJob', 'Restart Job'), tip: 'Re-run this failed link’s ingestion job from the beginning.', hidden: (item) => !isLinkFailed(item), onClick: (item) => setRestartTarget(item) },
           { key: 'ingestionLog', label: t('links.viewIngestionLog'), onClick: (item) => setLogLink(item) },
           { key: 'viewSource', label: t('links.viewSource'), onClick: (item) => openSource(item) },
@@ -237,6 +279,16 @@ function LinksView() {
           confirmLabel={t('common.restart', 'Restart')}
           onConfirm={() => restartLinkJob(restartTarget)}
           onClose={() => setRestartTarget(null)}
+        />
+      )}
+      {reingestTarget && (
+        <ConfirmModal
+          title={t('links.reingest', 'Reingest Link')}
+          message={t('links.reingestConfirm', 'Reingest this content link? Its ingestion pipeline will run again from the beginning.')}
+          danger={false}
+          confirmLabel={t('links.reingest', 'Reingest Link')}
+          onConfirm={() => reingestLink(reingestTarget)}
+          onClose={() => setReingestTarget(null)}
         />
       )}
       {artifactLoading && (
