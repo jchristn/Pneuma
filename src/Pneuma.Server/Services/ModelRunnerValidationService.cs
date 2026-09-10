@@ -69,14 +69,24 @@ namespace Pneuma.Server.Services
         /// <param name="endpointId">Partio endpoint id (completion or embedding).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The validation result, or null when the endpoint is not found.</returns>
-        public async Task<ModelEndpointValidationDto?> ValidateAsync(string endpointId, CancellationToken token)
+        public async Task<ModelEndpointValidationDto?> ValidateAsync(string endpointId, string? type, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(endpointId)) return null;
 
             try
             {
-                PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
-                if (completion != null) return await ValidateCompletionAsync(completion, token).ConfigureAwait(false);
+                // The endpoint type must be honored when supplied: Partio seeds the default embedding and default
+                // completion endpoints with the SAME id ("default"), so probing completion-first would validate the
+                // wrong endpoint for the default embedding. Only fall back to probing both when type is unknown.
+                bool wantCompletion = String.Equals(type, "completion", StringComparison.OrdinalIgnoreCase);
+                bool wantEmbedding = String.Equals(type, "embedding", StringComparison.OrdinalIgnoreCase);
+
+                if (wantCompletion || !wantEmbedding)
+                {
+                    PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
+                    if (completion != null) return await ValidateCompletionAsync(completion, token).ConfigureAwait(false);
+                    if (wantCompletion) return null;
+                }
 
                 PartioEndpoint? embedding = await _Partio.ReadEndpointAsync("embedding", endpointId, token).ConfigureAwait(false);
                 if (embedding != null) return await ValidateEmbeddingAsync(embedding, token).ConfigureAwait(false);
@@ -137,7 +147,10 @@ namespace Pneuma.Server.Services
             ModelEndpointValidationCheck toolCheck = await RunToolCallingProbeAsync(client, token).ConfigureAwait(false);
             result.Checks.Add(toolCheck);
 
-            result.Ok = completionCheck.Ok && toolCheck.Ok;
+            // Tool calling is an informational capability probe, not a requirement: many completion models
+            // (used for summarization or plain completion) do not support tools, and that does not make the
+            // endpoint invalid. Only the completion check gates the overall result.
+            result.Ok = completionCheck.Ok;
             return result;
         }
 
@@ -225,9 +238,10 @@ namespace Pneuma.Server.Services
                     ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, cts.Token).ConfigureAwait(false);
                     if (response == null || !response.Success)
                     {
+                        // A rejected tool request (e.g. HTTP 400 "does not support tools") means the model simply
+                        // has no tool-calling capability — informational, not a validation failure.
                         check.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
-                        check.Ok = false;
-                        check.Error = response == null ? "No response from the model." : (response.Error ?? "The tool-calling request failed.");
+                        MarkToolUnsupported(check, response == null ? "no response from the model" : (response.Error ?? "the request was rejected"));
                         return check;
                     }
 
@@ -247,17 +261,16 @@ namespace Pneuma.Server.Services
                     }
                     else
                     {
-                        // A successful stream that answers in prose without ever calling the offered tool means this
-                        // model/endpoint does not honor function calling — which is exactly what breaks agentic chat.
-                        check.Ok = false;
-                        check.Error = "The model answered without calling the offered tool, so function calling is not supported on this endpoint. Agentic chat requires tool calling.";
+                        // A successful stream that answers in prose without ever calling the offered tool means the
+                        // model does not honor function calling. That is fine for completion/summarization use;
+                        // report it as a capability warning rather than a failure.
+                        MarkToolUnsupported(check, "the model answered without calling the offered tool");
                     }
                 }
                 catch (Exception e)
                 {
                     check.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
-                    check.Ok = false;
-                    check.Error = DescribeException(e, token, cts.Token);
+                    MarkToolUnsupported(check, DescribeException(e, token, cts.Token));
                 }
             }
             return check;
@@ -292,6 +305,17 @@ namespace Pneuma.Server.Services
                 }
             }
             return check;
+        }
+
+        // Tool calling is a capability, not a requirement: record its absence as a non-failing warning so an
+        // endpoint that only does plain completion/summarization still validates as healthy.
+        private static void MarkToolUnsupported(ModelEndpointValidationCheck check, string reason)
+        {
+            check.Ok = false;
+            check.Warning = true;
+            check.Error = null;
+            check.Detail = "Tool calling not supported (" + Trim(reason, 160)
+                + "). This endpoint can serve completions and summarization, but not agentic (tool-using) chat.";
         }
 
         private static ModelEndpointValidationDto NewResult(PartioEndpoint endpoint, string type)

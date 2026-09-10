@@ -184,7 +184,10 @@ namespace Pneuma.Server.Routes
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
             string id = RouteHelper.Param(ctx, "id");
-            ModelEndpointValidationDto? result = await _Validation.ValidateAsync(id, ctx.Token).ConfigureAwait(false);
+            // The row's type disambiguates ids that Partio shares between the default embedding and default
+            // completion endpoints (both seeded as "default").
+            string? type = ctx.Request.Query.Elements?["type"];
+            ModelEndpointValidationDto? result = await _Validation.ValidateAsync(id, type, ctx.Token).ConfigureAwait(false);
             if (result == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);

@@ -296,8 +296,9 @@ class ApiClient {
 
   // Actively validate a model endpoint end to end (completion + tool calling, or embedding). Returns a
   // validation result with per-check outcomes.
-  validateModelRunner(id) {
-    return this._request('POST', `/v1.0/model-runners/${encodeURIComponent(id)}/validate`);
+  validateModelRunner(id, type) {
+    const q = type ? `?type=${encodeURIComponent(type)}` : '';
+    return this._request('POST', `/v1.0/model-runners/${encodeURIComponent(id)}/validate${q}`);
   }
 
   // Enqueue ingestion for many URLs at once for a single subject.

@@ -20,6 +20,7 @@ function ValidationModal({ state, onClose, onRetry }) {
   const { t } = useTranslation();
   const { loading, data, error, name } = state;
   const checks = Array.isArray(data?.checks) ? data.checks : [];
+  const anyWarn = checks.some((c) => c.warning);
 
   const footer = (
     <>
@@ -42,8 +43,10 @@ function ValidationModal({ state, onClose, onRetry }) {
         <>
           <div style={{ marginBottom: '1rem' }}>
             <StatusPill
-              label={data.ok ? t('modelRunners.validatePassed') : t('modelRunners.validateFailed')}
-              tone={data.ok ? 'success' : 'danger'}
+              label={data.ok
+                ? (anyWarn ? t('modelRunners.validatePassedWarnings', 'Passed with warnings') : t('modelRunners.validatePassed'))
+                : t('modelRunners.validateFailed')}
+              tone={data.ok ? (anyWarn ? 'warning' : 'success') : 'danger'}
             />
           </div>
           <dl className="kv-grid" style={{ marginBottom: '1rem' }}>
@@ -65,8 +68,13 @@ function ValidationModal({ state, onClose, onRetry }) {
               {checks.map((c, i) => (
                 <tr key={i}>
                   <td>{c.name}</td>
-                  <td><StatusPill label={c.ok ? 'Pass' : 'Fail'} tone={c.ok ? 'success' : 'danger'} /></td>
-                  <td className="wrap">{c.ok ? (c.detail || '—') : (c.error || '—')}</td>
+                  <td>
+                    <StatusPill
+                      label={c.warning ? 'Warn' : (c.ok ? 'Pass' : 'Fail')}
+                      tone={c.warning ? 'warning' : (c.ok ? 'success' : 'danger')}
+                    />
+                  </td>
+                  <td className="wrap">{c.warning ? (c.detail || c.error || '—') : (c.ok ? (c.detail || '—') : (c.error || '—'))}</td>
                   <td style={{ textAlign: 'right' }}>{c.durationMs != null ? `${Math.round(c.durationMs)} ms` : '—'}</td>
                 </tr>
               ))}
@@ -120,9 +128,9 @@ function ModelRunnersView() {
 
   const runValidation = useCallback(async (row) => {
     const label = row.name || row.model || row.id;
-    setValidation({ id: row.id, name: label, loading: true, data: null, error: null });
+    setValidation({ id: row.id, type: row.type, name: label, loading: true, data: null, error: null });
     try {
-      const data = await apiClient.validateModelRunner(row.id);
+      const data = await apiClient.validateModelRunner(row.id, row.type);
       if (mounted.current) setValidation((v) => (v && v.id === row.id ? { ...v, loading: false, data } : v));
     } catch (err) {
       if (mounted.current) setValidation((v) => (v && v.id === row.id ? { ...v, loading: false, error: err?.message || 'Validation failed' } : v));
@@ -214,7 +222,7 @@ function ModelRunnersView() {
       )}
       {validation && (
         <ValidationModal state={validation} onClose={() => setValidation(null)} onRetry={() => {
-          const row = { id: validation.id, name: validation.name };
+          const row = { id: validation.id, type: validation.type, name: validation.name };
           runValidation(row);
         }} />
       )}

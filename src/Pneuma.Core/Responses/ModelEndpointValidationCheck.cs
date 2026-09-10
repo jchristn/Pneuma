@@ -17,6 +17,12 @@ namespace Pneuma.Core.Responses
         /// <summary>Whether the probe succeeded.</summary>
         public bool Ok { get; set; } = false;
 
+        /// <summary>
+        /// Whether this check is informational rather than pass/fail — a capability the endpoint may or may not
+        /// have (e.g. tool calling). A warning does not fail the overall validation; it just reports the finding.
+        /// </summary>
+        public bool Warning { get; set; } = false;
+
         /// <summary>A short human-readable description of what the probe observed on success (e.g. the reply text or vector dimensionality). Null when the probe failed.</summary>
         public string? Detail { get; set; } = null;
 
