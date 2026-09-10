@@ -261,10 +261,21 @@ namespace Pneuma.Server.Routes
                 Model = endpoint.Model,
                 Endpoint = endpoint.Endpoint,
                 ApiFormat = endpoint.ApiFormat,
+                ApiKey = endpoint.ApiKey,
                 Active = endpoint.Active,
                 MaxConcurrentRequests = endpoint.MaxConcurrentRequests,
                 MaxQueueDepth = endpoint.MaxQueueDepth,
-                ContextSize = endpoint.ContextSize
+                ContextSize = endpoint.ContextSize,
+                MaximumTimeoutMs = endpoint.MaximumTimeoutMs,
+                HealthCheckEnabled = endpoint.HealthCheckEnabled,
+                HealthCheckUrl = endpoint.HealthCheckUrl,
+                HealthCheckMethod = endpoint.HealthCheckMethod,
+                HealthCheckIntervalMs = endpoint.HealthCheckIntervalMs,
+                HealthCheckTimeoutMs = endpoint.HealthCheckTimeoutMs,
+                HealthCheckExpectedStatusCode = endpoint.HealthCheckExpectedStatusCode,
+                HealthyThreshold = endpoint.HealthyThreshold,
+                UnhealthyThreshold = endpoint.UnhealthyThreshold,
+                HealthCheckUseAuth = endpoint.HealthCheckUseAuth
             };
         }
 
@@ -280,7 +291,17 @@ namespace Pneuma.Server.Routes
                 Active = request.Active,
                 MaxConcurrentRequests = System.Math.Max(1, request.MaxConcurrentRequests),
                 MaxQueueDepth = System.Math.Max(0, request.MaxQueueDepth),
-                ContextSize = System.Math.Max(0, request.ContextSize)
+                ContextSize = System.Math.Max(0, request.ContextSize),
+                MaximumTimeoutMs = System.Math.Max(1, request.MaximumTimeoutMs),
+                HealthCheckEnabled = request.HealthCheckEnabled,
+                HealthCheckUrl = request.HealthCheckUrl,
+                HealthCheckMethod = request.HealthCheckMethod,
+                HealthCheckIntervalMs = System.Math.Max(0, request.HealthCheckIntervalMs),
+                HealthCheckTimeoutMs = System.Math.Max(0, request.HealthCheckTimeoutMs),
+                HealthCheckExpectedStatusCode = request.HealthCheckExpectedStatusCode,
+                HealthyThreshold = request.HealthyThreshold,
+                UnhealthyThreshold = request.UnhealthyThreshold,
+                HealthCheckUseAuth = request.HealthCheckUseAuth
             };
         }
 

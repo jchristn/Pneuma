@@ -162,19 +162,34 @@ function ModelRunnersView() {
   ];
 
   const formFields = [
+    { name: '__sec_basic', type: 'section', label: 'Basic' },
     { name: 'type', label: t('modelRunners.type'), type: 'select', required: true, default: 'Embedding', options: TYPES.map((x) => ({ value: x, label: x })), tip: 'Embedding endpoints turn text into vectors for search; Completion endpoints generate answers. Pick which role this model serves.' },
     { name: 'name', label: 'Name', tip: 'A human-readable label for this endpoint (e.g. "local-embed"). Does not affect behavior.' },
     { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text', tip: "The provider's model identifier exactly as it expects it — e.g. 'nomic-embed-text' for embeddings or 'llama3.2' for chat." },
     { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'http://ollama:11434', tip: 'Base URL of the provider serving this model. For the bundled Ollama use http://ollama:11434.' },
     { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })), tip: 'The wire protocol this endpoint speaks. Ollama for the local runner; OpenAI/Gemini for those hosted APIs.' },
-    { name: 'apiKey', label: 'API Key (write-only)', type: 'password', tip: 'Secret key for hosted providers. Stored encrypted and never returned. Leave blank for a keyless local Ollama.' },
-    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 1, min: 1, placeholder: '1', tip: 'Cap on simultaneous requests Partio opens to this endpoint. Keep at 1 for a single local model so each inference runs unshared and avoids upstream timeouts; raise for scaled hosted APIs.' },
+    { name: 'apiKey', label: 'API Key', type: 'password', tip: 'Secret key for hosted providers. Leave blank for a keyless local Ollama. Leave blank when editing to keep the stored key unchanged.' },
+
+    { name: '__sec_request', type: 'section', label: 'Request Handling' },
+    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, this endpoint is kept but not used for ingestion or answering.' },
+    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Cap on simultaneous requests Partio opens to this endpoint. Keep low for a single local model so each inference runs unshared and avoids upstream timeouts; raise for scaled hosted APIs.' },
     { name: 'maxQueueDepth', label: t('modelRunners.maxQueueDepth'), type: 'number', default: 0, min: 0, placeholder: '0', tip: 'How many requests may wait for a slot once the concurrency cap is hit. 0 rejects over-limit requests immediately (429); raise it to let ingestion bursts queue instead of bouncing. A queued request that waits past the endpoint timeout returns 504.' },
+    { name: 'maximumTimeoutMs', label: 'Request Timeout (ms)', type: 'number', default: 60000, min: 1000, step: 1000, placeholder: '60000', tip: 'Upper bound in milliseconds for an upstream request before it is aborted. Distinct from the health check timeout.' },
     { name: 'contextSize', label: t('modelRunners.contextSize'), type: 'number', default: 0, min: 0, placeholder: '8192', tip: 'Completion models only: the model’s context window in tokens (e.g. 8192). When the chat history approaches this, the conversation is automatically compacted into a summary. 0 disables compaction.' },
-    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, this endpoint is kept but not used for ingestion or answering.' }
+
+    { name: '__sec_health', type: 'section', label: 'Health Check' },
+    { name: 'healthCheckEnabled', label: 'Enable Health Checks', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'Whether Partio periodically probes this endpoint for reachability.' },
+    { name: 'healthCheckUrl', label: 'Health Check URL', placeholder: 'Auto-derived from endpoint if blank', tip: 'URL Partio probes. Leave blank to let Partio derive it from the endpoint and API format.' },
+    { name: 'healthCheckMethod', label: 'Health Check Method', type: 'select', default: 'GET', options: ['GET', 'HEAD'].map((x) => ({ value: x, label: x })), tip: 'HTTP method used for the health probe.' },
+    { name: 'healthCheckIntervalMs', label: 'Interval (ms)', type: 'number', default: 30000, min: 1000, step: 1000, placeholder: '30000', tip: 'Milliseconds between health checks.' },
+    { name: 'healthCheckTimeoutMs', label: 'Check Timeout (ms)', type: 'number', default: 5000, min: 100, step: 100, placeholder: '5000', tip: 'Per-check HTTP timeout in milliseconds.' },
+    { name: 'healthCheckExpectedStatusCode', label: 'Expected Status Code', type: 'number', default: 200, min: 100, placeholder: '200', tip: 'HTTP status code that counts as a healthy response.' },
+    { name: 'healthyThreshold', label: 'Healthy Threshold', type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Consecutive successful checks required to mark the endpoint healthy.' },
+    { name: 'unhealthyThreshold', label: 'Unhealthy Threshold', type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Consecutive failed checks required to mark the endpoint unhealthy.' },
+    { name: 'healthCheckUseAuth', label: 'Include API key in health check', type: 'checkbox', default: false, omitIfEmpty: false, tip: "Send the endpoint's API key with health probes, for hosted providers that require auth to respond." }
   ];
 
-  const detailFields = formFields.filter((f) => f.name !== 'apiKey');
+  const detailFields = formFields.filter((f) => f.type !== 'section' && f.name !== 'apiKey');
 
   return (
     <>

@@ -290,25 +290,7 @@ namespace Pneuma.Core.Integrations.Implementations
                     if (item.ValueKind != JsonValueKind.Object) continue;
                     string? id = GetStringProperty(item, "Id", "id");
                     if (String.IsNullOrEmpty(id)) continue;
-
-                    bool active = false;
-                    if (TryGetProperty(item, out JsonElement activeEl, "Active", "active") && activeEl.ValueKind == JsonValueKind.True)
-                    {
-                        active = true;
-                    }
-
-                    endpoints.Add(new PartioEndpoint
-                    {
-                        Id = id,
-                        Name = GetStringProperty(item, "Name", "name"),
-                        Model = GetStringProperty(item, "Model", "model"),
-                        ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
-                        Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
-                        Active = active,
-                        MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
-                        MaxQueueDepth = GetIntProperty(item, 0, "MaxQueueDepth", "maxQueueDepth"),
-                        ContextSize = GetIntProperty(item, GetTagInt(item, "contextSize"), "ContextSize", "contextSize")
-                    });
+                    endpoints.Add(MapEndpoint(item));
                 }
             }
 
@@ -317,8 +299,6 @@ namespace Pneuma.Core.Integrations.Implementations
 
         private static PartioEndpoint MapEndpoint(JsonElement item)
         {
-            bool active = false;
-            if (TryGetProperty(item, out JsonElement activeEl, "Active", "active") && activeEl.ValueKind == JsonValueKind.True) active = true;
             return new PartioEndpoint
             {
                 Id = GetStringProperty(item, "Id", "id") ?? String.Empty,
@@ -326,10 +306,21 @@ namespace Pneuma.Core.Integrations.Implementations
                 Model = GetStringProperty(item, "Model", "model"),
                 ApiFormat = GetStringProperty(item, "ApiFormat", "apiFormat"),
                 Endpoint = GetStringProperty(item, "Endpoint", "endpoint"),
-                Active = active,
+                ApiKey = GetStringProperty(item, "ApiKey", "apiKey"),
+                Active = GetBoolProperty(item, false, "Active", "active"),
                 MaxConcurrentRequests = GetIntProperty(item, 2, "MaxConcurrentRequests", "maxConcurrentRequests"),
                 MaxQueueDepth = GetIntProperty(item, 0, "MaxQueueDepth", "maxQueueDepth"),
-                ContextSize = GetTagInt(item, "contextSize")
+                ContextSize = GetIntProperty(item, GetTagInt(item, "contextSize"), "ContextSize", "contextSize"),
+                MaximumTimeoutMs = GetIntProperty(item, 60000, "MaximumTimeoutMs", "maximumTimeoutMs"),
+                HealthCheckEnabled = GetBoolProperty(item, false, "HealthCheckEnabled", "healthCheckEnabled"),
+                HealthCheckUrl = GetStringProperty(item, "HealthCheckUrl", "healthCheckUrl"),
+                HealthCheckMethod = GetStringProperty(item, "HealthCheckMethod", "healthCheckMethod") ?? "GET",
+                HealthCheckIntervalMs = GetIntProperty(item, 0, "HealthCheckIntervalMs", "healthCheckIntervalMs"),
+                HealthCheckTimeoutMs = GetIntProperty(item, 0, "HealthCheckTimeoutMs", "healthCheckTimeoutMs"),
+                HealthCheckExpectedStatusCode = GetIntProperty(item, 200, "HealthCheckExpectedStatusCode", "healthCheckExpectedStatusCode"),
+                HealthyThreshold = GetIntProperty(item, 2, "HealthyThreshold", "healthyThreshold"),
+                UnhealthyThreshold = GetIntProperty(item, 2, "UnhealthyThreshold", "unhealthyThreshold"),
+                HealthCheckUseAuth = GetBoolProperty(item, false, "HealthCheckUseAuth", "healthCheckUseAuth")
             };
         }
 
@@ -363,7 +354,17 @@ namespace Pneuma.Core.Integrations.Implementations
                 Active = endpoint.Active,
                 MaxConcurrentRequests = Math.Max(1, endpoint.MaxConcurrentRequests),
                 MaxQueueDepth = Math.Max(0, endpoint.MaxQueueDepth),
-                ContextSize = Math.Max(0, endpoint.ContextSize)
+                ContextSize = Math.Max(0, endpoint.ContextSize),
+                MaximumTimeoutMs = Math.Max(1, endpoint.MaximumTimeoutMs),
+                HealthCheckEnabled = endpoint.HealthCheckEnabled,
+                HealthCheckUrl = endpoint.HealthCheckUrl,
+                HealthCheckMethod = String.IsNullOrWhiteSpace(endpoint.HealthCheckMethod) ? "GET" : endpoint.HealthCheckMethod,
+                HealthCheckIntervalMs = Math.Max(0, endpoint.HealthCheckIntervalMs),
+                HealthCheckTimeoutMs = Math.Max(0, endpoint.HealthCheckTimeoutMs),
+                HealthCheckExpectedStatusCode = endpoint.HealthCheckExpectedStatusCode,
+                HealthyThreshold = endpoint.HealthyThreshold,
+                UnhealthyThreshold = endpoint.UnhealthyThreshold,
+                HealthCheckUseAuth = endpoint.HealthCheckUseAuth
             };
         }
 
@@ -405,6 +406,16 @@ namespace Pneuma.Core.Integrations.Implementations
             SetPascal(body, "MaxConcurrentRequests", "maxConcurrentRequests", JsonValue.Create(Math.Max(1, endpoint.MaxConcurrentRequests)));
             SetPascal(body, "MaxQueueDepth", "maxQueueDepth", JsonValue.Create(Math.Max(0, endpoint.MaxQueueDepth)));
             SetPascal(body, "ContextSize", "contextSize", JsonValue.Create(Math.Max(0, endpoint.ContextSize)));
+            SetPascal(body, "MaximumTimeoutMs", "maximumTimeoutMs", JsonValue.Create(Math.Max(1, endpoint.MaximumTimeoutMs)));
+            SetPascal(body, "HealthCheckEnabled", "healthCheckEnabled", JsonValue.Create(endpoint.HealthCheckEnabled));
+            SetPascal(body, "HealthCheckUrl", "healthCheckUrl", JsonValue.Create(endpoint.HealthCheckUrl));
+            SetPascal(body, "HealthCheckMethod", "healthCheckMethod", JsonValue.Create(String.IsNullOrWhiteSpace(endpoint.HealthCheckMethod) ? "GET" : endpoint.HealthCheckMethod));
+            SetPascal(body, "HealthCheckIntervalMs", "healthCheckIntervalMs", JsonValue.Create(Math.Max(0, endpoint.HealthCheckIntervalMs)));
+            SetPascal(body, "HealthCheckTimeoutMs", "healthCheckTimeoutMs", JsonValue.Create(Math.Max(0, endpoint.HealthCheckTimeoutMs)));
+            SetPascal(body, "HealthCheckExpectedStatusCode", "healthCheckExpectedStatusCode", JsonValue.Create(endpoint.HealthCheckExpectedStatusCode));
+            SetPascal(body, "HealthyThreshold", "healthyThreshold", JsonValue.Create(endpoint.HealthyThreshold));
+            SetPascal(body, "UnhealthyThreshold", "unhealthyThreshold", JsonValue.Create(endpoint.UnhealthyThreshold));
+            SetPascal(body, "HealthCheckUseAuth", "healthCheckUseAuth", JsonValue.Create(endpoint.HealthCheckUseAuth));
 
             if (!String.IsNullOrEmpty(endpoint.ApiKey))
             {
@@ -624,6 +635,17 @@ namespace Pneuma.Core.Integrations.Implementations
             if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed))
             {
                 return parsed;
+            }
+            return fallback;
+        }
+
+        private static bool GetBoolProperty(JsonElement element, bool fallback, params string[] names)
+        {
+            if (TryGetProperty(element, out JsonElement value, names))
+            {
+                if (value.ValueKind == JsonValueKind.True) return true;
+                if (value.ValueKind == JsonValueKind.False) return false;
+                if (value.ValueKind == JsonValueKind.String && Boolean.TryParse(value.GetString(), out bool parsed)) return parsed;
             }
             return fallback;
         }

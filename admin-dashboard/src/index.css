@@ -378,6 +378,8 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   padding: var(--spacing-md) var(--spacing-lg); border-top: 1px solid var(--color-border);
 }
 .form-grid { display: flex; flex-direction: column; gap: var(--spacing-md); }
+.form-section-heading { font-size: var(--font-size-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); padding-bottom: 0.35rem; margin-top: 0.5rem; }
+.form-grid > .form-section-heading:first-child { margin-top: 0; }
 .form-grid.form-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); align-items: start; }
 .form-grid.form-grid-2col .field-full { grid-column: 1 / -1; }
 @media (max-width: 720px) { .form-grid.form-grid-2col { grid-template-columns: 1fr; } }

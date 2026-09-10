@@ -47,6 +47,9 @@ function FieldInput({ field, value, onChange }) {
   const tip = field.tip || undefined;
   const labelClass = tip ? 'has-tip' : undefined;
   const fullClass = field.fullWidth ? ' field-full' : '';
+  if (field.type === 'section') {
+    return <div className="form-section-heading field-full" title={tip}>{field.label}</div>;
+  }
   const common = {
     id: `field-${field.name}`,
     value: value ?? '',
@@ -173,6 +176,7 @@ function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabl
     try {
       const body = {};
       fields.forEach((f) => {
+        if (f.type === 'section') return;
         if (f.readOnly && !f.includeReadOnly) return;
         let val = values[f.name];
         if (f.type === 'number' && val !== '' && val !== null) val = Number(val);
