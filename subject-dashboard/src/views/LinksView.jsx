@@ -52,6 +52,8 @@ function LinksView() {
   const [logTarget, setLogTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [reingestTarget, setReingestTarget] = useState(null);
+  const [reingesting, setReingesting] = useState(false);
 
   const loadRef = useRef();
 
@@ -181,9 +183,47 @@ function LinksView() {
     }
   };
 
+  // Reingesting a link re-runs its ingestion pipeline by requeuing its most recent ingestion job
+  // (the same job the ingestion log shows, newest run first). Returns the job id, or null when the
+  // link has never produced a job to reingest.
+  const latestJobId = useCallback(async (linkId) => {
+    const runs = asArray(await apiClient.getLinkIngestionLog(linkId), 'runs', 'logs');
+    if (runs.length === 0) return null;
+    const newest = [...runs].sort(
+      (a, b) => new Date(b?.job?.createdUtc || 0).getTime() - new Date(a?.job?.createdUtc || 0).getTime()
+    )[0];
+    const job = newest?.job || {};
+    return job.id || job.Id || null;
+  }, [apiClient]);
+
+  const handleReingest = async () => {
+    if (!reingestTarget) return;
+    setReingesting(true);
+    setError('');
+    setNotice('');
+    try {
+      const jobId = await latestJobId(reingestTarget.id);
+      if (!jobId) {
+        setReingestTarget(null);
+        setError(t('links.reingestNoJob', 'This link has no ingestion job to reingest.'));
+        return;
+      }
+      await apiClient.restartJob(jobId);
+      setReingestTarget(null);
+      setNotice(t('links.reingestQueued', 'Reingestion queued.'));
+      await load(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReingesting(false);
+    }
+  };
+
   const { selectedItems, clear, selection } = useTableSelection(links);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkReingestOpen, setBulkReingestOpen] = useState(false);
+  const [bulkReingesting, setBulkReingesting] = useState(false);
 
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
@@ -201,11 +241,42 @@ function LinksView() {
     }
   };
 
+  const handleBulkReingest = async () => {
+    setBulkReingesting(true);
+    setError('');
+    setNotice('');
+    try {
+      let queued = 0;
+      let skipped = 0;
+      for (const link of selectedItems) {
+        const jobId = await latestJobId(link.id);
+        if (jobId) {
+          await apiClient.restartJob(jobId);
+          queued += 1;
+        } else {
+          skipped += 1;
+        }
+      }
+      setBulkReingestOpen(false);
+      clear();
+      const base = t('links.bulkReingestQueued', { count: queued, defaultValue: `Reingestion queued for ${queued} link(s).` });
+      setNotice(skipped > 0
+        ? `${base} ${t('links.bulkReingestSkipped', { count: skipped, defaultValue: `${skipped} skipped (no ingestion job).` })}`
+        : base);
+      await load(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkReingesting(false);
+    }
+  };
+
   const bulkBar = (
     <BulkActionBar
       count={selectedItems.length}
       onClear={clear}
       actions={[
+        { key: 'reingest', label: t('links.reingestMultiple', 'Reingest Links'), onClick: () => setBulkReingestOpen(true) },
         { key: 'delete', label: t('common.delete'), danger: true, onClick: () => setBulkDeleteOpen(true) }
       ]}
     />
@@ -265,6 +336,7 @@ function LinksView() {
           actions={[
             { label: t('common.view'), onClick: () => setDetail(row) },
             { label: t('links.viewIngestionLog'), onClick: () => setLogTarget(row) },
+            { label: t('links.reingest', 'Reingest Link'), onClick: () => setReingestTarget(row) },
             { label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(row) }
           ]}
         />
@@ -375,6 +447,27 @@ function LinksView() {
         message={`Delete ${selectedItems.length} selected content link(s)? This cannot be undone.`}
         confirmLabel={t('common.delete')}
         isLoading={bulkDeleting}
+      />
+
+      <ConfirmModal
+        isOpen={!!reingestTarget}
+        onClose={() => setReingestTarget(null)}
+        onConfirm={handleReingest}
+        title={t('links.reingest', 'Reingest Link')}
+        message={t('links.reingestConfirm', 'Reingest this content link? Its ingestion pipeline will run again from the beginning.')}
+        entityName={reingestTarget?.url}
+        confirmLabel={t('links.reingest', 'Reingest Link')}
+        isLoading={reingesting}
+      />
+
+      <ConfirmModal
+        isOpen={bulkReingestOpen}
+        onClose={() => setBulkReingestOpen(false)}
+        onConfirm={handleBulkReingest}
+        title={t('links.reingestMultiple', 'Reingest Links')}
+        message={t('links.bulkReingestConfirm', { count: selectedItems.length, defaultValue: `Reingest ${selectedItems.length} selected content link(s)? Each link's ingestion pipeline will run again from the beginning.` })}
+        confirmLabel={t('links.reingestMultiple', 'Reingest Links')}
+        isLoading={bulkReingesting}
       />
     </div>
   );
