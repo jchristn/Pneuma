@@ -5,10 +5,6 @@ namespace Pneuma.Server.Routes
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
-    using Pneuma.Core.Graph;
-    using Pneuma.Core.Integrations.Abstractions;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
@@ -20,8 +16,10 @@ namespace Pneuma.Server.Routes
     using WatsonWebserver.Core.OpenApi;
 
     /// <summary>
-    /// User-facing search: query the RecallDB retrieval store (full-text over per-chunk documents) and
-    /// resolve hits to a representative set of graph nodes.
+    /// User-facing search over the retrieval store. Every mode — full-text only, vector only, or hybrid
+    /// (RRF-fused) — is served by the shared <see cref="GroundedQueryService"/> so search, grounded answering,
+    /// and the MCP tools cannot drift. The mode is selected with the <c>mode</c> query parameter
+    /// (<c>text</c> | <c>vector</c> | <c>hybrid</c>); it defaults to hybrid.
     /// </summary>
     public class SearchRoutes
     {
@@ -29,10 +27,7 @@ namespace Pneuma.Server.Routes
 
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
-        private readonly IInvertedIndex _Search;
-        private readonly ICollectionStore _Collections;
-        private readonly string? _DefaultCollectionId;
-        private readonly IGraphRepositoryFactory _GraphFactory;
+        private readonly GroundedQueryService _Query;
 
         #endregion
 
@@ -41,24 +36,16 @@ namespace Pneuma.Server.Routes
         /// <summary>Instantiate search routes.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="search">Full-text search client (RecallDB).</param>
-        /// <param name="collections">Collection store used to resolve the target collection.</param>
-        /// <param name="defaultCollectionId">Default collection id used when a request specifies none.</param>
-        /// <param name="graphFactory">Per-tenant graph repository factory.</param>
+        /// <param name="query">Shared retrieval/grounded-query service (provides full-text, vector, and hybrid search).</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public SearchRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory)
+        public SearchRoutes(DatabaseDriverBase db, AuthorizationService authz, GroundedQueryService query)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
-            if (search == null) throw new ArgumentNullException(nameof(search));
-            if (collections == null) throw new ArgumentNullException(nameof(collections));
-            if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
+            if (query == null) throw new ArgumentNullException(nameof(query));
             _Db = db;
             _Authz = authz;
-            _Search = search;
-            _Collections = collections;
-            _DefaultCollectionId = defaultCollectionId;
-            _GraphFactory = graphFactory;
+            _Query = query;
         }
 
         #endregion
@@ -72,9 +59,9 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/search", SearchAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Search the corpus for representative nodes (RecallDB)", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Search the corpus (full-text, vector, or hybrid) for representative nodes", "Search"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{subjectId}/search", SubjectSearchAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Search a subject's ingested documents (RecallDB), paginated by score", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Search a subject's documents (full-text, vector, or hybrid), paginated by score", "Search"));
         }
 
         #endregion
@@ -101,33 +88,18 @@ namespace Pneuma.Server.Routes
             string? maxText = ctx.Request.Query.Elements?["max"];
             if (!String.IsNullOrEmpty(maxText) && Int32.TryParse(maxText, out int parsed)) max = Math.Clamp(parsed, 1, 100);
 
+            RetrievalModeEnum mode = ParseMode(ctx);
             string tenantId = rc.TenantId ?? String.Empty;
-            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, ctx.Request.Query.Elements?["collection"], _DefaultCollectionId, ctx.Token).ConfigureAwait(false);
-            SearchResponse response = new SearchResponse { Query = query };
-            if (String.IsNullOrEmpty(collectionId))
-            {
-                await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
-                return;
-            }
-
-            // Optional per-request facet filter (URL-encoded RetrievalFilter JSON in the `filter` query param).
             RetrievalFilter? requestFilter = ParseFilter(ctx);
-            List<RetrievalTagCondition> req = requestFilter != null ? requestFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
-            List<RetrievalTagCondition> exc = requestFilter != null ? requestFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, null, req.Count > 0 ? req : null, exc.Count > 0 ? exc : null, ctx.Token).ConfigureAwait(false);
-            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            string? collectionOverride = ctx.Request.Query.Elements?["collection"];
 
-            foreach (SearchHit hit in hits)
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, max, null, mode, requestFilter, collectionOverride, ctx.Token).ConfigureAwait(false);
+
+            SearchResponse response = new SearchResponse { Query = query!, Mode = mode.ToString() };
+            foreach (RetrievedChunk hit in hits)
             {
-                if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
-                if (!seen.Add(nodeId)) continue;
-
-                GraphNode? node = await (await _GraphFactory.ForTenantAsync(tenantId, ctx.Token).ConfigureAwait(false)).ReadNodeAsync(nodeId, ctx.Token).ConfigureAwait(false);
-                if (node == null) continue;
-
-                response.Results.Add(new SearchNodeResult { Node = node, Score = hit.Score, Snippet = hit.Snippet });
+                response.Results.Add(new SearchNodeResult { Node = hit.Node, Score = hit.Score, Snippet = hit.Snippet });
             }
-
             await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
         }
 
@@ -164,32 +136,22 @@ namespace Pneuma.Server.Routes
             string? skipText = ctx.Request.Query.Elements?["skip"];
             if (!String.IsNullOrEmpty(skipText) && Int32.TryParse(skipText, out int parsedSkip)) skip = Math.Max(0, parsedSkip);
 
-            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, ctx.Request.Query.Elements?["collection"], _DefaultCollectionId, ctx.Token).ConfigureAwait(false);
-            List<SearchHit> hits = new List<SearchHit>();
-            if (!String.IsNullOrEmpty(collectionId))
-            {
-                Dictionary<string, string> tagFilter = new Dictionary<string, string> { { "subjectId", subjectId } };
-                // Scope to the subject's default retrieval filter merged with any per-request filter, so search
-                // narrows by label/tag exactly the way grounded retrieval and chat do.
-                RetrievalFilter effective = RetrievalFilter.Merge(ParseSubjectDefault(subject), ParseFilter(ctx));
-                List<RetrievalTagCondition> req = effective.EffectiveRequired();
-                List<RetrievalTagCondition> exc = effective.EffectiveExcluded();
-                hits = await _Search.SearchAsync(tenantId, collectionId, query, 1000, tagFilter, req.Count > 0 ? req : null, exc.Count > 0 ? exc : null, ctx.Token).ConfigureAwait(false);
-            }
+            RetrievalModeEnum mode = ParseMode(ctx);
+            RetrievalFilter? requestFilter = ParseFilter(ctx);
+            string? collectionOverride = ctx.Request.Query.Elements?["collection"];
 
-            // A source link is stored as many RecallDB documents (one per chunk). Each chunk hit carries its
-            // originating link id in tags, so hits roll up per link directly (best-scoring chunk + match count).
+            // Gather a generous pool of hits (the subject default filter is merged in by the service) and roll
+            // them up per source link. A source link is many chunk documents; each hit carries its link id.
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, 1000, subjectId, mode, requestFilter, collectionOverride, ctx.Token).ConfigureAwait(false);
+
             List<string> order = new List<string>();
             Dictionary<string, SearchGroup> groups = new Dictionary<string, SearchGroup>(StringComparer.Ordinal);
-            foreach (SearchHit hit in hits)
+            foreach (RetrievedChunk hit in hits)
             {
-                string? linkId = null;
-                if (hit.Tags.TryGetValue("linkId", out string? lid) && !String.IsNullOrEmpty(lid)) linkId = lid;
-                string key = !String.IsNullOrEmpty(linkId) ? "link:" + linkId : "doc:" + hit.DocumentId;
-
+                string key = !String.IsNullOrEmpty(hit.LinkId) ? "link:" + hit.LinkId : "doc:" + (hit.DocumentId ?? hit.NodeId);
                 if (!groups.TryGetValue(key, out SearchGroup? group))
                 {
-                    group = new SearchGroup { LinkId = linkId, Best = hit, MatchCount = 0 };
+                    group = new SearchGroup { LinkId = hit.LinkId, Best = hit, MatchCount = 0 };
                     groups[key] = group;
                     order.Add(key);
                 }
@@ -205,7 +167,6 @@ namespace Pneuma.Server.Routes
             List<SearchGroup> pageGroups = new List<SearchGroup>();
             for (int i = skip; i < ranked.Count && pageGroups.Count < maxResults; i++) pageGroups.Add(ranked[i]);
 
-            // Resolve link details (url/title) for the links shown on this page.
             Dictionary<string, SubjectLink> linkById = new Dictionary<string, SubjectLink>(StringComparer.Ordinal);
             foreach (SearchGroup group in pageGroups)
             {
@@ -219,13 +180,13 @@ namespace Pneuma.Server.Routes
             {
                 SubjectSearchResult result = new SubjectSearchResult
                 {
-                    DocumentId = group.Best.DocumentId,
+                    DocumentId = group.Best.DocumentId ?? group.Best.NodeId,
                     Score = group.Best.Score,
                     MatchCount = group.MatchCount,
                     Snippet = group.Best.Snippet,
-                    LinkId = group.LinkId
+                    LinkId = group.LinkId,
+                    NodeId = group.Best.NodeId
                 };
-                if (group.Best.Tags.TryGetValue("litegraphNodeId", out string? nodeId)) result.NodeId = nodeId;
                 if (!String.IsNullOrEmpty(group.LinkId) && linkById.TryGetValue(group.LinkId!, out SubjectLink? link))
                 {
                     result.LinkUrl = link.Url;
@@ -245,6 +206,34 @@ namespace Pneuma.Server.Routes
                 Objects = objects
             };
             await RouteHelper.SendJsonAsync(ctx, 200, envelope).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Parse the <c>mode</c> query parameter into a retrieval mode. Accepts <c>text</c>/<c>fulltext</c>/
+        /// <c>keyword</c>/<c>lexical</c> for full-text, <c>vector</c>/<c>semantic</c> for vector, and anything
+        /// else (including absent) as hybrid.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <returns>The requested retrieval mode; hybrid by default.</returns>
+        private static RetrievalModeEnum ParseMode(HttpContextBase ctx)
+        {
+            string? raw = ctx.Request.Query.Elements?["mode"];
+            if (String.IsNullOrWhiteSpace(raw)) return RetrievalModeEnum.Hybrid;
+            switch (raw!.Trim().ToLowerInvariant())
+            {
+                case "text":
+                case "fulltext":
+                case "full-text":
+                case "keyword":
+                case "lexical":
+                    return RetrievalModeEnum.FullText;
+                case "vector":
+                case "semantic":
+                case "embedding":
+                    return RetrievalModeEnum.Vector;
+                default:
+                    return RetrievalModeEnum.Hybrid;
+            }
         }
 
         /// <summary>
@@ -268,22 +257,6 @@ namespace Pneuma.Server.Routes
             }
         }
 
-        /// <summary>Parse a subject's stored default retrieval filter, or null when absent or unparseable.</summary>
-        /// <param name="subject">The subject.</param>
-        /// <returns>The subject's default filter, or null.</returns>
-        private static RetrievalFilter? ParseSubjectDefault(Subject subject)
-        {
-            if (subject == null || String.IsNullOrWhiteSpace(subject.RetrievalFilterJson)) return null;
-            try
-            {
-                return Json.Deserialize<RetrievalFilter>(subject.RetrievalFilterJson!);
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-
         #endregion
 
         #region Nested-Types
@@ -295,7 +268,7 @@ namespace Pneuma.Server.Routes
             public string? LinkId { get; set; }
 
             /// <summary>The best-scoring chunk hit seen for this source.</summary>
-            public SearchHit Best { get; set; } = null!;
+            public RetrievedChunk Best { get; set; } = null!;
 
             /// <summary>How many chunk hits belong to this source.</summary>
             public int MatchCount { get; set; }

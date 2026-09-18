@@ -35,6 +35,7 @@ namespace Pneuma.Core.Database
             await SeedRolesAsync(db, token).ConfigureAwait(false);
             string tenantId = await SeedAccountTenantAdminAsync(db, options, token).ConfigureAwait(false);
             await SeedPromptsAsync(db, token).ConfigureAwait(false);
+            await SeedModelRunnersAsync(db, options, token).ConfigureAwait(false);
 
             if (String.IsNullOrEmpty(tenantId)) return null;
 
@@ -46,6 +47,36 @@ namespace Pneuma.Core.Database
         #endregion
 
         #region Private-Methods
+
+        private static async Task SeedModelRunnersAsync(DatabaseDriverBase db, SeedOptions options, CancellationToken token)
+        {
+            string baseUrl = String.IsNullOrWhiteSpace(options.OllamaBaseUrl) ? "http://127.0.0.1:11434" : options.OllamaBaseUrl.TrimEnd('/');
+            await SeedModelRunnerAsync(db, "nomic-embed-text", ModelCapabilityEnum.Embedding, baseUrl, token).ConfigureAwait(false);
+            await SeedModelRunnerAsync(db, "gemma3:4b", ModelCapabilityEnum.Completion, baseUrl, token).ConfigureAwait(false);
+        }
+
+        private static async Task SeedModelRunnerAsync(DatabaseDriverBase db, string model, ModelCapabilityEnum capability, string baseUrl, CancellationToken token)
+        {
+            ModelRunner? existing = await db.ModelRunners.ReadByNameAsync(null, model, token).ConfigureAwait(false);
+            if (existing != null) return;
+
+            bool embedding = capability == ModelCapabilityEnum.Embedding;
+            ModelRunner runner = new ModelRunner
+            {
+                TenantId = null,
+                Name = model,
+                Provider = ModelRunnerProviderEnum.Ollama,
+                BaseUrl = baseUrl,
+                ApiType = "Ollama",
+                Capabilities = new List<ModelCapabilityEnum> { capability },
+                Usage = embedding ? ModelRunnerUsageEnum.Ingestion : ModelRunnerUsageEnum.Both,
+                DefaultModel = embedding ? null : model,
+                DefaultEmbeddingModel = embedding ? model : null,
+                Active = true,
+                IsProtected = false
+            };
+            await db.ModelRunners.CreateAsync(runner, token).ConfigureAwait(false);
+        }
 
         private static async Task SeedRolesAsync(DatabaseDriverBase db, CancellationToken token)
         {
@@ -180,6 +211,12 @@ namespace Pneuma.Core.Database
             // the subject may append its own override after this global base (same merge as the system prompt).
             await SeedPromptAsync(db, "prompt.rewrite", "Prompt Rewrite", DefaultPromptRewritePrompt, token).ConfigureAwait(false);
             await SeedPromptAsync(db, "reranking", "Reranking", DefaultRerankingPrompt, token).ConfigureAwait(false);
+
+            await SeedPromptAsync(db, "community.summarize", "Community Summarization",
+                "You are summarizing a community of related entities from a knowledge graph. In 2-4 sentences, "
+                + "describe the theme that connects them and what they collectively concern. Do not list the entities verbatim; "
+                + "synthesize the shared topic. Do not mention that this is a graph or a community.", token).ConfigureAwait(false);
+
             await SeedPromptAsync(db, "eval.judge", "Eval Judge",
                 "You are an impartial grader for a knowledge-base assistant. You are given a question, the expected " +
                 "correct answer, and the answer the assistant produced. Judge whether the produced answer is correct " +

@@ -211,6 +211,7 @@ namespace Pneuma.Server.Routes
             existing.Description = update.Description;
             existing.Tagline = update.Tagline;
             existing.Active = update.Active;
+            existing.PublishedForChat = update.PublishedForChat;
             existing.ThinkingEnabled = update.ThinkingEnabled;
             existing.SystemPrompt = update.SystemPrompt;
             existing.OntologyClassifyPrompt = update.OntologyClassifyPrompt;
@@ -218,8 +219,12 @@ namespace Pneuma.Server.Routes
             existing.EmbeddingModel = update.EmbeddingModel;
             existing.InferenceModel = update.InferenceModel;
             existing.RerankingModel = update.RerankingModel;
+            existing.RerankerType = update.RerankerType;
             existing.PromptRewriteModel = update.PromptRewriteModel;
             existing.Collection = update.Collection;
+            existing.ChunkStrategy = update.ChunkStrategy;
+            existing.ChunkMaxTokens = update.ChunkMaxTokens;
+            existing.ChunkOverlapTokens = update.ChunkOverlapTokens;
             existing.RerankingPrompt = update.RerankingPrompt;
             existing.PromptRewritePrompt = update.PromptRewritePrompt;
             existing.RetrievalFilterJson = update.RetrievalFilterJson;

@@ -53,13 +53,30 @@ namespace Pneuma.Core.Models
         /// <summary>Default model name for embeddings.</summary>
         public string? DefaultEmbeddingModel { get; set; } = null;
 
+        /// <summary>Azure OpenAI deployment name. Required when <see cref="Provider"/> is AzureOpenAI.</summary>
+        public string? Deployment { get; set; } = null;
+
+        /// <summary>Azure OpenAI API version. Optional; a provider default applies when null.</summary>
+        public string? ApiVersion { get; set; } = null;
+
+        /// <summary>Cloud region. Required when <see cref="Provider"/> is Bedrock or VertexAI.</summary>
+        public string? Region { get; set; } = null;
+
+        /// <summary>Cloud project identifier. Required when <see cref="Provider"/> is VertexAI.</summary>
+        public string? Project { get; set; } = null;
+
+        /// <summary>AWS access key id. Required when <see cref="Provider"/> is Bedrock. The secret access key is stored in <see cref="AuthMaterialEncrypted"/>.</summary>
+        public string? AccessKeyId { get; set; } = null;
+
+        /// <summary>Encrypted AWS session token, when using temporary credentials with Bedrock.</summary>
+        public string? SessionTokenEncrypted { get; set; } = null;
+
         /// <summary>Whether the runner is enabled.</summary>
         public bool Active { get; set; } = true;
 
         /// <summary>
         /// Maximum context window (in tokens) of the model, when known. Drives automatic chat conversation
         /// compression once the running message history approaches the window. 0 means unknown/disabled.
-        /// Not persisted for stored runners; populated on the transient runner resolved from a Partio endpoint.
         /// </summary>
         public int ContextSize { get; set; } = 0;
 

@@ -19,7 +19,6 @@ FRONTEND_LIMIT=400
 # Backend files grandfathered above the limit (single class + regions). Keep this list short and justified.
 BACKEND_ALLOWLIST=(
   "src/Pneuma.Core/Integrations/Implementations/LiteGraphClient.cs"
-  "src/Pneuma.Core/Integrations/Implementations/PartioClient.cs"
   # Single cohesive services organized with regions; splitting a stateful streaming/answer service across
   # files would hurt readability more than it helps.
   "src/Pneuma.Server/Services/AgenticChatService.cs"
@@ -56,6 +55,8 @@ FRONTEND_ALLOWLIST=(
   "subject-dashboard/src/views/EvalView.jsx"
   # The admin dashboard's single hand-rolled REST client (one method per endpoint across the full admin surface).
   "admin-dashboard/src/utils/api.js"
+  # The subject dashboard's single hand-rolled REST client (one method per endpoint); grows with the API surface.
+  "subject-dashboard/src/utils/api.js"
   # The admin dashboard's i18n string bundle: one flat resource object of UI translations that grows with the
   # UI surface. Splitting it across files would fragment the single translation source.
   "admin-dashboard/src/i18n/resources.js"

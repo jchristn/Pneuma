@@ -28,6 +28,21 @@ namespace Pneuma.Sdk.Models
         /// <summary>API type / format hint (provider-specific).</summary>
         public string? ApiType { get; set; } = null;
 
+        /// <summary>Azure OpenAI deployment name (Azure OpenAI only).</summary>
+        public string? Deployment { get; set; } = null;
+
+        /// <summary>API version (for example the Azure OpenAI api-version).</summary>
+        public string? ApiVersion { get; set; } = null;
+
+        /// <summary>Region (for example Bedrock or Vertex AI).</summary>
+        public string? Region { get; set; } = null;
+
+        /// <summary>Project identifier (Vertex AI).</summary>
+        public string? Project { get; set; } = null;
+
+        /// <summary>Access key identifier (Bedrock). Secret material is never returned.</summary>
+        public string? AccessKeyId { get; set; } = null;
+
         /// <summary>Capabilities the runner exposes.</summary>
         public List<ModelCapabilityEnum> Capabilities { get; set; } = new List<ModelCapabilityEnum>();
 

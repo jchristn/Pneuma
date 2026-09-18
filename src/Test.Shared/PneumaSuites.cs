@@ -24,11 +24,15 @@ namespace Test.Shared
                     RbacDatabaseSuite.Build(),
                     OpsDatabaseSuite.Build(),
                     GraphSuite.Build(),
+                    RetrievalSuite.Build(),
                     IngestionSuite.Build(),
                     ExternalServicesSuite.Build(),
                     ApiSuite.Build(),
                     CollectionsSuite.Build(),
-                    GraphTenancySuite.Build()
+                    GraphTenancySuite.Build(),
+                    ChunkingSuite.Build(),
+                    ChunkingParitySuite.Build(),
+                    SubjectPromptSuite.Build()
                 };
             }
         }

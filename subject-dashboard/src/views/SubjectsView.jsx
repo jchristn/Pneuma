@@ -33,8 +33,10 @@ const DEFAULT_PROMPT_REWRITE = 'Rewrite the question into a single, self-contain
 
 const EMPTY_FORM = {
   displayName: '', type: 'Subject', description: '', tagline: DEFAULT_TAGLINE, urlSlug: '',
-  thinkingEnabled: false, historyRetentionDays: 90,
+  thinkingEnabled: false, publishedForChat: true, historyRetentionDays: 90,
   embeddingModel: '', inferenceModel: '', collection: '', rerankingModel: '', promptRewriteModel: '',
+  rerankerType: 'LlmListwise',
+  chunkStrategy: 'FixedTokenCount', chunkMaxTokens: 256, chunkOverlapTokens: 32,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   ontologyClassifyPrompt: DEFAULT_ONTOLOGY_CLASSIFY,
   ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION,
@@ -130,11 +132,16 @@ function SubjectsView() {
       tagline: subject.tagline != null ? subject.tagline : DEFAULT_TAGLINE,
       urlSlug: subject.urlSlug || '',
       thinkingEnabled: !!subject.thinkingEnabled,
+      publishedForChat: subject.publishedForChat !== false,
       historyRetentionDays: subject.historyRetentionDays || 90,
       embeddingModel: subject.embeddingModel || '',
       inferenceModel: subject.inferenceModel || '',
       collection: subject.collection || '',
+      chunkStrategy: subject.chunkStrategy || 'FixedTokenCount',
+      chunkMaxTokens: subject.chunkMaxTokens || 256,
+      chunkOverlapTokens: subject.chunkOverlapTokens != null ? subject.chunkOverlapTokens : 32,
       rerankingModel: subject.rerankingModel || '',
+      rerankerType: subject.rerankerType || 'LlmListwise',
       promptRewriteModel: subject.promptRewriteModel || '',
       systemPrompt: subject.systemPrompt || '',
       ontologyClassifyPrompt: subject.ontologyClassifyPrompt || '',
@@ -167,6 +174,10 @@ function SubjectsView() {
       ...form,
       urlSlug: form.urlSlug ? slugify(form.urlSlug) : slugify(form.displayName),
       thinkingEnabled: !!form.thinkingEnabled,
+      publishedForChat: !!form.publishedForChat,
+      chunkStrategy: form.chunkStrategy || 'FixedTokenCount',
+      chunkMaxTokens: Math.max(16, Number(form.chunkMaxTokens) || 256),
+      chunkOverlapTokens: Math.max(0, Number(form.chunkOverlapTokens) || 0),
       historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90)
     };
     try {
@@ -213,6 +224,14 @@ function SubjectsView() {
       label: t('subjects.description'),
       sortable: false,
       render: (v) => <span title={v}>{v || '—'}</span>
+    },
+    {
+      key: 'publishedForChat',
+      label: t('subjects.consumerChat', 'Consumer Chat'),
+      sortable: false,
+      render: (v) => v === false
+        ? <span style={{ opacity: 0.6 }}>{t('subjects.hidden', 'Hidden')}</span>
+        : <span>{t('subjects.published', 'Published')}</span>
     },
     {
       key: 'id',
@@ -335,6 +354,17 @@ function SubjectsView() {
             />
             <label htmlFor="cd-thinking" style={{ margin: 0 }} title={t('subjects.thinkingEnabledTip', "When on, the model's reasoning is shown in a collapsible section (with a thinking-time statistic) for chats about this subject. Off hides it.")}>{t('subjects.thinkingEnabled', 'Show model thinking in chat')}</label>
           </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={t('subjects.publishedForChatTip', 'When on, this subject appears in the end-user (consumer) dashboard and its ask page is reachable. Turn it off to withhold it from end users while you review its archive; this dashboard always sees it. On by default.')}>
+            <input
+              id="cd-published"
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={form.publishedForChat}
+              onChange={(e) => setForm({ ...form, publishedForChat: e.target.checked })}
+              title={t('subjects.publishedForChatTip', 'When on, this subject appears in the end-user (consumer) dashboard and its ask page is reachable. Turn it off to withhold it from end users while you review its archive; this dashboard always sees it. On by default.')}
+            />
+            <label htmlFor="cd-published" style={{ margin: 0 }} title={t('subjects.publishedForChatTip', 'When on, this subject appears in the end-user (consumer) dashboard and its ask page is reachable. Turn it off to withhold it from end users while you review its archive; this dashboard always sees it. On by default.')}>{t('subjects.publishedForChat', 'Available in consumer chat')}</label>
+          </div>
           <div className="form-group" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>
             <label htmlFor="cd-retention" title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}>{t('subjects.historyRetentionDays', 'Chat History Retention (days)')}</label>
             <input
@@ -370,12 +400,35 @@ function SubjectsView() {
               {collections.map((c) => <option key={c.id ?? c.Id} value={c.id ?? c.Id}>{collectionLabel(c)}</option>)}
             </select>
           </div>
+          <div className="form-group" title={t('subjects.chunkStrategyTip', 'How this subject’s content is split into chunks for retrieval. Fixed token count uses the size and overlap below; sentence- and paragraph-based split on natural boundaries. Applies to new ingestions.')}>
+            <label htmlFor="cd-chunkstrategy">{t('subjects.chunkStrategy', 'Chunking Strategy')}</label>
+            <select id="cd-chunkstrategy" value={form.chunkStrategy} onChange={(e) => setForm({ ...form, chunkStrategy: e.target.value })}>
+              <option value="FixedTokenCount">{t('subjects.chunkFixed', 'Fixed token count')}</option>
+              <option value="SentenceBased">{t('subjects.chunkSentence', 'Sentence based')}</option>
+              <option value="ParagraphBased">{t('subjects.chunkParagraph', 'Paragraph based')}</option>
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.chunkMaxTokensTip', 'Target chunk size in tokens for fixed-token-count chunking. Larger chunks give more context per hit; smaller chunks give finer-grained retrieval. Default 256.')}>
+            <label htmlFor="cd-chunksize">{t('subjects.chunkMaxTokens', 'Chunk Size (tokens)')}</label>
+            <input id="cd-chunksize" type="number" min="16" value={form.chunkMaxTokens} onChange={(e) => setForm({ ...form, chunkMaxTokens: e.target.value })} />
+          </div>
+          <div className="form-group" title={t('subjects.chunkOverlapTip', 'How many tokens adjacent chunks share, so context is not lost at chunk boundaries. Default 32.')}>
+            <label htmlFor="cd-chunkoverlap">{t('subjects.chunkOverlapTokens', 'Chunk Overlap (tokens)')}</label>
+            <input id="cd-chunkoverlap" type="number" min="0" value={form.chunkOverlapTokens} onChange={(e) => setForm({ ...form, chunkOverlapTokens: e.target.value })} />
+          </div>
           <div className="form-group" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages by relevance before answering. Leave as None to skip reranking.')}>
             <label htmlFor="cd-rerankmodel" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages before answering. None skips reranking.')}>{t('subjects.rerankingModel', 'Reranking Model (optional)')}</label>
             <select id="cd-rerankmodel" value={form.rerankingModel} onChange={(e) => setForm({ ...form, rerankingModel: e.target.value })}
               title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages before answering. None skips reranking.')}>
               <option value="">{t('subjects.none', 'None')}</option>
               {completionEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
+            </select>
+          </div>
+          <div className="form-group" title={t('subjects.rerankerTypeTip', 'How retrieved passages are reordered before answering. LLM listwise uses the reranking model above; cross-encoder uses the globally-configured rerank endpoint and falls back to LLM listwise when none is configured.')}>
+            <label htmlFor="cd-rerankertype">{t('subjects.rerankerType', 'Reranker Type')}</label>
+            <select id="cd-rerankertype" value={form.rerankerType} onChange={(e) => setForm({ ...form, rerankerType: e.target.value })}>
+              <option value="LlmListwise">{t('subjects.rerankerLlm', 'LLM listwise')}</option>
+              <option value="CrossEncoder">{t('subjects.rerankerCrossEncoder', 'Cross-encoder (dedicated endpoint)')}</option>
             </select>
           </div>
           <div className="form-group" title={t('subjects.promptRewriteModelTip', 'Optional completion endpoint used to rewrite the user’s question into a retrieval query before searching. Leave as None to skip prompt rewriting.')}>
@@ -386,56 +439,10 @@ function SubjectsView() {
               {completionEndpoints.map((ep) => <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>)}
             </select>
           </div>
-          <div className="form-group" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>
-            <label htmlFor="cd-sysprompt" title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.systemPrompt', 'System Prompt')}</label>
-            <textarea
-              id="cd-sysprompt"
-              rows={3}
-              value={form.systemPrompt}
-              placeholder={t('subjects.systemPromptHint', 'Appended after the global system prompt for chats about this subject.')}
-              onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
-              title={t('subjects.systemPromptTip', 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.')}
-            />
-          </div>
-          <div className="form-group" title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt to guide how passages are ordered by relevance.')}>
-            <label htmlFor="cd-rerankprompt" title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt.')}>{t('subjects.rerankingPrompt', 'Reranking Prompt')}</label>
-            <textarea
-              id="cd-rerankprompt"
-              rows={3}
-              value={form.rerankingPrompt}
-              onChange={(e) => setForm({ ...form, rerankingPrompt: e.target.value })}
-              title={t('subjects.rerankingPromptTip', 'Used only when a reranking model is set. Appended after the global reranking prompt.')}
-            />
-          </div>
-          <div className="form-group" title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt to guide how the question is rewritten into a retrieval query.')}>
-            <label htmlFor="cd-rewriteprompt" title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt.')}>{t('subjects.promptRewritePrompt', 'Prompt Rewrite Prompt')}</label>
-            <textarea
-              id="cd-rewriteprompt"
-              rows={3}
-              value={form.promptRewritePrompt}
-              onChange={(e) => setForm({ ...form, promptRewritePrompt: e.target.value })}
-              title={t('subjects.promptRewritePromptTip', 'Used only when a prompt-rewrite model is set. Appended after the global prompt-rewrite prompt.')}
-            />
-          </div>
-          <div className="form-group" title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}>
-            <label htmlFor="cd-ontclass" title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.ontologyClassifyPrompt', 'Ontology Classification Prompt')}</label>
-            <textarea
-              id="cd-ontclass"
-              rows={3}
-              value={form.ontologyClassifyPrompt}
-              onChange={(e) => setForm({ ...form, ontologyClassifyPrompt: e.target.value })}
-              title={t('subjects.ontologyClassifyTip', 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.')}
-            />
-          </div>
-          <div className="form-group" title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}>
-            <label htmlFor="cd-ontdef" title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}>{t('subjects.ontologyDefinitionPrompt', 'Ontology Definition')}</label>
-            <textarea
-              id="cd-ontdef"
-              rows={3}
-              value={form.ontologyDefinitionPrompt}
-              onChange={(e) => setForm({ ...form, ontologyDefinitionPrompt: e.target.value })}
-              title={t('subjects.ontologyDefinitionTip', 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.')}
-            />
+          <div className="form-group">
+            <div className="field-hint" style={{ padding: '0.5rem 0', lineHeight: 1.5 }}>
+              {t('subjects.promptsMovedNote', 'Prompt overrides (system, reranking, prompt rewrite, and ontology prompts) are now managed per subject on the Prompts page, which shows the effective content, the global default it falls back to, and the merge mode for each prompt.')}
+            </div>
           </div>
           <div className="form-group" title={t('subjects.retrievalFilterTip', 'Optional default facet filter restricting which ingested chunks answers may draw on. Add required/excluded labels (e.g. html, pdf) and tag key/value pairs. Leave empty for no filter.')}>
             <label title={t('subjects.retrievalFilterTip', 'Optional default facet filter restricting which ingested chunks answers may draw on.')}>{t('subjects.retrievalFilter', 'Retrieval Filter (optional)')}</label>

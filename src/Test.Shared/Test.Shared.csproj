@@ -15,4 +15,8 @@
     <PackageReference Include="Touchstone.Core" Version="0.1.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures\chunking-parity.json" />
+  </ItemGroup>
+
 </Project>

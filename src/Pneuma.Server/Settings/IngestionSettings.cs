@@ -31,6 +31,36 @@ namespace Pneuma.Server.Settings
             set { _MaxAttempts = Math.Clamp(value, 1, 10); }
         }
 
+        /// <summary>
+        /// Base backoff, in milliseconds, before retrying a job after a transient failure. The wait grows
+        /// exponentially with the attempt number (base, base·2, base·4, …) and is capped at
+        /// <see cref="RetryBackoffMaxMs"/>. Default 2000; clamped to [0, 300000].
+        /// </summary>
+        public int RetryBackoffBaseMs
+        {
+            get { return _RetryBackoffBaseMs; }
+            set { _RetryBackoffBaseMs = Math.Clamp(value, 0, 300000); }
+        }
+
+        /// <summary>Maximum backoff, in milliseconds, between retry attempts. Default 60000; clamped to [0, 600000].</summary>
+        public int RetryBackoffMaxMs
+        {
+            get { return _RetryBackoffMaxMs; }
+            set { _RetryBackoffMaxMs = Math.Clamp(value, 0, 600000); }
+        }
+
+        /// <summary>
+        /// Maximum number of embedding vectors held in the in-memory embedding cache (a global system limit
+        /// shared across all subjects and tenants). Identical text is served from the cache instead of being
+        /// re-embedded, saving the embedding round-trip on re-ingestion and duplicate content. Set to 0 to
+        /// disable caching. Default 50000; clamped to [0, 5000000].
+        /// </summary>
+        public int EmbeddingCacheSize
+        {
+            get { return _EmbeddingCacheSize; }
+            set { _EmbeddingCacheSize = Math.Clamp(value, 0, 5000000); }
+        }
+
         /// <summary>Per-stage timeout in seconds.</summary>
         public int StageTimeoutSeconds
         {
@@ -75,6 +105,9 @@ namespace Pneuma.Server.Settings
         private int _MaxConcurrentTasks = 4;
         private int _PollIntervalMs = 2000;
         private int _MaxAttempts = 3;
+        private int _RetryBackoffBaseMs = 2000;
+        private int _RetryBackoffMaxMs = 60000;
+        private int _EmbeddingCacheSize = 50000;
         private int _StageTimeoutSeconds = 300;
         private int _BrowserNavigationTimeoutMs = 60000;
         private string _UserAgent = HttpContentFetcher.DefaultUserAgent;

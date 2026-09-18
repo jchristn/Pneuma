@@ -233,6 +233,11 @@ order, search }` options object as its last argument.
 ### Prompts
 - `listPrompts(options?)`, `createPrompt(p)`, `getPrompt(id)`, `updatePrompt(id, p)`, `deletePrompt(id)`
 
+### Subject prompts
+- `listSubjectPrompts(subjectId)` — a subject's effective prompts, each with `key`, `name`, `effectiveContent`, `globalContent`, `overrideContent`, `source` (`"Global"` | `"SubjectOverride"`), and `mergeMode` (`"Append"` | `"Replace"`)
+- `setSubjectPrompt(subjectId, key, { content, mergeMode? })` — set a per-subject override; `mergeMode` defaults to `'Append'`
+- `deleteSubjectPrompt(subjectId, key)` — remove an override, reverting the key to the global prompt
+
 ### Settings (system-admin only)
 - `getSettings()` — GET `/v1.0/settings`; secrets masked as `"********"`
 - `updateSettings(settings)` — PUT `/v1.0/settings`; unchanged masked secrets are preserved

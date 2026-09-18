@@ -2,11 +2,12 @@ namespace Pneuma.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
@@ -16,37 +17,43 @@ namespace Pneuma.Server.Routes
     using WatsonWebserver.Core.OpenApi;
 
     /// <summary>
-    /// Model runner routes. A pass-through proxy to Partio's embedding and completion endpoints:
-    /// Pneuma stores no local model state, it simply manages Partio endpoints on the operator's behalf.
+    /// Model runner routes. Model endpoints are stored natively in Pneuma (the <c>modelrunners</c> table);
+    /// Pneuma addresses each provider directly through PolyPrompt. Secrets are encrypted at rest and never
+    /// returned. Route paths and the "Model Runners" surface name are preserved for dashboard/SDK compatibility.
     /// </summary>
     public class ModelRunnerRoutes
     {
         #region Private-Members
 
-        private readonly IPartioClient _Partio;
+        private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
         private readonly ModelHealthMonitor _Health;
         private readonly ModelRunnerValidationService _Validation;
+        private readonly Aes256Cipher _Cipher;
 
         #endregion
 
         #region Constructors-and-Factories
 
-        /// <summary>Instantiate model runner (Partio endpoint proxy) routes.</summary>
-        /// <param name="partio">Partio client.</param>
+        /// <summary>Instantiate model runner routes.</summary>
+        /// <param name="db">Database driver (native model-runner store).</param>
         /// <param name="authz">Authorization service.</param>
         /// <param name="health">Model health monitor providing per-base-URL health status.</param>
         /// <param name="validation">Model runner validation service (active end-to-end endpoint checks).</param>
-        public ModelRunnerRoutes(IPartioClient partio, AuthorizationService authz, ModelHealthMonitor health, ModelRunnerValidationService validation)
+        /// <param name="cipher">Cipher used to encrypt endpoint secrets at rest.</param>
+        /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
+        public ModelRunnerRoutes(DatabaseDriverBase db, AuthorizationService authz, ModelHealthMonitor health, ModelRunnerValidationService validation, Aes256Cipher cipher)
         {
-            if (partio == null) throw new ArgumentNullException(nameof(partio));
+            if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (health == null) throw new ArgumentNullException(nameof(health));
             if (validation == null) throw new ArgumentNullException(nameof(validation));
-            _Partio = partio;
+            if (cipher == null) throw new ArgumentNullException(nameof(cipher));
+            _Db = db;
             _Authz = authz;
             _Health = health;
             _Validation = validation;
+            _Cipher = cipher;
         }
 
         #endregion
@@ -55,12 +62,13 @@ namespace Pneuma.Server.Routes
 
         /// <summary>Register routes.</summary>
         /// <param name="server">Watson server.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="server"/> is null.</exception>
         public void Register(Webserver server)
         {
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/model-runners", ListAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("List model endpoints (Partio)", "ModelRunners"));
+                openApiMetadata: OpenApiRouteMetadata.Create("List model endpoints", "ModelRunners"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/model-runners", CreateAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Create a model endpoint", "ModelRunners"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/model-runners/health", HealthListAsync, RouteHelper.ExceptionAsync,
@@ -93,11 +101,9 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
+            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(rc.TenantId, ctx.Token).ConfigureAwait(false);
             List<ModelEndpointDto> all = new List<ModelEndpointDto>();
-            List<PartioEndpoint> embedding = await _Partio.ListEmbeddingEndpointsAsync(ctx.Token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in embedding) all.Add(ToDto(endpoint, "Embedding"));
-            List<PartioEndpoint> completion = await _Partio.ListCompletionEndpointsAsync(ctx.Token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in completion) all.Add(ToDto(endpoint, "Completion"));
+            foreach (ModelRunner runner in runners) all.Add(ToDto(runner));
 
             EnumerationResult<ModelEndpointDto> result = EnumerationHelper.Paginate(all, RouteHelper.ReadEnumerationQuery(ctx), e => e.CreatedUtc, e => e.Name);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
@@ -116,8 +122,13 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            PartioEndpoint created = await _Partio.CreateEndpointAsync(type, ToEndpoint(request), ctx.Token).ConfigureAwait(false);
-            await RouteHelper.SendJsonAsync(ctx, 201, ToDto(created, DisplayType(type))).ConfigureAwait(false);
+            ModelRunner runner = new ModelRunner
+            {
+                TenantId = rc.TenantId
+            };
+            ApplyRequest(runner, request, type);
+            ModelRunner created = await _Db.ModelRunners.CreateAsync(runner, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 201, ToDto(created)).ConfigureAwait(false);
         }
 
         private async Task ReadAsync(HttpContextBase ctx)
@@ -125,20 +136,13 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
-            string id = RouteHelper.Param(ctx, "id");
-            PartioEndpoint? endpoint = await _Partio.ReadEndpointAsync("embedding", id, ctx.Token).ConfigureAwait(false);
-            string display = "Embedding";
-            if (endpoint == null)
-            {
-                endpoint = await _Partio.ReadEndpointAsync("completion", id, ctx.Token).ConfigureAwait(false);
-                display = "Completion";
-            }
-            if (endpoint == null)
+            ModelRunner? runner = await _Db.ModelRunners.ReadAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            if (runner == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
-            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(endpoint, display)).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(runner)).ConfigureAwait(false);
         }
 
         private async Task HealthListAsync(HttpContextBase ctx)
@@ -146,12 +150,9 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
+            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(rc.TenantId, ctx.Token).ConfigureAwait(false);
             List<ModelEndpointHealthDto> health = new List<ModelEndpointHealthDto>();
-            List<PartioEndpoint> embedding = await _Partio.ListEmbeddingEndpointsAsync(ctx.Token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in embedding) health.Add(_Health.BuildStatus(endpoint.Id, endpoint.Name, "Embedding", endpoint.Endpoint));
-            List<PartioEndpoint> completion = await _Partio.ListCompletionEndpointsAsync(ctx.Token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in completion) health.Add(_Health.BuildStatus(endpoint.Id, endpoint.Name, "Completion", endpoint.Endpoint));
-
+            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl));
             await RouteHelper.SendJsonAsync(ctx, 200, health).ConfigureAwait(false);
         }
 
@@ -160,21 +161,13 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
-            string id = RouteHelper.Param(ctx, "id");
-            PartioEndpoint? endpoint = await _Partio.ReadEndpointAsync("embedding", id, ctx.Token).ConfigureAwait(false);
-            string display = "Embedding";
-            if (endpoint == null)
-            {
-                endpoint = await _Partio.ReadEndpointAsync("completion", id, ctx.Token).ConfigureAwait(false);
-                display = "Completion";
-            }
-            if (endpoint == null)
+            ModelRunner? runner = await _Db.ModelRunners.ReadAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            if (runner == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
-
-            ModelEndpointHealthDto status = _Health.BuildStatus(endpoint.Id, endpoint.Name, display, endpoint.Endpoint);
+            ModelEndpointHealthDto status = _Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl);
             await RouteHelper.SendJsonAsync(ctx, 200, status).ConfigureAwait(false);
         }
 
@@ -184,8 +177,6 @@ namespace Pneuma.Server.Routes
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
             string id = RouteHelper.Param(ctx, "id");
-            // The row's type disambiguates ids that Partio shares between the default embedding and default
-            // completion endpoints (both seeded as "default").
             string? type = ctx.Request.Query.Elements?["type"];
             ModelEndpointValidationDto? result = await _Validation.ValidateAsync(id, type, ctx.Token).ConfigureAwait(false);
             if (result == null)
@@ -202,16 +193,24 @@ namespace Pneuma.Server.Routes
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Admin).ConfigureAwait(false)) return;
 
             string id = RouteHelper.Param(ctx, "id");
-            CreateModelEndpointRequest? request = RouteHelper.ReadBody<CreateModelEndpointRequest>(ctx);
-            string? type = NormalizeType(request?.Type) ?? await ResolveTypeAsync(id, ctx.Token).ConfigureAwait(false);
-            if (request == null || type == null)
+            ModelRunner? existing = await _Db.ModelRunners.ReadAsync(id, ctx.Token).ConfigureAwait(false);
+            if (existing == null)
             {
-                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A body with a valid type (Embedding|Completion) is required.").ConfigureAwait(false);
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
 
-            PartioEndpoint updated = await _Partio.UpdateEndpointAsync(type, id, ToEndpoint(request), ctx.Token).ConfigureAwait(false);
-            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(updated, DisplayType(type))).ConfigureAwait(false);
+            CreateModelEndpointRequest? request = RouteHelper.ReadBody<CreateModelEndpointRequest>(ctx);
+            if (request == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A request body is required.").ConfigureAwait(false);
+                return;
+            }
+
+            string type = NormalizeType(request.Type) ?? TypeOf(existing);
+            ApplyRequest(existing, request, type);
+            ModelRunner updated = await _Db.ModelRunners.UpdateAsync(existing, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(updated)).ConfigureAwait(false);
         }
 
         private async Task DeleteAsync(HttpContextBase ctx)
@@ -220,24 +219,44 @@ namespace Pneuma.Server.Routes
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Admin).ConfigureAwait(false)) return;
 
             string id = RouteHelper.Param(ctx, "id");
-            string? type = await ResolveTypeAsync(id, ctx.Token).ConfigureAwait(false);
-            if (type == null)
+            ModelRunner? existing = await _Db.ModelRunners.ReadAsync(id, ctx.Token).ConfigureAwait(false);
+            if (existing == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
-            await _Partio.DeleteEndpointAsync(type, id, ctx.Token).ConfigureAwait(false);
+            if (existing.IsProtected)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "Protected", "Model endpoint is protected.").ConfigureAwait(false);
+                return;
+            }
+            await _Db.ModelRunners.DeleteAsync(id, ctx.Token).ConfigureAwait(false);
             ctx.Response.StatusCode = 204;
             await ctx.Response.Send().ConfigureAwait(false);
         }
 
-        private async Task<string?> ResolveTypeAsync(string id, System.Threading.CancellationToken token)
+        // Apply create/update request fields onto a runner. Secrets are re-encrypted only when supplied, so an
+        // update that omits the key preserves the stored credential.
+        private void ApplyRequest(ModelRunner runner, CreateModelEndpointRequest request, string type)
         {
-            PartioEndpoint? embedding = await _Partio.ReadEndpointAsync("embedding", id, token).ConfigureAwait(false);
-            if (embedding != null) return "embedding";
-            PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", id, token).ConfigureAwait(false);
-            if (completion != null) return "completion";
-            return null;
+            bool embedding = String.Equals(type, "embedding", StringComparison.OrdinalIgnoreCase);
+            runner.Name = String.IsNullOrWhiteSpace(request.Name) ? (String.IsNullOrWhiteSpace(request.Model) ? runner.Name : request.Model!) : request.Name!;
+            runner.Provider = request.Provider ?? MapApiFormat(request.ApiFormat);
+            if (!String.IsNullOrWhiteSpace(request.Endpoint)) runner.BaseUrl = request.Endpoint!;
+            runner.ApiType = request.ApiFormat;
+            runner.Capabilities = new List<ModelCapabilityEnum> { embedding ? ModelCapabilityEnum.Embedding : ModelCapabilityEnum.Completion };
+            runner.Usage = embedding ? ModelRunnerUsageEnum.Ingestion : ModelRunnerUsageEnum.Both;
+            runner.DefaultModel = embedding ? null : request.Model;
+            runner.DefaultEmbeddingModel = embedding ? request.Model : null;
+            runner.Deployment = request.Deployment;
+            runner.ApiVersion = request.ApiVersion;
+            runner.Region = request.Region;
+            runner.Project = request.Project;
+            runner.AccessKeyId = request.AccessKeyId;
+            runner.ContextSize = Math.Max(0, request.ContextSize);
+            runner.Active = request.Active;
+            if (!String.IsNullOrEmpty(request.ApiKey)) runner.AuthMaterialEncrypted = _Cipher.Encrypt(request.ApiKey);
+            if (!String.IsNullOrEmpty(request.SessionToken)) runner.SessionTokenEncrypted = _Cipher.Encrypt(request.SessionToken);
         }
 
         private static string? NormalizeType(string? type)
@@ -249,62 +268,56 @@ namespace Pneuma.Server.Routes
             return null;
         }
 
-        private static string DisplayType(string type)
+        private static string TypeOf(ModelRunner runner)
         {
-            return type == "completion" ? "Completion" : "Embedding";
+            if (runner.Capabilities.Contains(ModelCapabilityEnum.Embedding) && !runner.Capabilities.Contains(ModelCapabilityEnum.Completion)) return "Embedding";
+            return "Completion";
         }
 
-        private static ModelEndpointDto ToDto(PartioEndpoint endpoint, string type)
+        private static ModelRunnerProviderEnum MapApiFormat(string? apiFormat)
+        {
+            if (String.IsNullOrWhiteSpace(apiFormat)) return ModelRunnerProviderEnum.Ollama;
+            string value = apiFormat.Trim().ToLowerInvariant();
+            switch (value)
+            {
+                case "openai": return ModelRunnerProviderEnum.OpenAI;
+                case "openaicompatible":
+                case "vllm":
+                case "lmstudio": return ModelRunnerProviderEnum.OpenAICompatible;
+                case "gemini": return ModelRunnerProviderEnum.Gemini;
+                case "ollama": return ModelRunnerProviderEnum.Ollama;
+                case "azure":
+                case "azureopenai": return ModelRunnerProviderEnum.AzureOpenAI;
+                case "anthropic": return ModelRunnerProviderEnum.Anthropic;
+                case "bedrock": return ModelRunnerProviderEnum.Bedrock;
+                case "voyage":
+                case "voyageai": return ModelRunnerProviderEnum.VoyageAI;
+                case "vertex":
+                case "vertexai": return ModelRunnerProviderEnum.VertexAI;
+                default: return ModelRunnerProviderEnum.Ollama;
+            }
+        }
+
+        private static ModelEndpointDto ToDto(ModelRunner runner)
         {
             return new ModelEndpointDto
             {
-                Id = endpoint.Id,
-                Type = type,
-                Name = endpoint.Name,
-                Model = endpoint.Model,
-                Endpoint = endpoint.Endpoint,
-                ApiFormat = endpoint.ApiFormat,
-                ApiKey = endpoint.ApiKey,
-                Active = endpoint.Active,
-                MaxConcurrentRequests = endpoint.MaxConcurrentRequests,
-                MaxQueueDepth = endpoint.MaxQueueDepth,
-                ContextSize = endpoint.ContextSize,
-                MaximumTimeoutMs = endpoint.MaximumTimeoutMs,
-                HealthCheckEnabled = endpoint.HealthCheckEnabled,
-                HealthCheckUrl = endpoint.HealthCheckUrl,
-                HealthCheckMethod = endpoint.HealthCheckMethod,
-                HealthCheckIntervalMs = endpoint.HealthCheckIntervalMs,
-                HealthCheckTimeoutMs = endpoint.HealthCheckTimeoutMs,
-                HealthCheckExpectedStatusCode = endpoint.HealthCheckExpectedStatusCode,
-                HealthyThreshold = endpoint.HealthyThreshold,
-                UnhealthyThreshold = endpoint.UnhealthyThreshold,
-                HealthCheckUseAuth = endpoint.HealthCheckUseAuth
-            };
-        }
-
-        private static PartioEndpoint ToEndpoint(CreateModelEndpointRequest request)
-        {
-            return new PartioEndpoint
-            {
-                Name = request.Name,
-                Model = request.Model,
-                Endpoint = request.Endpoint,
-                ApiFormat = request.ApiFormat,
-                ApiKey = request.ApiKey,
-                Active = request.Active,
-                MaxConcurrentRequests = System.Math.Max(1, request.MaxConcurrentRequests),
-                MaxQueueDepth = System.Math.Max(0, request.MaxQueueDepth),
-                ContextSize = System.Math.Max(0, request.ContextSize),
-                MaximumTimeoutMs = System.Math.Max(1, request.MaximumTimeoutMs),
-                HealthCheckEnabled = request.HealthCheckEnabled,
-                HealthCheckUrl = request.HealthCheckUrl,
-                HealthCheckMethod = request.HealthCheckMethod,
-                HealthCheckIntervalMs = System.Math.Max(0, request.HealthCheckIntervalMs),
-                HealthCheckTimeoutMs = System.Math.Max(0, request.HealthCheckTimeoutMs),
-                HealthCheckExpectedStatusCode = request.HealthCheckExpectedStatusCode,
-                HealthyThreshold = request.HealthyThreshold,
-                UnhealthyThreshold = request.UnhealthyThreshold,
-                HealthCheckUseAuth = request.HealthCheckUseAuth
+                Id = runner.Id,
+                Type = TypeOf(runner),
+                Provider = runner.Provider,
+                Name = runner.Name,
+                Model = runner.DefaultModel ?? runner.DefaultEmbeddingModel,
+                Endpoint = runner.BaseUrl,
+                ApiFormat = runner.ApiType,
+                ApiKey = null,
+                Deployment = runner.Deployment,
+                ApiVersion = runner.ApiVersion,
+                Region = runner.Region,
+                Project = runner.Project,
+                AccessKeyId = runner.AccessKeyId,
+                Active = runner.Active,
+                ContextSize = runner.ContextSize,
+                CreatedUtc = runner.CreatedUtc
             };
         }
 

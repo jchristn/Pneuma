@@ -7,6 +7,7 @@ namespace Pneuma.Server.Services
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Caching;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
@@ -16,6 +17,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
+    using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Core.Storage;
     using SyslogLogging;
@@ -32,12 +34,14 @@ namespace Pneuma.Server.Services
         #region Private-Members
 
         private readonly DatabaseDriverBase _Db;
-        private readonly IPartioClient _Partio;
+        private readonly ISemanticProcessor _Processor;
+        private readonly Aes256Cipher _Cipher;
         private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IVectorRepository _Vectors;
         private readonly IArtifactStore _Artifacts;
         private readonly PolyPromptClassifier _Classifier;
         private readonly IngestionJournal _Journal;
+        private readonly EmbeddingCache _EmbeddingCache;
         private readonly LoggingModule _Logging;
 
         #endregion
@@ -46,28 +50,34 @@ namespace Pneuma.Server.Services
 
         /// <summary>Instantiate the pipeline stages.</summary>
         /// <param name="db">Database driver.</param>
-        /// <param name="partio">Partio client.</param>
+        /// <param name="processor">Semantic processor (chunk/embed/summarize).</param>
+        /// <param name="cipher">Cipher used to decrypt the resolved completion runner's key.</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="vectors">Vector repository (RecallDB) that stores chunk content + embeddings.</param>
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="journal">Journal for stage events and best-effort artifact writes.</param>
+        /// <param name="embeddingCache">Bounded embedding cache so identical text is not re-embedded.</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public IngestionStages(
             DatabaseDriverBase db,
-            IPartioClient partio,
+            ISemanticProcessor processor,
+            Aes256Cipher cipher,
             IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
             IArtifactStore artifacts,
             IngestionJournal journal,
+            EmbeddingCache embeddingCache,
             LoggingModule logging)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
-            _Partio = partio ?? throw new ArgumentNullException(nameof(partio));
+            _Processor = processor ?? throw new ArgumentNullException(nameof(processor));
+            _Cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
             _GraphFactory = graphFactory ?? throw new ArgumentNullException(nameof(graphFactory));
             _Vectors = vectors ?? throw new ArgumentNullException(nameof(vectors));
             _Artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
             _Journal = journal ?? throw new ArgumentNullException(nameof(journal));
+            _EmbeddingCache = embeddingCache ?? throw new ArgumentNullException(nameof(embeddingCache));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Classifier = new PolyPromptClassifier(logging);
         }
@@ -85,42 +95,29 @@ namespace Pneuma.Server.Services
         /// <exception cref="InvalidOperationException">Thrown when no completion endpoint is available.</exception>
         public async Task<CandidateSubgraph> ClassifyAsync(IngestionJob job, List<ExtractedCell> cells, string subjectName, CancellationToken token)
         {
-            // The classification model comes from the link's chosen Partio completion endpoint — Pneuma keeps
-            // no local model state. Build a transient runner from the endpoint's model/url/apiFormat.
-            PartioEndpoint? endpoint = await ResolveCompletionEndpointAsync(job, token).ConfigureAwait(false);
-            if (endpoint == null) throw new InvalidOperationException("No completion model endpoint is available for classification.");
+            // The classification model comes from the link's chosen completion runner in the model-endpoint
+            // store; its key is decrypted here for the direct provider call.
+            ModelRunner? runner = await ResolveCompletionEndpointAsync(job, token).ConfigureAwait(false);
+            if (runner == null) throw new InvalidOperationException("No completion model endpoint is available for classification.");
 
-            ModelRunner runner = new ModelRunner
+            string? apiKey = null;
+            if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
             {
-                Name = String.IsNullOrWhiteSpace(endpoint.Name) ? "partio-completion" : endpoint.Name!,
-                Provider = MapProvider(endpoint.ApiFormat),
-                BaseUrl = endpoint.Endpoint ?? String.Empty,
-                DefaultModel = endpoint.Model ?? String.Empty
-            };
-            string? apiKey = endpoint.ApiKey;
-
-            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "ontology.classify", token).ConfigureAwait(false);
-            string systemPrompt = prompt?.Content ?? "Classify the content into the subject knowledge-graph ontology.";
-
-            Prompt? ontology = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "ontology.definition", token).ConfigureAwait(false);
-            string ontologyDefinition = ontology?.Content ?? String.Empty;
-
-            // Per-subject ontology overrides are appended after the global prompts (global base + subject
-            // appended), so a subject can refine classification and its ontology without losing the shared base.
-            Subject? subject = await _Db.Subjects.ReadAsync(job.TenantId, job.SubjectId, token).ConfigureAwait(false);
-            if (subject != null)
-            {
-                if (!String.IsNullOrWhiteSpace(subject.OntologyClassifyPrompt))
-                {
-                    systemPrompt = systemPrompt + "\n\n" + subject.OntologyClassifyPrompt!.Trim();
-                }
-                if (!String.IsNullOrWhiteSpace(subject.OntologyDefinitionPrompt))
-                {
-                    ontologyDefinition = String.IsNullOrWhiteSpace(ontologyDefinition)
-                        ? subject.OntologyDefinitionPrompt!.Trim()
-                        : ontologyDefinition + "\n\n" + subject.OntologyDefinitionPrompt!.Trim();
-                }
+                try { apiKey = _Cipher.Decrypt(runner.AuthMaterialEncrypted); }
+                catch (Exception) { apiKey = null; }
             }
+
+            // Resolve the classification and ontology prompts: global base + per-subject override (Append/Replace)
+            // + the legacy per-subject ontology columns, so a subject can refine classification and its ontology
+            // without losing the shared base. Global is the fallback.
+            Subject? subject = await _Db.Subjects.ReadAsync(job.TenantId, job.SubjectId, token).ConfigureAwait(false);
+            PromptResolver resolver = new PromptResolver(_Db);
+
+            ResolvedPrompt classifyResolved = await resolver.ResolveAsync(job.TenantId, job.SubjectId, "ontology.classify", subject?.OntologyClassifyPrompt, token).ConfigureAwait(false);
+            string systemPrompt = String.IsNullOrWhiteSpace(classifyResolved.EffectiveContent) ? "Classify the content into the subject knowledge-graph ontology." : classifyResolved.EffectiveContent;
+
+            ResolvedPrompt ontologyResolved = await resolver.ResolveAsync(job.TenantId, job.SubjectId, "ontology.definition", subject?.OntologyDefinitionPrompt, token).ConfigureAwait(false);
+            string ontologyDefinition = ontologyResolved.EffectiveContent;
 
             return await _Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
         }
@@ -184,7 +181,7 @@ namespace Pneuma.Server.Services
             return merge;
         }
 
-        /// <summary>Summarize each cell via Partio (one discrete pipeline step). Returns the produced summaries.</summary>
+        /// <summary>Summarize each cell (one discrete pipeline step). Returns the produced summaries.</summary>
         /// <param name="job">The job.</param>
         /// <param name="cells">Extracted semantic cells.</param>
         /// <param name="cellNodeIds">Cell node ids aligned one-to-one with <paramref name="cells"/> (from the merge stage).</param>
@@ -192,8 +189,8 @@ namespace Pneuma.Server.Services
         /// <returns>The non-empty summaries produced, each paired with its originating cell node id.</returns>
         public async Task<List<CellSummary>> SummarizeCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> cellNodeIds, CancellationToken token)
         {
-            Prompt? summarizePrompt = await _Db.Prompts.ReadByKeyAsync(job.TenantId, "cell.summarize", token).ConfigureAwait(false);
-            string? summarizationPrompt = summarizePrompt?.Content;
+            ResolvedPrompt summarizeResolved = await new PromptResolver(_Db).ResolveAsync(job.TenantId, job.SubjectId, "cell.summarize", null, token).ConfigureAwait(false);
+            string? summarizationPrompt = String.IsNullOrWhiteSpace(summarizeResolved.EffectiveContent) ? null : summarizeResolved.EffectiveContent;
 
             List<CellSummary> summaries = new List<CellSummary>();
             for (int i = 0; i < cells.Count; i++)
@@ -201,7 +198,7 @@ namespace Pneuma.Server.Services
                 token.ThrowIfCancellationRequested();
                 ExtractedCell cell = cells[i];
                 if (String.IsNullOrWhiteSpace(cell.Text)) continue;
-                string summary = await _Partio.SummarizeAsync(cell.Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
+                string summary = await _Processor.SummarizeAsync(cell.Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
                 if (!String.IsNullOrWhiteSpace(summary))
                 {
                     summaries.Add(new CellSummary
@@ -214,16 +211,20 @@ namespace Pneuma.Server.Services
             return summaries;
         }
 
-        /// <summary>Chunk each cell (and each summary) via Partio (one discrete pipeline step); no embeddings yet.</summary>
+        /// <summary>Chunk each cell (and each summary) (one discrete pipeline step); no embeddings yet.</summary>
         /// <param name="job">The job.</param>
         /// <param name="cells">Extracted semantic cells.</param>
         /// <param name="cellNodeIds">Cell node ids aligned one-to-one with <paramref name="cells"/> (from the merge stage).</param>
         /// <param name="summaries">Summaries produced by the summarization step, each carrying its cell node id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The produced chunks (text only), each stamped with its originating cell node id.</returns>
-        public async Task<List<PartioChunk>> ChunkCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> cellNodeIds, List<CellSummary> summaries, CancellationToken token)
+        public async Task<List<SemanticChunk>> ChunkCellsAsync(IngestionJob job, List<ExtractedCell> cells, List<string> cellNodeIds, List<CellSummary> summaries, CancellationToken token)
         {
-            List<PartioChunk> all = new List<PartioChunk>();
+            List<SemanticChunk> all = new List<SemanticChunk>();
+
+            // Resolve the subject's chunking configuration so short-form and long-form subjects can chunk
+            // differently; falls back to the platform defaults when the subject is missing or unset.
+            ChunkingOptions options = await ResolveChunkingOptionsAsync(job, token).ConfigureAwait(false);
 
             for (int i = 0; i < cells.Count; i++)
             {
@@ -231,9 +232,9 @@ namespace Pneuma.Server.Services
                 ExtractedCell cell = cells[i];
                 if (String.IsNullOrWhiteSpace(cell.Text)) continue;
                 string cellNodeId = (cellNodeIds != null && i < cellNodeIds.Count) ? cellNodeIds[i] : String.Empty;
-                List<PartioChunk> chunks = await _Partio.ChunkAsync(cell.Text, token).ConfigureAwait(false);
-                if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = cell.Text });
-                foreach (PartioChunk chunk in chunks)
+                List<SemanticChunk> chunks = await _Processor.ChunkAsync(cell.Text, options, token).ConfigureAwait(false);
+                if (chunks.Count == 0) chunks.Add(new SemanticChunk { Text = cell.Text });
+                foreach (SemanticChunk chunk in chunks)
                 {
                     if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
                     chunk.CellNodeId = cellNodeId;
@@ -247,9 +248,9 @@ namespace Pneuma.Server.Services
                 {
                     token.ThrowIfCancellationRequested();
                     if (String.IsNullOrWhiteSpace(summary.Text)) continue;
-                    List<PartioChunk> chunks = await _Partio.ChunkAsync(summary.Text, token).ConfigureAwait(false);
-                    if (chunks.Count == 0) chunks.Add(new PartioChunk { Text = summary.Text });
-                    foreach (PartioChunk chunk in chunks)
+                    List<SemanticChunk> chunks = await _Processor.ChunkAsync(summary.Text, options, token).ConfigureAwait(false);
+                    if (chunks.Count == 0) chunks.Add(new SemanticChunk { Text = summary.Text });
+                    foreach (SemanticChunk chunk in chunks)
                     {
                         if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
                         chunk.CellNodeId = summary.CellNodeId;
@@ -261,28 +262,48 @@ namespace Pneuma.Server.Services
             return all;
         }
 
-        /// <summary>Embed the produced chunks via Partio in bounded batches (one discrete pipeline step).</summary>
+        /// <summary>Embed the produced chunks in bounded batches (one discrete pipeline step).</summary>
         /// <param name="job">The job.</param>
         /// <param name="chunks">The chunks to embed (mutated in place with their vectors).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The chunks, now carrying their embedding vectors.</returns>
-        public async Task<List<PartioChunk>> EmbedChunksAsync(IngestionJob job, List<PartioChunk> chunks, CancellationToken token)
+        public async Task<List<SemanticChunk>> EmbedChunksAsync(IngestionJob job, List<SemanticChunk> chunks, CancellationToken token)
         {
             if (chunks.Count == 0) return chunks;
 
-            // Embed in bounded batches so a large source does not produce one enormous provider request.
+            string? model = job.EmbeddingEndpointId;
+
+            // Serve cache hits first (identical text embedded on a prior run or elsewhere in this job is not
+            // re-embedded), and collect the indices whose text still needs embedding.
+            List<int> misses = new List<int>();
+            for (int i = 0; i < chunks.Count; i++)
+            {
+                if (_EmbeddingCache.TryGet(model, chunks[i].Text, out List<float> cached))
+                {
+                    chunks[i].Embeddings = cached;
+                }
+                else
+                {
+                    misses.Add(i);
+                }
+            }
+
+            // Embed the misses in bounded batches so a large source does not produce one enormous provider
+            // request; cache each result so a later run (or duplicate content) can skip the round-trip.
             const int batchSize = 64;
-            for (int start = 0; start < chunks.Count; start += batchSize)
+            for (int start = 0; start < misses.Count; start += batchSize)
             {
                 token.ThrowIfCancellationRequested();
-                int count = Math.Min(batchSize, chunks.Count - start);
+                int count = Math.Min(batchSize, misses.Count - start);
                 List<string> texts = new List<string>(count);
-                for (int i = 0; i < count; i++) texts.Add(chunks[start + i].Text);
+                for (int i = 0; i < count; i++) texts.Add(chunks[misses[start + i]].Text);
 
-                List<List<float>> vectors = await _Partio.EmbedAsync(texts, job.EmbeddingEndpointId, token).ConfigureAwait(false);
+                List<List<float>> vectors = await _Processor.EmbedAsync(texts, model, token).ConfigureAwait(false);
                 for (int i = 0; i < count && i < vectors.Count; i++)
                 {
-                    chunks[start + i].Embeddings = vectors[i];
+                    SemanticChunk chunk = chunks[misses[start + i]];
+                    chunk.Embeddings = vectors[i];
+                    _EmbeddingCache.Set(model, chunk.Text, vectors[i]);
                 }
             }
 
@@ -304,7 +325,7 @@ namespace Pneuma.Server.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>The number of chunk documents stored in the collection.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the job has no target collection assigned.</exception>
-        public async Task<int> IndexAsync(IngestionJob job, MergeResult merge, List<PartioChunk> chunks, CancellationToken token)
+        public async Task<int> IndexAsync(IngestionJob job, MergeResult merge, List<SemanticChunk> chunks, CancellationToken token)
         {
             if (String.IsNullOrEmpty(job.CollectionId)) throw new InvalidOperationException("Ingestion job " + job.Id + " has no target collection assigned.");
 
@@ -312,7 +333,7 @@ namespace Pneuma.Server.Services
             List<ChunkDocument> documents = new List<ChunkDocument>();
             int position = 0;
 
-            foreach (PartioChunk chunk in chunks)
+            foreach (SemanticChunk chunk in chunks)
             {
                 if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
                 if (chunk.Embeddings == null || chunk.Embeddings.Count == 0) continue;
@@ -368,11 +389,11 @@ namespace Pneuma.Server.Services
         /// <param name="job">The job.</param>
         /// <param name="chunks">The chunks to persist.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task PersistChunkArtifactsAsync(IngestionJob job, List<PartioChunk> chunks, CancellationToken token)
+        public async Task PersistChunkArtifactsAsync(IngestionJob job, List<SemanticChunk> chunks, CancellationToken token)
         {
             List<string> texts = new List<string>();
             List<List<float>> vectors = new List<List<float>>();
-            foreach (PartioChunk chunk in chunks)
+            foreach (SemanticChunk chunk in chunks)
             {
                 texts.Add(chunk.Text);
                 vectors.Add(chunk.Embeddings ?? new List<float>());
@@ -409,10 +430,10 @@ namespace Pneuma.Server.Services
         /// <summary>Count how many of the given chunks carry a non-empty embedding vector.</summary>
         /// <param name="chunks">The chunks.</param>
         /// <returns>The number of embedded chunks.</returns>
-        public static int CountEmbeddings(List<PartioChunk> chunks)
+        public static int CountEmbeddings(List<SemanticChunk> chunks)
         {
             int count = 0;
-            foreach (PartioChunk chunk in chunks)
+            foreach (SemanticChunk chunk in chunks)
             {
                 if (chunk.Embeddings != null && chunk.Embeddings.Count > 0) count++;
             }
@@ -423,27 +444,36 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<PartioEndpoint?> ResolveCompletionEndpointAsync(IngestionJob job, CancellationToken token)
+        /// <summary>Resolve the chunking configuration for a job from its subject, falling back to defaults.</summary>
+        /// <param name="job">The job.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The chunking options to apply.</returns>
+        private async Task<ChunkingOptions> ResolveChunkingOptionsAsync(IngestionJob job, CancellationToken token)
+        {
+            ChunkingOptions options = new ChunkingOptions();
+            Subject? subject = await _Db.Subjects.ReadAsync(job.TenantId, job.SubjectId, token).ConfigureAwait(false);
+            if (subject == null) return options;
+            if (!String.IsNullOrWhiteSpace(subject.ChunkStrategy)) options.Strategy = subject.ChunkStrategy!;
+            options.MaxTokens = subject.ChunkMaxTokens;
+            options.OverlapCount = subject.ChunkOverlapTokens;
+            return options;
+        }
+
+        private async Task<ModelRunner?> ResolveCompletionEndpointAsync(IngestionJob job, CancellationToken token)
         {
             if (!String.IsNullOrWhiteSpace(job.CompletionEndpointId))
             {
-                PartioEndpoint? byId = await _Partio.ReadEndpointAsync("completion", job.CompletionEndpointId, token).ConfigureAwait(false);
-                if (byId != null) return byId;
+                ModelRunner? byId = await _Db.ModelRunners.ReadAsync(job.CompletionEndpointId!, token).ConfigureAwait(false);
+                if (byId != null && byId.Active) return byId;
             }
 
-            List<PartioEndpoint> completions = await _Partio.ListCompletionEndpointsAsync(token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in completions)
+            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(job.TenantId, token).ConfigureAwait(false);
+            foreach (ModelRunner runner in runners)
             {
-                if (endpoint.Active) return endpoint;
+                if (!runner.Active) continue;
+                if (runner.Capabilities.Contains(ModelCapabilityEnum.Completion)) return runner;
             }
-            return completions.Count > 0 ? completions[0] : null;
-        }
-
-        private static ModelRunnerProviderEnum MapProvider(string? apiFormat)
-        {
-            if (String.Equals(apiFormat, "OpenAI", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.OpenAI;
-            if (String.Equals(apiFormat, "Gemini", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.Gemini;
-            return ModelRunnerProviderEnum.Ollama;
+            return null;
         }
 
         private async Task<string> CreateCellNodeAsync(IngestionJob job, IGraphRepository graph, string sourceNodeId, string text, CancellationToken token)

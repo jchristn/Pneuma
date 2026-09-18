@@ -1,7 +1,6 @@
 namespace Pneuma.Core.Responses
 {
     using System.Collections.Generic;
-    using Pneuma.Core.Integrations.Models;
 
     /// <summary>
     /// The available embedding and completion model endpoints exposed to the dashboards.
@@ -9,9 +8,9 @@ namespace Pneuma.Core.Responses
     public class IngestionEndpointsResponse
     {
         /// <summary>The available embedding endpoints.</summary>
-        public List<PartioEndpoint> Embedding { get; set; } = new List<PartioEndpoint>();
+        public List<ModelEndpointDto> Embedding { get; set; } = new List<ModelEndpointDto>();
 
         /// <summary>The available completion endpoints.</summary>
-        public List<PartioEndpoint> Completion { get; set; } = new List<PartioEndpoint>();
+        public List<ModelEndpointDto> Completion { get; set; } = new List<ModelEndpointDto>();
     }
 }

@@ -255,8 +255,8 @@ class ApiClient {
     return { blob, contentType: response.headers.get('Content-Type') || blob.type || 'application/octet-stream' };
   }
 
-  // Available embedding/completion model endpoints from Partio.
-  // Shape: { embedding: [{id,name,model,apiFormat,active}], completion: [{...}] }.
+  // Available embedding/completion model endpoints.
+  // Shape: { embedding: [{id,name,model,provider,active}], completion: [{...}] }.
   listIngestionEndpoints() {
     return this._request('GET', '/v1.0/ingestion/endpoints');
   }
@@ -304,6 +304,24 @@ class ApiClient {
   // Enqueue ingestion for many URLs at once for a single subject.
   bulkSubmitLinks(subjectId, body) {
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
+  }
+
+  // ------------------------------------------------------------- Prompts
+  // Per-subject prompt catalog: every prompt key with its effective content, the global
+  // default, any subject override, the resolved source, and the override merge mode.
+  getSubjectPrompts(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts`);
+  }
+
+  // Set (or clear) a subject-level override for one prompt key. body: { content, mergeMode }.
+  // An empty content clears the override so the subject reverts to the global default.
+  updateSubjectPrompt(subjectId, key, body) {
+    return this._request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`, { body });
+  }
+
+  // Remove a subject-level override for one prompt key, reverting to the global default.
+  deleteSubjectPrompt(subjectId, key) {
+    return this._request('DELETE', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`);
   }
 
   // -------------------------------------------------------- Assignments

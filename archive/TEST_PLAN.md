@@ -8,7 +8,7 @@ API — with positive and negative cases." It does not change any test yet.
 
 **Harness.** Touchstone descriptors in `Test.Shared/Suites/*` (no console output), run three ways:
 `Test.Automated` (CLI), `Test.Xunit`, `Test.Nunit`. Shared helpers in `Test.Shared/Support/`:
-`TestServer` (in-process `PneumaServer` over SQLite with **fake** integrations — `FakePartioClient`,
+`TestServer` (in-process `PneumaServer` over SQLite with **fake** integrations —
 `FakeRecallDbClient`, `FakeLiteGraphClient`, `FakeDocumentAtomClient`, `FakeContentFetcher`,
 `FakeGraphRepositoryFactory`), `TestDatabase` (provider chosen by `PNEUMA_TEST_DB_TYPE`, default SQLite),
 and HTTP message handlers for resilience testing (`Recording`/`Sequenced`/`Delaying`).
@@ -71,17 +71,17 @@ neighbor expansion, insufficient-support refusal), `ModelRunnerGate` (admission,
 queue-depth), `ModelHealthMonitor` (base-URL dedup, healthy/unhealthy hysteresis, rolling history),
 `RequestHistoryCaptureService` (secret redaction + body truncation + retention prune — only "captured" is
 asserted), `IngestionWorkerService`/`EvalWorkerService` (claim-loop, gate yielding), `SubjectDeletionWorker`
-(background cascade + resume-on-startup), `CollectionResolver`, `PartioEndpointInitializer`,
+(background cascade + resume-on-startup), `CollectionResolver`,
 `LiteGraphInitializer`, `SettingsRedactor` (unit), `CascadeDeletionService` (direct, beyond the DB/ingestion
 paths). `AnalyticsService`, provisioners, and diagnostics are reasonably covered.
 
 ### 2.5 Integration interfaces — real-client contract holes
 Role interfaces have fakes; ExternalServices covers LiteGraph (clamp/read/round-trip), DocumentAtom
 (flatten/skip-binary), resilience, and vector/inverted-index facet honoring, plus a live RecallDB test gated on
-`PNEUMA_LIVE_STACK=1`. Gaps: **`IPartioClient`/`ISemanticProcessor`** wire contract (the PascalCase request
-serialization that previously caused 400s — no regression test), **`IContentFetcher`** (headless fetch/scroll —
+`PNEUMA_LIVE_STACK=1`. Gaps: the native chunking/embedding/summarization path (`Pneuma.Chunking` + PolyPrompt)
+has no dedicated processing-contract test, **`IContentFetcher`** (headless fetch/scroll —
 hard, at least a plain-HTTP-fallback test), and **`IServiceProbe`** per-service classification beyond the
-aggregate diagnostics test. Live-stack tests exist for RecallDB only; Partio/LiteGraph/DocumentAtom have no
+aggregate diagnostics test. Live-stack tests exist for RecallDB only; LiteGraph/DocumentAtom have no
 opt-in live contract test.
 
 ### 2.6 MCP surface
@@ -147,9 +147,9 @@ case; every enumerate has a tenant-isolation case.**
    (`endOfResults`/`recordsRemaining`).
 
 ### P3 — Integration contracts, SDKs, dashboards (2.5, 2.7, 2.8)
-9. Real-client contract tests behind `PNEUMA_LIVE_STACK=1` for Partio (summarize/chunk/embed, PascalCase
-   serialization regression), LiteGraph, and DocumentAtom, mirroring the existing gated RecallDB test; plus a
-   plain-HTTP `IContentFetcher` fallback test.
+9. Real-client contract tests behind `PNEUMA_LIVE_STACK=1` for LiteGraph and DocumentAtom, plus a
+   native-processing test for `Pneuma.Chunking` + PolyPrompt (summarize/chunk/embed), mirroring the existing
+   gated RecallDB test; plus a plain-HTTP `IContentFetcher` fallback test.
 10. **CI job to run the SDK test suites** (js/pytest/csharp) against an in-process or live server; audit each
     SDK for method-per-endpoint parity with the REST surface.
 11. Dashboard `vitest` tests for `ApiClient` (request building, error mapping), `streamSse`, i18n fallback

@@ -356,6 +356,25 @@ select {
   margin-bottom: 20px;
 }
 
+/* ---------- Prompts ---------- */
+.prompt-filter-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+.prompt-list { display: flex; flex-direction: column; gap: 16px; }
+.prompt-card { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.prompt-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.prompt-key { font-family: var(--font-mono, monospace); font-size: 0.8rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 7px; }
+.prompt-name { font-weight: 600; color: var(--text-primary); }
+.prompt-field { display: flex; flex-direction: column; gap: 5px; }
+.prompt-field > label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); font-weight: 600; }
+.prompt-readonly { white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px; max-height: 12rem; overflow: auto; }
+.prompt-readonly.prompt-muted { color: var(--text-secondary); }
+.prompt-editor-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.prompt-mergemode { min-width: 160px; margin: 0; }
+.prompt-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.prompt-badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+.prompt-badge-override { background: var(--color-info-bg); color: var(--color-info); }
+.prompt-badge-global { background: var(--bg-tertiary); color: var(--text-secondary); }
+.prompt-badge-mode { background: var(--bg-tertiary); color: var(--text-secondary); }
+
 /* Shared top-level range selector above the activity charts. */
 .chart-range-bar {
   display: flex;

@@ -40,6 +40,18 @@
     {
       "key": "turnId",
       "value": ""
+    },
+    {
+      "key": "embeddingEndpointId",
+      "value": ""
+    },
+    {
+      "key": "completionEndpointId",
+      "value": ""
+    },
+    {
+      "key": "promptKey",
+      "value": "user.answer"
     }
   ],
   "auth": {
@@ -210,7 +222,7 @@
           }
         },
         {
-          "name": "List Model Runners (Partio endpoints)",
+          "name": "List Model Runners (model endpoints)",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/v1.0/model-runners"
@@ -232,7 +244,18 @@
         },
         {
           "name": "Create Model Endpoint",
-          "description": "Proxies to Partio. type = Embedding|Completion; endpoint = upstream model URL.",
+          "description": "Managed natively by Pneuma (no external proxy). type = Embedding|Completion; provider selects the PolyPrompt provider (OpenAI, OpenAICompatible, Gemini, Ollama, AzureOpenAI, Anthropic, Bedrock, VoyageAI, VertexAI) and determines which provider-specific fields apply (deployment/apiVersion for AzureOpenAI, region/accessKeyId for Bedrock, project/region for VertexAI). Secrets (apiKey, secretAccessKey, sessionToken) are write-only and never returned on read.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var d = pm.response.json(); if (d && (d.id || d.Id)) pm.collectionVariables.set('completionEndpointId', d.id || d.Id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -243,9 +266,27 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"Completion\",\n  \"name\": \"local-chat\",\n  \"model\": \"llama3.2\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"contextSize\": 8192\n}"
+              "raw": "{\n  \"type\": \"Completion\",\n  \"provider\": \"Ollama\",\n  \"name\": \"local-chat\",\n  \"model\": \"llama3.2\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"apiFormat\": \"Ollama\",\n  \"deployment\": null,\n  \"apiVersion\": null,\n  \"region\": null,\n  \"project\": null,\n  \"accessKeyId\": null,\n  \"apiKey\": null,\n  \"secretAccessKey\": null,\n  \"sessionToken\": null,\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"maxQueueDepth\": 0,\n  \"contextSize\": 8192\n}"
             },
             "url": "{{baseUrl}}/v1.0/model-runners"
+          }
+        },
+        {
+          "name": "Update Model Endpoint",
+          "description": "Update an endpoint by id. Include provider + provider-specific fields; leave a secret field null/omitted to keep the stored value. Example shows an Azure OpenAI completion endpoint.",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"Completion\",\n  \"provider\": \"AzureOpenAI\",\n  \"name\": \"azure-chat\",\n  \"model\": \"gpt-4o\",\n  \"endpoint\": \"https://my-resource.openai.azure.com\",\n  \"apiFormat\": \"OpenAI\",\n  \"deployment\": \"gpt-4o\",\n  \"apiVersion\": \"2024-02-15-preview\",\n  \"region\": null,\n  \"project\": null,\n  \"accessKeyId\": null,\n  \"apiKey\": \"sk-...\",\n  \"secretAccessKey\": null,\n  \"sessionToken\": null,\n  \"active\": true,\n  \"maxConcurrentRequests\": 2,\n  \"maxQueueDepth\": 0,\n  \"contextSize\": 128000\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/model-runners/:id"
           }
         },
         {
@@ -525,6 +566,40 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/v1.0/subjects/by-slug/{{subjectSlug}}"
+          }
+        },
+        {
+          "name": "List Subject Prompts",
+          "description": "Effective prompts for the subject: each { key, name, effectiveContent, globalContent, overrideContent|null, source (Global|SubjectOverride), mergeMode (Append|Replace) }.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/prompts"
+          }
+        },
+        {
+          "name": "Set Subject Prompt Override",
+          "description": "Set (or clear) the subject's override for a prompt key. mergeMode Append layers the override after the global prompt; Replace uses the override alone. Empty content clears the override (falls back to global).",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Answer in Example Subject's voice, citing sources.\",\n  \"mergeMode\": \"Append\"\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/prompts/{{promptKey}}"
+          }
+        },
+        {
+          "name": "Delete Subject Prompt Override",
+          "description": "Remove the subject's override for a prompt key (falls back to the global prompt). Returns 204.",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/prompts/{{promptKey}}"
           }
         },
         {

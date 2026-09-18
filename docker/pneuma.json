@@ -70,11 +70,6 @@
     "documentAtom": {
       "endpoint": "http://documentatom:8000/"
     },
-    "partio": {
-      "endpoint": "http://partio-server:8400/",
-      "bearerToken": "partioadmin",
-      "tenantId": "default"
-    },
     "recallDb": {
       "endpoint": "http://recalldb-server:8600/",
       "bearerToken": "recalldbadmin",

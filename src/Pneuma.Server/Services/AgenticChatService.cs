@@ -151,12 +151,8 @@ namespace Pneuma.Server.Services
                 Title = MakeThreadTitle(turns)
             }, token).ConfigureAwait(false);
 
-            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "assistant.system", token).ConfigureAwait(false);
-            string systemPrompt = String.IsNullOrWhiteSpace(prompt?.Content) ? _FallbackSystemPrompt : prompt!.Content;
-            if (subject != null && !String.IsNullOrWhiteSpace(subject.SystemPrompt))
-            {
-                systemPrompt = systemPrompt + "\n\n" + subject.SystemPrompt!.Trim();
-            }
+            ResolvedPrompt resolvedSystem = await new PromptResolver(_Db).ResolveAsync(tenantId, subject?.Id, "assistant.system", subject?.SystemPrompt, token).ConfigureAwait(false);
+            string systemPrompt = String.IsNullOrWhiteSpace(resolvedSystem.EffectiveContent) ? _FallbackSystemPrompt : resolvedSystem.EffectiveContent;
             bool thinkingEnabled = subject?.ThinkingEnabled ?? false;
 
             string? apiKey = DecryptKey(runner);

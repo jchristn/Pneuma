@@ -7,7 +7,15 @@ import Modal from './Modal';
 import IngestionTimeline, { isTerminal } from './IngestionTimeline';
 import './SetupWizard.css';
 
-const API_FORMATS = ['Ollama', 'OpenAI', 'Gemini'];
+// Quick-start providers. The full Model Runners view offers every provider plus their provider-specific
+// fields; the wizard keeps to the common keyless/API-key providers to get a first endpoint running fast.
+const PROVIDERS = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Gemini'];
+const PROVIDER_LABELS = {
+  Ollama: 'Ollama',
+  OpenAI: 'OpenAI',
+  OpenAICompatible: 'OpenAI-Compatible',
+  Gemini: 'Google Gemini'
+};
 
 const STEPS = [
   { key: 'models', title: 'Model endpoints', hint: 'Point Pneuma at the models that will embed and answer over your content.' },
@@ -47,15 +55,15 @@ function EndpointForm({ kind, value, onChange }) {
         <Field label="Endpoint URL" tip="Base URL of the provider that serves this model. For the bundled Ollama use http://ollama:11434.">
           <input value={value.endpoint} onChange={(e) => set({ endpoint: e.target.value })} placeholder="http://ollama:11434" />
         </Field>
-        <Field label="API format" tip="Which provider API this endpoint speaks. Ollama for the bundled local runner; OpenAI/Gemini for hosted APIs.">
-          <select value={value.apiFormat} onChange={(e) => set({ apiFormat: e.target.value })}>
-            {API_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+        <Field label="Provider" tip="Which provider serves this model. Ollama for the bundled local runner; OpenAI/Gemini for hosted APIs. The Model Runners view offers the full provider list.">
+          <select value={value.provider} onChange={(e) => set({ provider: e.target.value })}>
+            {PROVIDERS.map((p) => <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>)}
           </select>
         </Field>
         <Field label="API key" tip="Secret key for hosted providers (OpenAI/Gemini). Leave blank for a local Ollama, which needs none.">
           <input type="password" value={value.apiKey} onChange={(e) => set({ apiKey: e.target.value })} placeholder="(none for Ollama)" />
         </Field>
-        <Field label="Max concurrency" tip="Upper bound on simultaneous requests Partio opens to this endpoint. Keep low (2) for a local model.">
+        <Field label="Max concurrency" tip="Upper bound on simultaneous requests Pneuma opens to this endpoint. Keep low (2) for a local model.">
           <input type="number" min="1" value={value.maxConcurrentRequests} onChange={(e) => set({ maxConcurrentRequests: e.target.value })} />
         </Field>
       </div>
@@ -63,7 +71,7 @@ function EndpointForm({ kind, value, onChange }) {
   );
 }
 
-const blankEndpoint = (apiFormat = 'Ollama') => ({ name: '', model: '', endpoint: 'http://ollama:11434', apiFormat, apiKey: '', maxConcurrentRequests: 1 });
+const blankEndpoint = (provider = 'Ollama') => ({ name: '', model: '', endpoint: 'http://ollama:11434', provider, apiKey: '', maxConcurrentRequests: 1 });
 
 export default function SetupWizard({ onClose }) {
   const { t } = useTranslation();
@@ -132,7 +140,7 @@ export default function SetupWizard({ onClose }) {
 
   const createEndpoints = async () => {
     const mk = (type, f) => apiClient.create('model-runners', {
-      type, name: f.name || type, model: f.model, endpoint: f.endpoint, apiFormat: f.apiFormat,
+      type, name: f.name || type, model: f.model, endpoint: f.endpoint, provider: f.provider,
       apiKey: f.apiKey || undefined, active: true, maxConcurrentRequests: Number(f.maxConcurrentRequests) || 1
     });
     const e = await mk('Embedding', embed);

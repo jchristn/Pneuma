@@ -1,7 +1,6 @@
 namespace Pneuma.Server.Services
 {
     using Pneuma.Core.Integrations.Abstractions;
-    using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Storage;
 
     /// <summary>
@@ -13,9 +12,6 @@ namespace Pneuma.Server.Services
     {
         /// <summary>Document atomizer (type detection + cell extraction).</summary>
         public IAtomizer DocumentAtom { get; set; } = null!;
-
-        /// <summary>Semantic processor with Partio's endpoint-administration surface.</summary>
-        public IPartioClient Partio { get; set; } = null!;
 
         /// <summary>Full-text (lexical) search over the retrieval store (RecallDB).</summary>
         public IInvertedIndex Search { get; set; } = null!;

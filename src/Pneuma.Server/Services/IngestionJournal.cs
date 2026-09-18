@@ -100,20 +100,29 @@ namespace Pneuma.Server.Services
         /// <param name="status">The new link status.</param>
         /// <param name="error">The last error, or null.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task UpdateLinkAsync(IngestionJob job, SubjectLinkStatusEnum status, string? error, CancellationToken token)
+        /// <param name="contentHash">
+        /// When non-null and the status is <see cref="SubjectLinkStatusEnum.Ingested"/>, records the source
+        /// content hash on the link for future delta detection. Left unchanged otherwise.
+        /// </param>
+        public async Task UpdateLinkAsync(IngestionJob job, SubjectLinkStatusEnum status, string? error, CancellationToken token, string? contentHash = null)
         {
             SubjectLink? link = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
             if (link == null) return;
             link.Status = status;
             link.LastError = error;
-            if (status == SubjectLinkStatusEnum.Ingested) link.LastIngestedUtc = DateTime.UtcNow;
+            if (status == SubjectLinkStatusEnum.Ingested)
+            {
+                link.LastIngestedUtc = DateTime.UtcNow;
+                if (!String.IsNullOrEmpty(contentHash)) link.ContentHash = contentHash;
+            }
             await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
         }
 
         /// <summary>Mark a job completed: update status, record the terminal event, mark the link ingested, and count metrics.</summary>
         /// <param name="job">The job.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task CompleteAsync(IngestionJob job, CancellationToken token)
+        /// <param name="contentHash">Hash of the ingested source bytes, recorded on the link for delta detection; may be null.</param>
+        public async Task CompleteAsync(IngestionJob job, CancellationToken token, string? contentHash = null)
         {
             job.Status = IngestionStatusEnum.Completed;
             job.Stage = IngestionStageEnum.Done;
@@ -121,7 +130,7 @@ namespace Pneuma.Server.Services
             job.Error = null;
             await UpdateJobAsync(job, token).ConfigureAwait(false);
             await RecordEventAsync(job, IngestionStageEnum.Done, IngestionStatusEnum.Completed, "Ingestion complete.", 0, token).ConfigureAwait(false);
-            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token).ConfigureAwait(false);
+            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token, contentHash).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionCompleted();
             PneumaMetrics.RecordIngestionJob("completed");
         }

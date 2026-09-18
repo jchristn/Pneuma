@@ -23,13 +23,17 @@ namespace Pneuma.Core.Database.Mysql.Implementations
             runner.LastUpdateUtc = runner.CreatedUtc;
 
             string sql =
-                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, deployment, apiversion, region, project, accesskeyid, sessiontokenencrypted, contextsize, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(runner.Id) + ", " + Sanitizer.Str(runner.TenantId) + ", " +
                 Sanitizer.Str(runner.Name) + ", " + Sanitizer.Str(runner.Provider.ToString()) + ", " +
                 Sanitizer.Str(runner.BaseUrl) + ", " + Sanitizer.Str(runner.ApiType) + ", " +
                 Sanitizer.Str(runner.AuthMaterialEncrypted) + ", " + Sanitizer.Str(JsonColumn.FromEnums(runner.Capabilities)) + ", " +
                 Sanitizer.Str(runner.Usage.ToString()) + ", " + Sanitizer.Str(runner.DefaultModel) + ", " +
-                Sanitizer.Str(runner.DefaultEmbeddingModel) + ", " + Sanitizer.Bit(runner.Active) + ", " +
+                Sanitizer.Str(runner.DefaultEmbeddingModel) + ", " +
+                Sanitizer.Str(runner.Deployment) + ", " + Sanitizer.Str(runner.ApiVersion) + ", " +
+                Sanitizer.Str(runner.Region) + ", " + Sanitizer.Str(runner.Project) + ", " +
+                Sanitizer.Str(runner.AccessKeyId) + ", " + Sanitizer.Str(runner.SessionTokenEncrypted) + ", " +
+                Sanitizer.Num(runner.ContextSize) + ", " + Sanitizer.Bit(runner.Active) + ", " +
                 Sanitizer.Bit(runner.IsProtected) + ", " + Sanitizer.Ts(runner.CreatedUtc) + ", " +
                 Sanitizer.Ts(runner.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
@@ -98,6 +102,13 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", runnerusage = " + Sanitizer.Str(runner.Usage.ToString()) +
                 ", defaultmodel = " + Sanitizer.Str(runner.DefaultModel) +
                 ", defaultembeddingmodel = " + Sanitizer.Str(runner.DefaultEmbeddingModel) +
+                ", deployment = " + Sanitizer.Str(runner.Deployment) +
+                ", apiversion = " + Sanitizer.Str(runner.ApiVersion) +
+                ", region = " + Sanitizer.Str(runner.Region) +
+                ", project = " + Sanitizer.Str(runner.Project) +
+                ", accesskeyid = " + Sanitizer.Str(runner.AccessKeyId) +
+                ", sessiontokenencrypted = " + Sanitizer.Str(runner.SessionTokenEncrypted) +
+                ", contextsize = " + Sanitizer.Num(runner.ContextSize) +
                 ", active = " + Sanitizer.Bit(runner.Active) +
                 ", isprotected = " + Sanitizer.Bit(runner.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(runner.LastUpdateUtc) +
@@ -130,6 +141,13 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 Usage = RowReader.GetEnum<ModelRunnerUsageEnum>(row, "runnerusage", ModelRunnerUsageEnum.Both),
                 DefaultModel = RowReader.GetNullableString(row, "defaultmodel"),
                 DefaultEmbeddingModel = RowReader.GetNullableString(row, "defaultembeddingmodel"),
+                Deployment = RowReader.GetNullableString(row, "deployment"),
+                ApiVersion = RowReader.GetNullableString(row, "apiversion"),
+                Region = RowReader.GetNullableString(row, "region"),
+                Project = RowReader.GetNullableString(row, "project"),
+                AccessKeyId = RowReader.GetNullableString(row, "accesskeyid"),
+                SessionTokenEncrypted = RowReader.GetNullableString(row, "sessiontokenencrypted"),
+                ContextSize = RowReader.GetInt(row, "contextsize"),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

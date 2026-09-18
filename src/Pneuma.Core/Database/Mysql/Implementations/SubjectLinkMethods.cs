@@ -71,13 +71,13 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         internal static string InsertSql(SubjectLink link)
         {
             return
-                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, contenthash, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(link.Id) + ", " + Sanitizer.Str(link.TenantId) + ", " +
                 Sanitizer.Str(link.SubjectId) + ", " + Sanitizer.Str(link.Url) + ", " +
                 Sanitizer.Str(link.Title) + ", " + Sanitizer.Str(JsonColumn.FromStrings(link.Labels)) + ", " +
                 Sanitizer.Str(JsonColumn.FromDictionary(link.Tags)) + ", " + Sanitizer.Str(link.SubmittedByUserId) + ", " +
                 Sanitizer.Str(link.Status.ToString()) + ", " + Sanitizer.Ts(link.LastIngestedUtc) + ", " +
-                Sanitizer.Str(link.LastError) + ", " + Sanitizer.Bit(link.Active) + ", " +
+                Sanitizer.Str(link.LastError) + ", " + Sanitizer.Str(link.ContentHash) + ", " + Sanitizer.Bit(link.Active) + ", " +
                 Sanitizer.Bit(link.IsProtected) + ", " + Sanitizer.Ts(link.CreatedUtc) + ", " +
                 Sanitizer.Ts(link.LastUpdateUtc) + ");";
         }
@@ -140,6 +140,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", status = " + Sanitizer.Str(link.Status.ToString()) +
                 ", lastingestedutc = " + Sanitizer.Ts(link.LastIngestedUtc) +
                 ", lasterror = " + Sanitizer.Str(link.LastError) +
+                ", contenthash = " + Sanitizer.Str(link.ContentHash) +
                 ", active = " + Sanitizer.Bit(link.Active) +
                 ", isprotected = " + Sanitizer.Bit(link.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(link.LastUpdateUtc) +
@@ -169,6 +170,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 Status = RowReader.GetEnum<SubjectLinkStatusEnum>(row, "status", SubjectLinkStatusEnum.Submitted),
                 LastIngestedUtc = RowReader.GetNullableDateTime(row, "lastingestedutc"),
                 LastError = RowReader.GetNullableString(row, "lasterror"),
+                ContentHash = RowReader.GetNullableString(row, "contenthash"),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

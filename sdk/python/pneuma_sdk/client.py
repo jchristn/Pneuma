@@ -561,9 +561,9 @@ class PneumaClient:
                 link's source graph node, so retrieval can be scoped to them.
             tags: Optional key/value tags attached to every chunk and to the
                 link's source graph node, so retrieval can be scoped to them.
-            embedding_endpoint_id: Partio embedding endpoint id (sent as
+            embedding_endpoint_id: Embedding endpoint id (sent as
                 ``embeddingEndpointId``).
-            completion_endpoint_id: Partio completion endpoint id (sent as
+            completion_endpoint_id: Completion endpoint id (sent as
                 ``completionEndpointId``).
         """
         body: Dict[str, Any] = {"url": url}
@@ -597,9 +597,9 @@ class PneumaClient:
             urls: The content URLs to ingest.
             labels: Optional labels applied to every URL in the batch.
             tags: Optional key/value tags applied to every URL in the batch.
-            embedding_endpoint_id: Partio embedding endpoint id (sent as
+            embedding_endpoint_id: Embedding endpoint id (sent as
                 ``embeddingEndpointId``).
-            completion_endpoint_id: Partio completion endpoint id (sent as
+            completion_endpoint_id: Completion endpoint id (sent as
                 ``completionEndpointId``).
 
         Returns:
@@ -623,7 +623,14 @@ class PneumaClient:
 
         Returns:
             ``{ "embedding": [...], "completion": [...] }`` where each entry has
-            ``id``, ``name``, ``model``, ``apiFormat`` and ``active``.
+            ``id``, ``type`` ("Embedding" | "Completion"), ``name``, ``model``,
+            ``endpoint``, ``apiFormat``, ``provider`` (one of ``OpenAI``,
+            ``OpenAICompatible``, ``Gemini``, ``Ollama``, ``AzureOpenAI``,
+            ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``),
+            ``deployment``, ``apiVersion``, ``region``, ``project``,
+            ``accessKeyId`` and ``active``. Secret material (``apiKey``,
+            ``secretAccessKey``, ``sessionToken``) is write-only and never
+            returned.
         """
         return self._request("GET", "/v1.0/ingestion/endpoints")
 
@@ -693,14 +700,14 @@ class PneumaClient:
         return self._request("GET", f"/v1.0/links/{link_id}/atoms")
 
     def get_link_chunks(self, link_id: str) -> Any:
-        """GET /v1.0/links/{id}/chunks — Partio chunks artifact.
+        """GET /v1.0/links/{id}/chunks — chunks artifact.
 
         Raises an API error with status 404 if that stage hasn't run yet.
         """
         return self._request("GET", f"/v1.0/links/{link_id}/chunks")
 
     def get_link_vectors(self, link_id: str) -> Any:
-        """GET /v1.0/links/{id}/vectors — Partio embeddings artifact.
+        """GET /v1.0/links/{id}/vectors — embeddings artifact.
 
         Raises an API error with status 404 if that stage hasn't run yet.
         """
@@ -794,7 +801,16 @@ class PneumaClient:
         )
 
     def create_model_runner(self, runner: Dict[str, Any]) -> Any:
-        """POST /v1.0/model-runners."""
+        """POST /v1.0/model-runners.
+
+        ``runner`` accepts ``name``, ``provider`` (one of ``OpenAI``,
+        ``OpenAICompatible``, ``Gemini``, ``Ollama``, ``AzureOpenAI``,
+        ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``), ``endpoint``,
+        ``apiFormat``, ``deployment``, ``apiVersion``, ``region``, ``project``,
+        ``accessKeyId`` and ``active``. Secret material (``apiKey``,
+        ``secretAccessKey``, ``sessionToken``) is write-only: it may be sent here
+        but is never returned on reads.
+        """
         return self._request("POST", "/v1.0/model-runners", json_body=runner)
 
     def get_model_runner(self, runner_id: str) -> Any:
@@ -854,6 +870,52 @@ class PneumaClient:
     def delete_prompt(self, prompt_id: str) -> None:
         """DELETE /v1.0/prompts/{id}."""
         return self._request("DELETE", f"/v1.0/prompts/{prompt_id}")
+
+    # ------------------------------------------------------------------
+    # Subject prompts
+    # ------------------------------------------------------------------
+
+    def list_subject_prompts(self, subject_id: str) -> Any:
+        """GET /v1.0/subjects/{subjectId}/prompts -> list of effective prompts.
+
+        Args:
+            subject_id: The subject whose prompts to list.
+
+        Returns:
+            A list of prompt entries, each with ``key``, ``name``,
+            ``effectiveContent``, ``globalContent``, ``overrideContent`` (may be
+            ``None``), ``source`` (``"Global"`` or ``"SubjectOverride"``), and
+            ``mergeMode`` (``"Append"`` or ``"Replace"``).
+        """
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/prompts")
+
+    def set_subject_prompt(
+        self, subject_id: str, key: str, content: str, merge_mode: str = "Append"
+    ) -> Any:
+        """PUT /v1.0/subjects/{subjectId}/prompts/{key}. Sets a prompt override.
+
+        Args:
+            subject_id: The subject to override the prompt for.
+            key: The prompt key to override.
+            content: The override content to store.
+            merge_mode: How the override combines with the global prompt, either
+                ``"Append"`` (default) or ``"Replace"`` (sent as ``mergeMode``).
+
+        Returns:
+            The subject's effective prompt for the key after the update.
+        """
+        body: Dict[str, Any] = {"content": content, "mergeMode": merge_mode}
+        return self._request(
+            "PUT", f"/v1.0/subjects/{subject_id}/prompts/{key}", json_body=body
+        )
+
+    def delete_subject_prompt(self, subject_id: str, key: str) -> None:
+        """DELETE /v1.0/subjects/{subjectId}/prompts/{key}.
+
+        Removes the subject-level override for ``key``, reverting it to the
+        global prompt.
+        """
+        return self._request("DELETE", f"/v1.0/subjects/{subject_id}/prompts/{key}")
 
     # ------------------------------------------------------------------
     # Settings (system admin)

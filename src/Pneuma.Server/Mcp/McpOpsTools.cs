@@ -6,8 +6,7 @@ namespace Pneuma.Server.Mcp
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
@@ -28,7 +27,6 @@ namespace Pneuma.Server.Mcp
 
         private readonly DatabaseDriverBase _Db;
         private readonly AppSettings _Settings;
-        private readonly IPartioClient _Partio;
         private readonly ModelHealthMonitor _Health;
 
         #endregion
@@ -38,14 +36,12 @@ namespace Pneuma.Server.Mcp
         /// <summary>Instantiate the operations tools.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="settings">Live application settings (returned redacted).</param>
-        /// <param name="partio">Partio client used to enumerate model endpoints.</param>
         /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a dependency is null.</exception>
-        public McpOpsTools(DatabaseDriverBase db, AppSettings settings, IPartioClient partio, ModelHealthMonitor health)
+        public McpOpsTools(DatabaseDriverBase db, AppSettings settings, ModelHealthMonitor health)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            _Partio = partio ?? throw new ArgumentNullException(nameof(partio));
             _Health = health ?? throw new ArgumentNullException(nameof(health));
         }
 
@@ -140,10 +136,8 @@ namespace Pneuma.Server.Mcp
         public async Task<object> EnumerateModelRunnerHealthAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
         {
             List<ModelEndpointHealthDto> health = new List<ModelEndpointHealthDto>();
-            List<PartioEndpoint> embedding = await _Partio.ListEmbeddingEndpointsAsync(token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in embedding) health.Add(_Health.BuildStatus(endpoint.Id, endpoint.Name, "Embedding", endpoint.Endpoint));
-            List<PartioEndpoint> completion = await _Partio.ListCompletionEndpointsAsync(token).ConfigureAwait(false);
-            foreach (PartioEndpoint endpoint in completion) health.Add(_Health.BuildStatus(endpoint.Id, endpoint.Name, "Completion", endpoint.Endpoint));
+            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(null, token).ConfigureAwait(false);
+            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl));
 
             EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
             int total = health.Count;
@@ -168,15 +162,15 @@ namespace Pneuma.Server.Mcp
             string endpointId = McpJsonRpc.GetStringArgument(arguments, "id");
             if (String.IsNullOrEmpty(endpointId)) { await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: 'id' is required.").ConfigureAwait(false); return null; }
 
-            string display = "Embedding";
-            PartioEndpoint? endpoint = await _Partio.ReadEndpointAsync("embedding", endpointId, token).ConfigureAwait(false);
-            if (endpoint == null)
-            {
-                endpoint = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
-                display = "Completion";
-            }
-            if (endpoint == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Model endpoint not found.").ConfigureAwait(false); return null; }
-            return _Health.BuildStatus(endpoint.Id, endpoint.Name, display, endpoint.Endpoint);
+            ModelRunner? runner = await _Db.ModelRunners.ReadAsync(endpointId, token).ConfigureAwait(false);
+            if (runner == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Model endpoint not found.").ConfigureAwait(false); return null; }
+            return _Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl);
+        }
+
+        private static string HealthType(ModelRunner runner)
+        {
+            if (runner.Capabilities.Contains(ModelCapabilityEnum.Embedding) && !runner.Capabilities.Contains(ModelCapabilityEnum.Completion)) return "Embedding";
+            return "Completion";
         }
 
         #endregion

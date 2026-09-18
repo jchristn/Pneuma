@@ -42,7 +42,6 @@ const SYSTEMS = [
   { name: 'Prometheus', url: 'http://localhost:9090', cred: 'no auth' },
   { name: 'User Dashboard', url: 'http://localhost:3012', cred: 'admin@pneuma / password' },
   { name: 'Subject Dashboard', url: 'http://localhost:3011', cred: 'admin@pneuma / password' },
-  { name: 'Partio', url: 'http://localhost:8401', cred: 'token: partioadmin' },
   { name: 'RecallDB', url: 'http://localhost:8601', cred: 'token: recalldbadmin' },
   { name: 'DocumentAtom', url: 'http://localhost:3002', cred: 'no auth' },
   { name: 'LiteGraph', url: 'http://localhost:3001', cred: 'token: litegraphadmin' },

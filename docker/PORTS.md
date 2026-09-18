@@ -12,7 +12,6 @@ Everything is published on `localhost` by `docker compose up`. **Change these de
 | Grafana | http://localhost:3000 | `admin` / `admin` |
 | LiteGraph UI | http://localhost:3001 | token `litegraphadmin` |
 | DocumentAtom UI | http://localhost:3002 | none |
-| Partio dashboard | http://localhost:8401 | token `partioadmin` |
 | RecallDB dashboard | http://localhost:8601 | token `recalldbadmin` |
 
 ## Services
@@ -22,7 +21,6 @@ Everything is published on `localhost` by `docker compose up`. **Change these de
 | Pneuma API | 8080 | `admin@pneuma` / `password`; admin key `pneumaadmin` |
 | LiteGraph | 8701 | `litegraphadmin` |
 | DocumentAtom | 8000 | none |
-| Partio | 8400 | `partioadmin` |
 | RecallDB | 8600 | `recalldbadmin` |
 | Ollama | 11434 | none |
 | Prometheus | 9090 | none |

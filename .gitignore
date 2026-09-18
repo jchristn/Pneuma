@@ -59,3 +59,7 @@ sample-data-sets/
 
 # Internal planning docs (not part of the public repo)
 ASSISTANTHUB_FEATURES.md
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -4,6 +4,7 @@ namespace Pneuma.Core.Integrations
     using System.Net.Http;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Models;
+    using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using SyslogLogging;
 
@@ -28,13 +29,19 @@ namespace Pneuma.Core.Integrations
         #region Public-Methods
 
         /// <summary>
-        /// Create a completion client for a model runner, applying its default model.
+        /// Create a PolyPrompt client for a model runner, applying its default model. The returned client
+        /// serves both completions and embeddings (subject to provider support: Anthropic has no embeddings
+        /// API and Voyage AI has no completion API).
         /// </summary>
         /// <param name="runner">Model runner.</param>
-        /// <param name="apiKey">Decrypted API key, if any.</param>
+        /// <param name="apiKey">Decrypted primary secret: the API key, Azure AD/Vertex bearer token, or (for Bedrock) the AWS secret access key. May be null for keyless local runners.</param>
         /// <param name="logging">Logging module.</param>
-        /// <returns>A configured completion client.</returns>
-        public static CompletionClientBase Create(ModelRunner runner, string? apiKey, LoggingModule logging)
+        /// <param name="awsSessionToken">Decrypted AWS session token for Bedrock temporary credentials, if any.</param>
+        /// <returns>A configured client.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="runner"/> or <paramref name="logging"/> is null.</exception>
+        /// <exception cref="NotSupportedException">Thrown when the provider is unknown.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when a provider is missing a required field (e.g. Azure deployment, Bedrock/Vertex region).</exception>
+        public static CompletionClientBase Create(ModelRunner runner, string? apiKey, LoggingModule logging, string? awsSessionToken = null)
         {
             if (runner == null) throw new ArgumentNullException(nameof(runner));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
@@ -42,26 +49,59 @@ namespace Pneuma.Core.Integrations
             // Fresh HttpClient per client (pooled through the shared handler) so each endpoint's Authorization
             // header is isolated from the others.
             HttpClient http = new HttpClient(_Handler, disposeHandler: false);
+            string? endpointOrNull = String.IsNullOrWhiteSpace(runner.BaseUrl) ? null : runner.BaseUrl;
 
             CompletionClientBase client;
-            switch (runner.Provider)
+            try
             {
-                case ModelRunnerProviderEnum.OpenAI:
-                case ModelRunnerProviderEnum.OpenAICompatible:
-                    client = new OpenAiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
-                    break;
-                case ModelRunnerProviderEnum.Gemini:
-                    client = new GeminiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
-                    break;
-                case ModelRunnerProviderEnum.Ollama:
-                    client = new OllamaClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
-                    break;
-                default:
-                    http.Dispose();
-                    throw new NotSupportedException("Unsupported model runner provider: " + runner.Provider);
+                switch (runner.Provider)
+                {
+                    case ModelRunnerProviderEnum.OpenAI:
+                    case ModelRunnerProviderEnum.OpenAICompatible:
+                        client = new OpenAiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.Gemini:
+                        client = new GeminiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.Ollama:
+                        client = new OllamaClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.Anthropic:
+                        client = new AnthropicClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.VoyageAI:
+                        client = new VoyageAiClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.AzureOpenAI:
+                        if (String.IsNullOrWhiteSpace(runner.Deployment)) throw new InvalidOperationException("Azure OpenAI runner '" + runner.Name + "' requires a deployment name.");
+                        client = new AzureOpenAiClient(runner.BaseUrl, runner.Deployment, apiKey ?? String.Empty, runner.ApiVersion, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.Bedrock:
+                        if (String.IsNullOrWhiteSpace(runner.Region)) throw new InvalidOperationException("Bedrock runner '" + runner.Name + "' requires an AWS region.");
+                        if (String.IsNullOrWhiteSpace(runner.AccessKeyId)) throw new InvalidOperationException("Bedrock runner '" + runner.Name + "' requires an AWS access key id.");
+                        if (String.IsNullOrWhiteSpace(apiKey)) throw new InvalidOperationException("Bedrock runner '" + runner.Name + "' requires an AWS secret access key.");
+                        StaticAwsCredential awsCredential = new StaticAwsCredential(runner.AccessKeyId, apiKey, runner.Region, String.IsNullOrWhiteSpace(awsSessionToken) ? null : awsSessionToken);
+                        client = new BedrockClient(awsCredential, runner.Region, logging, http, endpointOrNull);
+                        break;
+                    case ModelRunnerProviderEnum.VertexAI:
+                        if (String.IsNullOrWhiteSpace(runner.Project)) throw new InvalidOperationException("Vertex AI runner '" + runner.Name + "' requires a project.");
+                        if (String.IsNullOrWhiteSpace(runner.Region)) throw new InvalidOperationException("Vertex AI runner '" + runner.Name + "' requires a region.");
+                        if (String.IsNullOrWhiteSpace(apiKey)) throw new InvalidOperationException("Vertex AI runner '" + runner.Name + "' requires a bearer token or service-account credential.");
+                        ICredentialProvider vertexCredential = new StaticTokenCredential(apiKey);
+                        client = new VertexAiClient(runner.Project, runner.Region, vertexCredential, endpointOrNull, logging, http);
+                        break;
+                    default:
+                        throw new NotSupportedException("Unsupported model runner provider: " + runner.Provider);
+                }
+            }
+            catch
+            {
+                http.Dispose();
+                throw;
             }
 
             if (!String.IsNullOrEmpty(runner.DefaultModel)) client.Model = runner.DefaultModel;
+            else if (!String.IsNullOrEmpty(runner.DefaultEmbeddingModel)) client.Model = runner.DefaultEmbeddingModel;
             return client;
         }
 

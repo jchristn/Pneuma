@@ -132,6 +132,38 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "ALTER TABLE ingestionjobs ADD COLUMN labelsjson TEXT;",
                     "ALTER TABLE ingestionjobs ADD COLUMN tagsjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(16, "Add subject consumer-chat publish flag and link content hash", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN publishedforchat INTEGER NOT NULL DEFAULT 1;",
+                    "ALTER TABLE subjectlinks ADD COLUMN contenthash TEXT;"
+                }));
+                list.Add(new SchemaMigration(17, "Add subject chunking configuration", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN chunkstrategy TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN chunkmaxtokens INTEGER NOT NULL DEFAULT 256;",
+                    "ALTER TABLE subjects ADD COLUMN chunkoverlaptokens INTEGER NOT NULL DEFAULT 32;"
+                }));
+                list.Add(new SchemaMigration(18, "Add subject reranker type", new List<string>
+                {
+                    "ALTER TABLE subjects ADD COLUMN rerankertype TEXT NOT NULL DEFAULT 'LlmListwise';"
+                }));
+                list.Add(new SchemaMigration(19, "Add model runner provider-specific fields", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN deployment TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN apiversion TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN region TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN project TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN accesskeyid TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN sessiontokenencrypted TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN contextsize INTEGER NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(20, "Add per-subject prompt overrides", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS subjectprompts (" +
+                        "id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, promptkey TEXT NOT NULL, " +
+                        "content TEXT, mergemode TEXT NOT NULL DEFAULT 'Append', createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_subjectprompts_key ON subjectprompts (tenantid, subjectid, promptkey);"
+                }));
                 return list;
             }
         }

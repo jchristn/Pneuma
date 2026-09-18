@@ -15,6 +15,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Settings;
@@ -37,9 +38,10 @@ namespace Pneuma.Server.Services
         private readonly ICollectionStore _Collections;
         private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IVectorRepository _Vectors;
-        private readonly IPartioClient _Partio;
+        private readonly ISemanticProcessor _Processor;
         private readonly RetrievalSettings _Retrieval;
         private readonly Aes256Cipher _Cipher;
+        private readonly ICrossEncoderReranker? _CrossEncoder;
         private readonly LoggingModule _Logging;
 
         #endregion
@@ -52,10 +54,11 @@ namespace Pneuma.Server.Services
         /// <param name="collections">Collection store used to resolve the target collection.</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="vectors">Vector repository (RecallDB).</param>
-        /// <param name="partio">Semantic processor (query embedding).</param>
+        /// <param name="processor">Semantic processor (query embedding).</param>
         /// <param name="retrieval">Retrieval settings.</param>
         /// <param name="cipher">Cipher for decrypting model-runner keys.</param>
         /// <param name="logging">Logging module.</param>
+        /// <param name="crossEncoder">Optional cross-encoder reranker; when null (or unconfigured) reranking uses the LLM listwise path.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public GroundedQueryService(
             DatabaseDriverBase db,
@@ -63,17 +66,18 @@ namespace Pneuma.Server.Services
             ICollectionStore collections,
             IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
-            IPartioClient partio,
+            ISemanticProcessor processor,
             RetrievalSettings retrieval,
             Aes256Cipher cipher,
-            LoggingModule logging)
+            LoggingModule logging,
+            ICrossEncoderReranker? crossEncoder = null)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (search == null) throw new ArgumentNullException(nameof(search));
             if (collections == null) throw new ArgumentNullException(nameof(collections));
             if (graphFactory == null) throw new ArgumentNullException(nameof(graphFactory));
             if (vectors == null) throw new ArgumentNullException(nameof(vectors));
-            if (partio == null) throw new ArgumentNullException(nameof(partio));
+            if (processor == null) throw new ArgumentNullException(nameof(processor));
             if (retrieval == null) throw new ArgumentNullException(nameof(retrieval));
             if (cipher == null) throw new ArgumentNullException(nameof(cipher));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
@@ -82,9 +86,10 @@ namespace Pneuma.Server.Services
             _Collections = collections;
             _GraphFactory = graphFactory;
             _Vectors = vectors;
-            _Partio = partio;
+            _Processor = processor;
             _Retrieval = retrieval;
             _Cipher = cipher;
+            _CrossEncoder = crossEncoder;
             _Logging = logging;
         }
 
@@ -138,6 +143,74 @@ namespace Pneuma.Server.Services
             {
                 Answer = generated.Text,
                 Sources = sources,
+                Grounded = true,
+                AnswerModel = generated.Model,
+                GenerationMs = generated.DurationMs
+            };
+        }
+
+        /// <summary>
+        /// Answer a global / thematic question about a subject from its community summaries instead of
+        /// chunk-level retrieval ("what are the main themes across this subject?"). The subject's community
+        /// summaries are ranked by relevance to the question, the strongest are used as grounding, and a cited
+        /// answer is synthesized. Returns an insufficient-support answer when no community summaries exist yet
+        /// (they must be built first).
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject to answer about.</param>
+        /// <param name="question">The thematic question.</param>
+        /// <param name="max">Maximum community summaries to ground on.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The grounded answer.</returns>
+        public async Task<GroundedAnswer> AnswerGlobalAsync(string tenantId, string subjectId, string question, int max, CancellationToken token = default)
+        {
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
+
+            Dictionary<string, string> summaryTags = new Dictionary<string, string>
+            {
+                { Ontology.TagSubjectId, subjectId },
+                { Ontology.TagNodeType, Ontology.NodeCommunitySummary }
+            };
+            List<GraphNode> summaries = await graph.SearchNodesByTagsAsync(summaryTags, 1000, token).ConfigureAwait(false);
+            if (summaries.Count == 0)
+            {
+                return new GroundedAnswer
+                {
+                    Answer = "This subject has no community summaries yet, so a thematic overview can't be produced. Build communities for the subject first.",
+                    Grounded = false,
+                    InsufficientSupport = true
+                };
+            }
+
+            // Rank community summaries by lexical overlap with the question (no embedding round-trip needed for a
+            // handful of summaries), and ground on the strongest few.
+            Dictionary<string, int> questionFreq = TokenFrequencies(question);
+            summaries.Sort((GraphNode a, GraphNode b) =>
+            {
+                double sa = CosineSimilarity(TokenFrequencies(a.Content ?? String.Empty), questionFreq);
+                double sb = CosineSimilarity(TokenFrequencies(b.Content ?? String.Empty), questionFreq);
+                int byScore = sb.CompareTo(sa);
+                return byScore != 0 ? byScore : String.CompareOrdinal(a.Id, b.Id);
+            });
+            if (summaries.Count > max) summaries = summaries.GetRange(0, max);
+
+            ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
+            if (runner == null)
+            {
+                return new GroundedAnswer
+                {
+                    Answer = "No answering model is configured. The returned community summaries are relevant to your question.",
+                    Sources = summaries,
+                    Grounded = true
+                };
+            }
+
+            GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, summaries, tenantId, runner, subjectId, token).ConfigureAwait(false);
+            return new GroundedAnswer
+            {
+                Answer = generated.Text,
+                Sources = summaries,
                 Grounded = true,
                 AnswerModel = generated.Model,
                 GenerationMs = generated.DurationMs
@@ -225,91 +298,38 @@ namespace Pneuma.Server.Services
 
         public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
         {
-            List<GraphNode> primary = new List<GraphNode>();
-            Dictionary<string, int> positionByNode = new Dictionary<string, int>(StringComparer.Ordinal);
+            // Gather + fuse the lexical and vector channels (RRF) over a candidate pool wider than the final
+            // `max`, so fusion and diversity selection have alternatives to choose among rather than being
+            // limited to the top-`max` of each channel. Then select the passages to ground on.
+            int poolSize = Math.Clamp(max * 4, max, 200);
+            RetrievalPool pool = await GatherAsync(tenantId, question, poolSize, subjectId, RetrievalModeEnum.Hybrid, requestFilter, null, token).ConfigureAwait(false);
+            if (pool.OrderedIds.Count == 0) return new List<GraphNode>();
+            Dictionary<string, int> positionByNode = pool.PositionByNode;
+            IGraphRepository graph = pool.Graph!;
+
+            // Select up to `max` passages. With diversity enabled, use Maximal Marginal Relevance so
+            // near-duplicate chunks do not crowd the grounding context — the answer sees diverse support rather
+            // than the same point repeated; otherwise take the top `max` by fused score.
+            List<string> selectedIds = _Retrieval.DiversityEnabled
+                ? SelectWithMmr(pool, max, _Retrieval.DiversityLambda)
+                : (pool.OrderedIds.Count > max ? pool.OrderedIds.GetRange(0, max) : pool.OrderedIds);
+
+            List<GraphNode> primary = new List<GraphNode>(selectedIds.Count);
             Dictionary<string, double> scoreByNode = new Dictionary<string, double>(StringComparer.Ordinal);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-
-            // A subject owns its retrieval configuration: its collection is where its chunks live, and its
-            // embedding model is used to embed the query so it matches the stored vectors. Fall back to the
-            // tenant default collection / server-side embedding when no subject is in scope.
-            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
-            string? collectionId = !String.IsNullOrWhiteSpace(subject?.Collection)
-                ? subject!.Collection
-                : await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false);
-            if (String.IsNullOrEmpty(collectionId)) return primary;
-            string? embeddingEndpointId = subject?.EmbeddingModel;
-
-            // Facet filter: the subject's default retrieval filter merged with any per-request filter (union of
-            // required, union of excluded — a request narrows, never widens, the subject default). Pushed down
-            // to RecallDB's tag filter so only eligible chunks are considered.
-            RetrievalFilter effectiveFilter = MergeFilters(subject?.RetrievalFilterJson, requestFilter);
-            List<RetrievalTagCondition> requiredConditions = effectiveFilter.EffectiveRequired();
-            List<RetrievalTagCondition> excludedConditions = effectiveFilter.EffectiveExcluded();
-            IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredConditions.Count > 0 ? requiredConditions : null;
-            IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedConditions.Count > 0 ? excludedConditions : null;
-
-            // When a subject is specified, restrict both retrieval paths to that subject's chunks via the
-            // exact-match subjectId tag every ingested chunk carries.
-            IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
-                ? null
-                : new Dictionary<string, string> { { "subjectId", subjectId } };
-
-            // All graph reads for this request go to the tenant's own LiteGraph tenant/graph.
-            IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
-
-            if (_Retrieval.UseInvertedIndex)
+            foreach (string id in selectedIds)
             {
-                try
+                primary.Add(pool.NodeById[id]);
+                // Reconstruction orders source-document groups by their best hit; use the fused RRF score so the
+                // most strongly-supported document leads.
+                scoreByNode[id] = pool.RrfByNode.TryGetValue(id, out double r) ? r : 0.0;
+                seen.Add(id);
+                // Record citation relevance only for the passages actually selected for grounding (not the whole
+                // candidate pool), so a link is cited only when its content reaches the answer.
+                if (citedLinkScores != null && pool.LinkByNode.TryGetValue(id, out string? linkId) && !String.IsNullOrEmpty(linkId))
                 {
-                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
-                    foreach (SearchHit hit in hits)
-                    {
-                        if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
-                        if (!seen.Add(nodeId)) continue;
-                        GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
-                        // RecallDB is the content authority; hydrate the source's text (and its source-document
-                        // link when the graph read returned nothing) so answers are built from the stored chunk.
-                        node = HydrateFromHit(node, nodeId, hit.Snippet);
-                        if (node == null) continue;
-                        if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId))
-                        {
-                            if (String.IsNullOrEmpty(node.CanonicalName)) node.CanonicalName = linkId;
-                            RecordCitationScore(citedLinkScores, linkId, hit.Score);
-                        }
-                        primary.Add(node);
-                        positionByNode[nodeId] = hit.Position;
-                        scoreByNode[nodeId] = hit.Score;
-                    }
+                    RecordCitationScore(citedLinkScores, linkId!, pool.BestRawByNode.TryGetValue(id, out double raw) ? raw : 0.0);
                 }
-                catch (Exception exception)
-                {
-                    _Logging.Warn("[GroundedQueryService] full-text retrieval failed: " + exception.Message);
-                }
-            }
-
-            try
-            {
-                List<float>? queryEmbedding = await EmbedQueryAsync(question, embeddingEndpointId, token).ConfigureAwait(false);
-                if (queryEmbedding != null && queryEmbedding.Count > 0)
-                {
-                    List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
-                    foreach (VectorSearchHit hit in vectorHits)
-                    {
-                        if (String.IsNullOrEmpty(hit.NodeId) || !seen.Add(hit.NodeId)) continue;
-                        GraphNode? node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
-                        node = HydrateFromHit(node, hit.NodeId, hit.Content);
-                        if (node == null) continue;
-                        if (!String.IsNullOrEmpty(hit.LinkId)) RecordCitationScore(citedLinkScores, hit.LinkId!, hit.Score);
-                        primary.Add(node);
-                        positionByNode[hit.NodeId] = hit.Position;
-                        scoreByNode[hit.NodeId] = hit.Score;
-                    }
-                }
-            }
-            catch (Exception exception)
-            {
-                _Logging.Warn("[GroundedQueryService] vector retrieval failed: " + exception.Message);
             }
 
             // RecallDB owns ordering and reconstruction: group the retrieved chunks by their source document and
@@ -323,6 +343,7 @@ namespace Pneuma.Server.Services
             if (_Retrieval.NeighborExpansionEnabled && sources.Count > 0)
             {
                 int ceiling = max + _Retrieval.NeighborExpansionMaxNodes;
+                int hops = _Retrieval.NeighborExpansionMaxHops;
                 try
                 {
                     List<GraphNode> seeds = new List<GraphNode>(sources);
@@ -330,14 +351,29 @@ namespace Pneuma.Server.Services
                     {
                         if (sources.Count >= ceiling) break;
                         if (String.IsNullOrEmpty(seed.Id)) continue;
-                        List<GraphNode> neighbors = await graph.GetNeighborsAsync(seed.Id, token).ConfigureAwait(false);
-                        foreach (GraphNode neighbor in neighbors)
+
+                        // Single hop: a direct-neighbor read. Multiple hops: a bounded server-side subgraph
+                        // extraction that reaches entities several relationships away (LiteGraph does the BFS).
+                        List<GraphNode> reached;
+                        if (hops <= 1)
+                        {
+                            reached = await graph.GetNeighborsAsync(seed.Id, token).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            GraphSubgraph subgraph = await graph.GetSubgraphAsync(seed.Id, hops, ceiling, 0, token).ConfigureAwait(false);
+                            reached = subgraph.Nodes;
+                        }
+
+                        foreach (GraphNode neighbor in reached)
                         {
                             if (String.IsNullOrEmpty(neighbor.Id) || !seen.Add(neighbor.Id)) continue;
                             // Only structural neighbors add value here: entities (relationships) and the Source
                             // (citation). Sibling chunk nodes carry no content of their own — their text is in
-                            // RecallDB and would only be surfaced by a direct retrieval hit.
+                            // RecallDB and would only be surfaced by a direct retrieval hit. Community-summary
+                            // nodes are thematic overviews, not local grounding, so they are excluded here too.
                             if (String.Equals(neighbor.NodeType, Ontology.NodeChunk, StringComparison.Ordinal)) continue;
+                            if (String.Equals(neighbor.NodeType, Ontology.NodeCommunitySummary, StringComparison.Ordinal)) continue;
                             sources.Add(neighbor);
                             if (sources.Count >= ceiling) break;
                         }
@@ -353,8 +389,51 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
+        /// Run a ranked search over the retrieval store in the requested mode — full-text only, vector only, or
+        /// hybrid (RRF-fused) — returning scored chunk hits (no neighbor expansion or diversity selection, so it
+        /// is a faithful search rather than a grounding set). Shared by the REST search routes so every mode
+        /// returns one shape.
+        /// </summary>
+        /// <param name="tenantId">Tenant whose collection is searched.</param>
+        /// <param name="question">The query text.</param>
+        /// <param name="max">Maximum hits to return.</param>
+        /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
+        /// <param name="mode">Which channels to use.</param>
+        /// <param name="requestFilter">Optional per-request facet filter (merged with the subject default).</param>
+        /// <param name="collectionOverride">Optional explicit collection id; overrides the subject/default resolution.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The ranked hits, most relevant first.</returns>
+        public async Task<List<RetrievedChunk>> SearchAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter = null, string? collectionOverride = null, CancellationToken token = default)
+        {
+            List<RetrievedChunk> results = new List<RetrievedChunk>();
+            if (String.IsNullOrWhiteSpace(question)) return results;
+
+            RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, token).ConfigureAwait(false);
+            foreach (string id in pool.OrderedIds)
+            {
+                if (results.Count >= max) break;
+                GraphNode node = pool.NodeById[id];
+                // A single-channel mode reports the raw channel score (cosine similarity / TsRank); hybrid reports
+                // the fused RRF score. Ordering follows the same score, so both are consistent with the ranking.
+                double score = mode == RetrievalModeEnum.Hybrid
+                    ? (pool.RrfByNode.TryGetValue(id, out double r) ? r : 0.0)
+                    : (pool.BestRawByNode.TryGetValue(id, out double s) ? s : 0.0);
+                results.Add(new RetrievedChunk
+                {
+                    Node = node,
+                    NodeId = id,
+                    Score = score,
+                    Snippet = pool.SnippetByNode.TryGetValue(id, out string? sn) ? sn : node.Content,
+                    LinkId = pool.LinkByNode.TryGetValue(id, out string? l) ? l : null,
+                    DocumentId = pool.DocIdByNode.TryGetValue(id, out string? d) ? d : null
+                });
+            }
+            return results;
+        }
+
+        /// <summary>
         /// Resolve the tenant's answering model runner. Prefers an explicitly-configured Pneuma model runner
-        /// marked for user prompts; when none exists, falls back to the tenant's configured Partio completion
+        /// marked for user prompts; when none exists, falls back to the tenant's configured completion
         /// endpoint (what the Model Runners dashboard manages) so answering works out of the box with the
         /// completion model, without requiring a separately-created runner.
         /// </summary>
@@ -370,11 +449,11 @@ namespace Pneuma.Server.Services
                 if (runner.Usage == ModelRunnerUsageEnum.UserPrompt || runner.Usage == ModelRunnerUsageEnum.Both) return runner;
             }
 
-            return await ResolvePartioCompletionRunnerAsync(token).ConfigureAwait(false);
+            return await ResolveDefaultCompletionRunnerAsync(token).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Resolve the answering runner for a subject: prefer the subject's configured inference model (a Partio
+        /// Resolve the answering runner for a subject: prefer the subject's configured inference model (a
         /// completion endpoint), falling back to the tenant-global resolution when the subject has none.
         /// </summary>
         /// <param name="tenantId">Tenant identifier.</param>
@@ -392,43 +471,27 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
-        /// Resolve a specific Partio completion endpoint id into a transient <see cref="ModelRunner"/> (used for a
-        /// subject's inference, reranking, and prompt-rewrite models). Returns null when the endpoint is unknown.
+        /// Resolve a specific completion model-runner id into its stored <see cref="ModelRunner"/> (used for a
+        /// subject's inference, reranking, and prompt-rewrite models). Returns null when the runner is unknown
+        /// or inactive.
         /// </summary>
-        /// <param name="endpointId">Partio completion endpoint id.</param>
+        /// <param name="endpointId">Model runner id.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>A transient runner, or null.</returns>
+        /// <returns>The stored runner, or null.</returns>
         public async Task<ModelRunner?> ResolveCompletionRunnerByIdAsync(string endpointId, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(endpointId)) return null;
-            PartioEndpoint? endpoint;
             try
             {
-                endpoint = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
+                ModelRunner? runner = await _Db.ModelRunners.ReadAsync(endpointId, token).ConfigureAwait(false);
+                if (runner == null || !runner.Active) return null;
+                return runner;
             }
             catch (Exception exception)
             {
-                _Logging.Warn("[GroundedQueryService] could not read completion endpoint '" + endpointId + "': " + exception.Message);
+                _Logging.Warn("[GroundedQueryService] could not read completion runner '" + endpointId + "': " + exception.Message);
                 return null;
             }
-            if (endpoint == null) return null;
-
-            ModelRunner runner = new ModelRunner
-            {
-                Name = String.IsNullOrWhiteSpace(endpoint.Name) ? "partio-completion" : endpoint.Name!,
-                Provider = MapProvider(endpoint.ApiFormat),
-                BaseUrl = endpoint.Endpoint ?? String.Empty,
-                DefaultModel = endpoint.Model ?? String.Empty,
-                Usage = ModelRunnerUsageEnum.Both,
-                Active = true,
-                ContextSize = endpoint.ContextSize
-            };
-            if (!String.IsNullOrEmpty(endpoint.ApiKey))
-            {
-                try { runner.AuthMaterialEncrypted = _Cipher.Encrypt(endpoint.ApiKey); }
-                catch (Exception) { runner.AuthMaterialEncrypted = null; }
-            }
-            return runner;
         }
 
         /// <summary>
@@ -445,7 +508,7 @@ namespace Pneuma.Server.Services
             if (subject == null || String.IsNullOrWhiteSpace(subject.PromptRewriteModel) || String.IsNullOrWhiteSpace(question)) return question;
             ModelRunner? runner = await ResolveCompletionRunnerByIdAsync(subject.PromptRewriteModel!, token).ConfigureAwait(false);
             if (runner == null) return question;
-            string systemPrompt = await MergePromptAsync(tenantId, "prompt.rewrite", subject.PromptRewritePrompt, token).ConfigureAwait(false);
+            string systemPrompt = await MergePromptAsync(tenantId, subject.Id, "prompt.rewrite", subject.PromptRewritePrompt, token).ConfigureAwait(false);
             // Ground the rewrite in the subject so vague questions ("tell me more about the side effects") resolve
             // to it ("...of {subject}") rather than the rewrite model inventing a placeholder subject.
             if (!String.IsNullOrWhiteSpace(subject.DisplayName))
@@ -475,10 +538,20 @@ namespace Pneuma.Server.Services
         /// <returns>The reordered candidates (or the original list).</returns>
         public async Task<List<T>> RerankAsync<T>(string tenantId, Subject? subject, string question, List<T> candidates, Func<T, string> textOf, CancellationToken token = default)
         {
-            if (subject == null || String.IsNullOrWhiteSpace(subject.RerankingModel) || candidates == null || candidates.Count <= 1) return candidates ?? new List<T>();
+            if (candidates == null || candidates.Count <= 1) return candidates ?? new List<T>();
+
+            // Dedicated cross-encoder path (per-subject opt-in): score each passage and reorder by score. Falls
+            // through to the LLM listwise path below when it is unconfigured or the call fails.
+            if (subject != null && subject.RerankerType == RerankerTypeEnum.CrossEncoder && _CrossEncoder != null && _CrossEncoder.IsConfigured)
+            {
+                List<T>? reordered = await RerankWithCrossEncoderAsync(question, candidates, textOf, token).ConfigureAwait(false);
+                if (reordered != null) return reordered;
+            }
+
+            if (subject == null || String.IsNullOrWhiteSpace(subject.RerankingModel)) return candidates;
             ModelRunner? runner = await ResolveCompletionRunnerByIdAsync(subject.RerankingModel!, token).ConfigureAwait(false);
             if (runner == null) return candidates;
-            string systemPrompt = await MergePromptAsync(tenantId, "reranking", subject.RerankingPrompt, token).ConfigureAwait(false);
+            string systemPrompt = await MergePromptAsync(tenantId, subject.Id, "reranking", subject.RerankingPrompt, token).ConfigureAwait(false);
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("Question: " + question);
@@ -508,6 +581,37 @@ namespace Pneuma.Server.Services
         }
 
         /// <summary>
+        /// Rerank candidates with the configured cross-encoder: score each passage against the question and
+        /// reorder by descending score (stable on ties). Returns null when the reranker returns no usable
+        /// scores, so the caller can fall back to LLM listwise reranking.
+        /// </summary>
+        private async Task<List<T>?> RerankWithCrossEncoderAsync<T>(string question, List<T> candidates, Func<T, string> textOf, CancellationToken token)
+        {
+            List<string> passages = new List<string>(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string text = textOf(candidates[i]) ?? String.Empty;
+                if (text.Length > 2000) text = text.Substring(0, 2000);
+                passages.Add(text);
+            }
+
+            IReadOnlyList<double>? scores = await _CrossEncoder!.ScoreAsync(question, passages, token).ConfigureAwait(false);
+            if (scores == null || scores.Count != candidates.Count) return null;
+
+            List<int> order = new List<int>(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++) order.Add(i);
+            order.Sort((int a, int b) =>
+            {
+                int byScore = scores[b].CompareTo(scores[a]);
+                return byScore != 0 ? byScore : a.CompareTo(b);
+            });
+
+            List<T> ordered = new List<T>(candidates.Count);
+            foreach (int index in order) ordered.Add(candidates[index]);
+            return ordered;
+        }
+
+        /// <summary>
         /// Convenience overload that loads the subject by id and reranks (for callers that hold a subject id but
         /// not the subject, e.g. the agentic search tool).
         /// </summary>
@@ -518,16 +622,15 @@ namespace Pneuma.Server.Services
             return await RerankAsync(tenantId, subject, question, candidates, textOf, token).ConfigureAwait(false);
         }
 
-        /// <summary>Read a global prompt by key and append the subject's override (global base + subject appended).</summary>
-        private async Task<string> MergePromptAsync(string tenantId, string key, string? subjectOverride, CancellationToken token)
+        /// <summary>
+        /// Resolve a prompt's effective content for a subject: the global default combined with any per-subject
+        /// override (Append/Replace) and the legacy per-subject prompt column. Global is the fallback.
+        /// </summary>
+        private async Task<string> MergePromptAsync(string tenantId, string? subjectId, string key, string? legacyOverride, CancellationToken token)
         {
-            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, key, token).ConfigureAwait(false);
-            string baseText = prompt?.Content ?? String.Empty;
-            if (!String.IsNullOrWhiteSpace(subjectOverride))
-            {
-                baseText = String.IsNullOrWhiteSpace(baseText) ? subjectOverride!.Trim() : baseText + "\n\n" + subjectOverride!.Trim();
-            }
-            return baseText;
+            PromptResolver resolver = new PromptResolver(_Db);
+            ResolvedPrompt resolved = await resolver.ResolveAsync(tenantId, subjectId, key, legacyOverride, token).ConfigureAwait(false);
+            return resolved.EffectiveContent;
         }
 
         /// <summary>Run a single text completion against a runner and return the trimmed text, or null on failure.</summary>
@@ -581,18 +684,14 @@ namespace Pneuma.Server.Services
         /// <returns>The generated answer with its model and duration (both null when generation failed).</returns>
         public async Task<GeneratedAnswer> GenerateAnswerDetailedAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, string? subjectId = null, CancellationToken token = default)
         {
-            Prompt? prompt = await _Db.Prompts.ReadByKeyAsync(tenantId, "user.answer", token).ConfigureAwait(false);
-            string systemPrompt = prompt?.Content ?? "Answer using only the provided sources and cite them.";
-
-            // Append the subject's system prompt after the global one (global base + subject appended).
+            string? legacySystemPrompt = null;
             if (!String.IsNullOrEmpty(subjectId))
             {
                 Subject? subject = await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
-                if (subject != null && !String.IsNullOrWhiteSpace(subject.SystemPrompt))
-                {
-                    systemPrompt = systemPrompt + "\n\n" + subject.SystemPrompt!.Trim();
-                }
+                legacySystemPrompt = subject?.SystemPrompt;
             }
+            string resolvedAnswerPrompt = await MergePromptAsync(tenantId, subjectId, "user.answer", legacySystemPrompt, token).ConfigureAwait(false);
+            string systemPrompt = String.IsNullOrWhiteSpace(resolvedAnswerPrompt) ? "Answer using only the provided sources and cite them." : resolvedAnswerPrompt;
 
             string? apiKey = null;
             if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
@@ -626,6 +725,93 @@ namespace Pneuma.Server.Services
             }
 
             return new GeneratedAnswer { Text = "An answer could not be generated, but the returned sources are relevant to your question." };
+        }
+
+        /// <summary>
+        /// Generate a cited answer while streaming its tokens: emits each visible token chunk through
+        /// <paramref name="onDelta"/> as the model produces it (model reasoning inside &lt;think&gt; blocks is
+        /// stripped from the stream), and returns the full answer plus generation metadata once complete. Falls
+        /// back to a single non-streamed answer if the model or provider does not stream successfully.
+        /// </summary>
+        /// <param name="question">The question.</param>
+        /// <param name="sources">Supporting nodes.</param>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="runner">Answering model runner.</param>
+        /// <param name="subjectId">Subject in scope, or null.</param>
+        /// <param name="onDelta">Invoked with each visible token chunk as it streams.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The generated answer with its model and duration.</returns>
+        public async Task<GeneratedAnswer> GenerateAnswerStreamAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, string? subjectId, Func<string, CancellationToken, Task> onDelta, CancellationToken token = default)
+        {
+            string? legacySystemPrompt = null;
+            if (!String.IsNullOrEmpty(subjectId))
+            {
+                Subject? subject = await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+                legacySystemPrompt = subject?.SystemPrompt;
+            }
+            string resolvedAnswerPrompt = await MergePromptAsync(tenantId, subjectId, "user.answer", legacySystemPrompt, token).ConfigureAwait(false);
+            string systemPrompt = String.IsNullOrWhiteSpace(resolvedAnswerPrompt) ? "Answer using only the provided sources and cite them." : resolvedAnswerPrompt;
+
+            string? apiKey = null;
+            if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
+            {
+                try { apiKey = _Cipher.Decrypt(runner.AuthMaterialEncrypted); }
+                catch (Exception) { apiKey = null; }
+            }
+
+            string contextText = BuildSourceContext(question, sources);
+
+            try
+            {
+                CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
+                ToolChatRequest request = new ToolChatRequest
+                {
+                    Messages = new List<ChatMessage> { ChatMessage.System(systemPrompt), ChatMessage.User(contextText) },
+                    Tools = new List<ToolDefinition>(),
+                    ToolChoice = "none",
+                    Temperature = 0.2,
+                    MaxTokens = 1024
+                };
+
+                ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+                if (response == null || !response.Success)
+                {
+                    return await StreamFallbackAsync(question, sources, tenantId, runner, subjectId, onDelta, token).ConfigureAwait(false);
+                }
+
+                // Emit each token chunk as it arrives. Consistent with the non-streaming answer path, the answer
+                // text is taken verbatim from the model (no reasoning-block stripping here — that is a chat-UI
+                // concern handled by the agentic path).
+                StringBuilder streamed = new StringBuilder();
+                await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token).ConfigureAwait(false))
+                {
+                    if (String.IsNullOrEmpty(chunk.Text)) continue;
+                    streamed.Append(chunk.Text);
+                    await onDelta(chunk.Text, token).ConfigureAwait(false);
+                }
+
+                string text = (response.Text ?? String.Empty).Trim();
+                if (String.IsNullOrEmpty(text)) text = streamed.ToString().Trim();
+                string? model = String.IsNullOrEmpty(response.Model) ? runner.DefaultModel : response.Model;
+                return new GeneratedAnswer { Text = text, Model = model, DurationMs = response.OverallRuntimeMs };
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn("[GroundedQueryService] streaming answer error: " + e.Message);
+                return await StreamFallbackAsync(question, sources, tenantId, runner, subjectId, onDelta, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>Non-streaming fallback for <see cref="GenerateAnswerStreamAsync"/>: generate the full answer and emit it as one delta.</summary>
+        private async Task<GeneratedAnswer> StreamFallbackAsync(string question, List<GraphNode> sources, string tenantId, ModelRunner runner, string? subjectId, Func<string, CancellationToken, Task> onDelta, CancellationToken token)
+        {
+            GeneratedAnswer fallback = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, subjectId, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(fallback.Text)) await onDelta(fallback.Text, token).ConfigureAwait(false);
+            return fallback;
         }
 
         /// <summary>
@@ -726,6 +912,283 @@ namespace Pneuma.Server.Services
             return ordered;
         }
 
+        /// <summary>
+        /// Add a channel's Reciprocal-Rank Fusion contribution for a node: <c>weight / (k + rank)</c>, summed
+        /// across the channels the node appears in. Rank is 1-based within a channel (best hit = rank 1).
+        /// </summary>
+        private static void AccumulateRrf(Dictionary<string, double> rrfByNode, string nodeId, double weight, int k, int rank)
+        {
+            double contribution = weight / (k + rank);
+            rrfByNode[nodeId] = (rrfByNode.TryGetValue(nodeId, out double existing) ? existing : 0.0) + contribution;
+        }
+
+        /// <summary>Record the best (highest) raw channel score seen for a node (used only to break RRF ties).</summary>
+        private static void RecordBestRaw(Dictionary<string, double> bestRawByNode, string nodeId, double score)
+        {
+            if (!bestRawByNode.TryGetValue(nodeId, out double existing) || score > existing) bestRawByNode[nodeId] = score;
+        }
+
+        /// <summary>
+        /// Run the selected retrieval channels over the resolved collection and fuse them with Reciprocal-Rank
+        /// Fusion, returning a pool of the resolved nodes with their fused/raw scores, positions, provenance, and
+        /// an RRF-ordered id list. Both the grounded path and the search endpoint build on this so retrieval
+        /// behaves identically across them.
+        /// </summary>
+        private async Task<RetrievalPool> GatherAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter, string? collectionOverride, CancellationToken token)
+        {
+            RetrievalPool pool = new RetrievalPool();
+
+            // A subject owns its retrieval configuration: its collection is where its chunks live, and its
+            // embedding model is used to embed the query so it matches the stored vectors. An explicit
+            // collection override (a per-request query param) wins; otherwise fall back to the subject's
+            // collection, then the tenant default.
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
+            string? collectionId = !String.IsNullOrWhiteSpace(collectionOverride)
+                ? await CollectionResolver.ResolveAsync(_Collections, tenantId, collectionOverride, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false)
+                : (!String.IsNullOrWhiteSpace(subject?.Collection)
+                    ? subject!.Collection
+                    : await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _Retrieval.DefaultCollectionId, token).ConfigureAwait(false));
+
+            // All graph reads for this request go to the tenant's own LiteGraph tenant/graph.
+            pool.Graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
+            if (String.IsNullOrEmpty(collectionId)) return pool;
+
+            string? embeddingEndpointId = subject?.EmbeddingModel;
+            int rrfK = _Retrieval.RrfK;
+
+            // Facet filter: the subject's default retrieval filter merged with any per-request filter (union of
+            // required, union of excluded — a request narrows, never widens, the subject default). Pushed down
+            // to RecallDB's tag filter so only eligible chunks are considered.
+            RetrievalFilter effectiveFilter = MergeFilters(subject?.RetrievalFilterJson, requestFilter);
+            List<RetrievalTagCondition> requiredConditions = effectiveFilter.EffectiveRequired();
+            List<RetrievalTagCondition> excludedConditions = effectiveFilter.EffectiveExcluded();
+            IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredConditions.Count > 0 ? requiredConditions : null;
+            IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedConditions.Count > 0 ? excludedConditions : null;
+
+            IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
+                ? null
+                : new Dictionary<string, string> { { "subjectId", subjectId } };
+
+            IGraphRepository graph = pool.Graph;
+
+            // Lexical (full-text) channel — used unless the mode is Vector-only.
+            if (mode != RetrievalModeEnum.Vector && _Retrieval.UseInvertedIndex)
+            {
+                try
+                {
+                    List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
+                    int rank = 0;
+                    HashSet<string> channelSeen = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (SearchHit hit in hits)
+                    {
+                        if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
+
+                        if (!pool.NodeById.TryGetValue(nodeId, out GraphNode? node))
+                        {
+                            node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
+                            node = HydrateFromHit(node, nodeId, hit.Snippet);
+                            if (node == null) continue;
+                            if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId) && String.IsNullOrEmpty(node.CanonicalName))
+                            {
+                                node.CanonicalName = linkId;
+                            }
+                            pool.NodeById[nodeId] = node;
+                            pool.PositionByNode[nodeId] = hit.Position;
+                            if (!String.IsNullOrEmpty(hit.Snippet)) pool.SnippetByNode[nodeId] = hit.Snippet!;
+                            if (!String.IsNullOrEmpty(hit.DocumentId)) pool.DocIdByNode[nodeId] = hit.DocumentId;
+                            if (hit.Tags.TryGetValue("linkId", out string? lnk) && !String.IsNullOrEmpty(lnk)) pool.LinkByNode[nodeId] = lnk!;
+                        }
+
+                        if (channelSeen.Add(nodeId))
+                        {
+                            rank++;
+                            AccumulateRrf(pool.RrfByNode, nodeId, _Retrieval.LexicalWeight, rrfK, rank);
+                        }
+                        RecordBestRaw(pool.BestRawByNode, nodeId, hit.Score);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    _Logging.Warn("[GroundedQueryService] full-text retrieval failed: " + exception.Message);
+                }
+            }
+
+            // Semantic (vector) channel — used unless the mode is FullText-only.
+            if (mode != RetrievalModeEnum.FullText)
+            {
+                try
+                {
+                    List<float>? queryEmbedding = await EmbedQueryAsync(question, embeddingEndpointId, token).ConfigureAwait(false);
+                    if (queryEmbedding != null && queryEmbedding.Count > 0)
+                    {
+                        List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
+                        int rank = 0;
+                        HashSet<string> channelSeen = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (VectorSearchHit hit in vectorHits)
+                        {
+                            if (String.IsNullOrEmpty(hit.NodeId)) continue;
+                            if (!pool.NodeById.TryGetValue(hit.NodeId, out GraphNode? node))
+                            {
+                                node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
+                                node = HydrateFromHit(node, hit.NodeId, hit.Content);
+                                if (node == null) continue;
+                                pool.NodeById[hit.NodeId] = node;
+                                pool.PositionByNode[hit.NodeId] = hit.Position;
+                                if (!String.IsNullOrEmpty(hit.Content)) pool.SnippetByNode[hit.NodeId] = hit.Content!;
+                                if (!String.IsNullOrEmpty(hit.LinkId)) pool.LinkByNode[hit.NodeId] = hit.LinkId!;
+                            }
+                            else if (!String.IsNullOrWhiteSpace(hit.Content))
+                            {
+                                // Same chunk in both channels: prefer the vector hit's full chunk content.
+                                node.Content = hit.Content;
+                            }
+
+                            if (channelSeen.Add(hit.NodeId))
+                            {
+                                rank++;
+                                AccumulateRrf(pool.RrfByNode, hit.NodeId, _Retrieval.SemanticWeight, rrfK, rank);
+                            }
+                            RecordBestRaw(pool.BestRawByNode, hit.NodeId, hit.Score);
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    _Logging.Warn("[GroundedQueryService] vector retrieval failed: " + exception.Message);
+                }
+            }
+
+            // Order every retrieved node by its fused RRF score (tie-break by best raw channel score, then id).
+            List<string> ordered = new List<string>(pool.NodeById.Keys);
+            ordered.Sort((string a, string b) =>
+            {
+                double ra = pool.RrfByNode.TryGetValue(a, out double x) ? x : 0.0;
+                double rb = pool.RrfByNode.TryGetValue(b, out double y) ? y : 0.0;
+                int byRrf = rb.CompareTo(ra);
+                if (byRrf != 0) return byRrf;
+                double sa = pool.BestRawByNode.TryGetValue(a, out double p) ? p : 0.0;
+                double sb = pool.BestRawByNode.TryGetValue(b, out double q) ? q : 0.0;
+                int byRaw = sb.CompareTo(sa);
+                if (byRaw != 0) return byRaw;
+                return String.CompareOrdinal(a, b);
+            });
+            pool.OrderedIds = ordered;
+            return pool;
+        }
+
+        /// <summary>
+        /// Select up to <paramref name="max"/> passages from the fused pool with Maximal Marginal Relevance:
+        /// greedily pick the candidate that best balances relevance (its normalized fused score) against novelty
+        /// (one minus its greatest lexical-cosine similarity to what is already selected). Removes near-duplicate
+        /// passages that would otherwise crowd the grounding context. Similarity is computed over passage text
+        /// (bag-of-words cosine), so no chunk embeddings are required.
+        /// </summary>
+        private static List<string> SelectWithMmr(RetrievalPool pool, int max, double lambda)
+        {
+            List<string> candidates = pool.OrderedIds;
+            if (candidates.Count <= 1 || max <= 1) return candidates.Count > max ? candidates.GetRange(0, Math.Max(0, max)) : candidates;
+
+            double relMax = 0.0;
+            foreach (string id in candidates)
+            {
+                double rrf = pool.RrfByNode.TryGetValue(id, out double v) ? v : 0.0;
+                if (rrf > relMax) relMax = rrf;
+            }
+            if (relMax <= 0.0) relMax = 1.0;
+
+            Dictionary<string, Dictionary<string, int>> freqById = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+            foreach (string id in candidates)
+            {
+                GraphNode node = pool.NodeById[id];
+                string text = String.IsNullOrWhiteSpace(node.Content) ? (node.Name ?? String.Empty) : node.Content!;
+                freqById[id] = TokenFrequencies(text);
+            }
+
+            int target = Math.Min(max, candidates.Count);
+            List<string> selected = new List<string>(target);
+            HashSet<string> remaining = new HashSet<string>(candidates, StringComparer.Ordinal);
+
+            // Seed with the most relevant candidate (candidates are already RRF-ordered).
+            selected.Add(candidates[0]);
+            remaining.Remove(candidates[0]);
+
+            while (selected.Count < target && remaining.Count > 0)
+            {
+                string? best = null;
+                double bestScore = Double.NegativeInfinity;
+                foreach (string id in candidates)
+                {
+                    if (!remaining.Contains(id)) continue;
+                    double relevance = (pool.RrfByNode.TryGetValue(id, out double rrf) ? rrf : 0.0) / relMax;
+                    double maxSim = 0.0;
+                    foreach (string chosen in selected)
+                    {
+                        double sim = CosineSimilarity(freqById[id], freqById[chosen]);
+                        if (sim > maxSim) maxSim = sim;
+                    }
+                    double mmr = (lambda * relevance) - ((1.0 - lambda) * maxSim);
+                    if (mmr > bestScore)
+                    {
+                        bestScore = mmr;
+                        best = id;
+                    }
+                }
+                if (best == null) break;
+                selected.Add(best);
+                remaining.Remove(best);
+            }
+            return selected;
+        }
+
+        /// <summary>Tokenize into a lowercase bag-of-words frequency map (alphanumeric tokens of length &gt;= 2).</summary>
+        private static Dictionary<string, int> TokenFrequencies(string text)
+        {
+            Dictionary<string, int> frequencies = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (String.IsNullOrEmpty(text)) return frequencies;
+            StringBuilder token = new StringBuilder();
+            foreach (char c in text)
+            {
+                if (Char.IsLetterOrDigit(c))
+                {
+                    token.Append(Char.ToLowerInvariant(c));
+                }
+                else if (token.Length > 0)
+                {
+                    AddToken(frequencies, token);
+                    token.Clear();
+                }
+            }
+            if (token.Length > 0) AddToken(frequencies, token);
+            return frequencies;
+        }
+
+        private static void AddToken(Dictionary<string, int> frequencies, StringBuilder token)
+        {
+            if (token.Length < 2) return;
+            string word = token.ToString();
+            frequencies[word] = frequencies.TryGetValue(word, out int count) ? count + 1 : 1;
+        }
+
+        /// <summary>Cosine similarity between two bag-of-words frequency maps (0 when either is empty).</summary>
+        private static double CosineSimilarity(Dictionary<string, int> a, Dictionary<string, int> b)
+        {
+            if (a.Count == 0 || b.Count == 0) return 0.0;
+            Dictionary<string, int> smaller = a.Count <= b.Count ? a : b;
+            Dictionary<string, int> larger = a.Count <= b.Count ? b : a;
+            double dot = 0.0;
+            foreach (KeyValuePair<string, int> entry in smaller)
+            {
+                if (larger.TryGetValue(entry.Key, out int other)) dot += (double)entry.Value * other;
+            }
+            if (dot == 0.0) return 0.0;
+            double magA = 0.0;
+            foreach (int v in a.Values) magA += (double)v * v;
+            double magB = 0.0;
+            foreach (int v in b.Values) magB += (double)v * v;
+            double denominator = Math.Sqrt(magA) * Math.Sqrt(magB);
+            return denominator > 0.0 ? dot / denominator : 0.0;
+        }
+
         /// <summary>Record the best (highest) relevance score seen for a cited content link.</summary>
         private static void RecordCitationScore(IDictionary<string, double>? scores, string linkId, double score)
         {
@@ -755,62 +1218,36 @@ namespace Pneuma.Server.Services
             return node;
         }
 
-        private async Task<ModelRunner?> ResolvePartioCompletionRunnerAsync(CancellationToken token)
+        private async Task<ModelRunner?> ResolveDefaultCompletionRunnerAsync(CancellationToken token)
         {
-            List<PartioEndpoint> completions;
+            List<ModelRunner> runners;
             try
             {
-                completions = await _Partio.ListCompletionEndpointsAsync(token).ConfigureAwait(false);
+                runners = await _Db.ModelRunners.EnumerateAsync(null, token).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
-                _Logging.Warn("[GroundedQueryService] could not list completion endpoints: " + exception.Message);
+                _Logging.Warn("[GroundedQueryService] could not list completion runners: " + exception.Message);
                 return null;
             }
 
-            PartioEndpoint? endpoint = null;
-            foreach (PartioEndpoint candidate in completions)
+            foreach (ModelRunner candidate in runners)
             {
-                if (candidate.Active) { endpoint = candidate; break; }
+                if (candidate.Active && candidate.Capabilities.Contains(ModelCapabilityEnum.Completion)) return candidate;
             }
-            if (endpoint == null && completions.Count > 0) endpoint = completions[0];
-            if (endpoint == null) return null;
-
-            ModelRunner runner = new ModelRunner
+            foreach (ModelRunner candidate in runners)
             {
-                Name = String.IsNullOrWhiteSpace(endpoint.Name) ? "partio-completion" : endpoint.Name!,
-                Provider = MapProvider(endpoint.ApiFormat),
-                BaseUrl = endpoint.Endpoint ?? String.Empty,
-                DefaultModel = endpoint.Model ?? String.Empty,
-                Usage = ModelRunnerUsageEnum.Both,
-                Active = true,
-                ContextSize = endpoint.ContextSize
-            };
-
-            // The Partio endpoint's key is plaintext; store it encrypted so the shared answer path (which
-            // decrypts AuthMaterialEncrypted) can consume this transient runner exactly like a stored one.
-            if (!String.IsNullOrEmpty(endpoint.ApiKey))
-            {
-                try { runner.AuthMaterialEncrypted = _Cipher.Encrypt(endpoint.ApiKey); }
-                catch (Exception) { runner.AuthMaterialEncrypted = null; }
+                if (candidate.Active) return candidate;
             }
-
-            return runner;
-        }
-
-        private static ModelRunnerProviderEnum MapProvider(string? apiFormat)
-        {
-            if (String.Equals(apiFormat, "OpenAI", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.OpenAI;
-            if (String.Equals(apiFormat, "Gemini", StringComparison.OrdinalIgnoreCase)) return ModelRunnerProviderEnum.Gemini;
-            return ModelRunnerProviderEnum.Ollama;
+            return null;
         }
 
         private async Task<List<float>?> EmbedQueryAsync(string question, string? embeddingEndpointId, CancellationToken token)
         {
             try
             {
-                PartioProcessResult processed = await _Partio.ProcessAsync(question, false, null, embeddingEndpointId, null, token).ConfigureAwait(false);
-                foreach (PartioChunk chunk in processed.Chunks)
+                SemanticProcessResult processed = await _Processor.ProcessAsync(question, false, null, embeddingEndpointId, null, token).ConfigureAwait(false);
+                foreach (SemanticChunk chunk in processed.Chunks)
                 {
                     if (chunk.Embeddings != null && chunk.Embeddings.Count > 0) return chunk.Embeddings;
                 }
@@ -820,6 +1257,46 @@ namespace Pneuma.Server.Services
                 _Logging.Warn("[GroundedQueryService] query embedding failed: " + exception.Message);
             }
             return null;
+        }
+
+        #endregion
+
+        #region Nested-Types
+
+        /// <summary>
+        /// The fused output of the retrieval channels: every resolved node keyed by id, with its fused RRF score,
+        /// best raw channel score, stored position, provenance (link id, document id), a display snippet, the
+        /// per-tenant graph client, and an RRF-ordered id list. Consumed by both the grounded path (which then
+        /// applies MMR selection and reconstruction) and the search endpoint.
+        /// </summary>
+        private sealed class RetrievalPool
+        {
+            /// <summary>Resolved graph node for each retrieved chunk, keyed by node id.</summary>
+            public Dictionary<string, GraphNode> NodeById { get; } = new Dictionary<string, GraphNode>(StringComparer.Ordinal);
+
+            /// <summary>Stored position of each retrieved chunk, keyed by node id.</summary>
+            public Dictionary<string, int> PositionByNode { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            /// <summary>Fused Reciprocal-Rank-Fusion score for each node.</summary>
+            public Dictionary<string, double> RrfByNode { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+
+            /// <summary>Best raw channel score (cosine / TsRank) for each node.</summary>
+            public Dictionary<string, double> BestRawByNode { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+
+            /// <summary>Originating content-link id for each node, when known.</summary>
+            public Dictionary<string, string> LinkByNode { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>Display snippet for each node, when known.</summary>
+            public Dictionary<string, string> SnippetByNode { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>Retrieval-store document id for each node, when known.</summary>
+            public Dictionary<string, string> DocIdByNode { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>Node ids ordered by fused RRF score, most relevant first.</summary>
+            public List<string> OrderedIds { get; set; } = new List<string>();
+
+            /// <summary>The per-tenant graph client used for the retrieval (and any neighbor expansion).</summary>
+            public IGraphRepository? Graph { get; set; }
         }
 
         #endregion

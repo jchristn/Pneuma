@@ -56,12 +56,6 @@
     "DocumentAtom": {
       "Endpoint": "http://127.0.0.1:8000/"
     },
-    "Partio": {
-      "Endpoint": "http://127.0.0.1:8400/",
-      "BearerToken": "partioadmin",
-      "EmbeddingEndpointId": null,
-      "CompletionEndpointId": null
-    },
     "RecallDb": {
       "Endpoint": "http://127.0.0.1:8600/",
       "BearerToken": "recalldbadmin",

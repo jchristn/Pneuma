@@ -58,13 +58,12 @@ namespace Pneuma.Server
 
             IntegrationClients clients = BuildIntegrationClients(settings);
             IArtifactStore artifactStore = BuildArtifactStore(settings, logging);
-            ModelHealthMonitor modelHealth = new ModelHealthMonitor(clients.Partio, logging);
+            ModelHealthMonitor modelHealth = new ModelHealthMonitor(database, logging);
 
             if (settings.Diagnostics.RunStartupProbes)
             {
                 List<IServiceProbe> probes = new List<IServiceProbe>();
                 if (clients.DocumentAtom is IServiceProbe documentAtomProbe) probes.Add(documentAtomProbe);
-                if (clients.Partio is IServiceProbe partioProbe) probes.Add(partioProbe);
                 if (clients.Search is IServiceProbe searchProbe) probes.Add(searchProbe);
                 if (clients.Graph is IServiceProbe graphProbe) probes.Add(graphProbe);
 
@@ -97,7 +96,7 @@ namespace Pneuma.Server
             };
             TenantProvisioningService provisioning = new TenantProvisioningService(provisioners, logging);
 
-            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, clients.Partio, provisioning, modelHealth, artifactStore, clients.Blobs, logging, telemetry);
+            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, provisioning, modelHealth, artifactStore, clients.Blobs, logging, telemetry);
             server.Start();
 
             if (settings.S3.Enabled)
@@ -147,8 +146,9 @@ namespace Pneuma.Server
             IContentFetcher fetcher = settings.Ingestion.UseHeadlessBrowser
                 ? new PlaywrightContentFetcher(new HttpContentFetcher(settings.Ingestion.UserAgent), settings.Ingestion.BrowserNavigationTimeoutMs, settings.Ingestion.UserAgent)
                 : new HttpContentFetcher(settings.Ingestion.UserAgent);
+            NativeSemanticProcessor semanticProcessor = new NativeSemanticProcessor(database, authentication.Cipher, logging);
             IngestionProcessor processor = new IngestionProcessor(
-                database, clients.DocumentAtom, clients.Partio, graphFactory, clients.Vectors, clients.Blobs,
+                database, clients.DocumentAtom, semanticProcessor, graphFactory, clients.Vectors, clients.Blobs,
                 artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, logging, telemetry);
             IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, logging);
 
@@ -162,11 +162,8 @@ namespace Pneuma.Server
                 CascadeDeletionService cascade = new CascadeDeletionService(database, artifactStore, clients.Vectors, graphFactory, clients.Blobs);
                 SubjectDeletionWorker deletionWorker = new SubjectDeletionWorker(database, cascade, logging);
                 deletionWorker.Start(shutdown.Token);
-                // Ensure default model endpoints exist in Partio when none are configured (create-only, so
-                // operator edits persist across restarts). Runs in the background because it retries while
-                // Partio finishes coming up.
-                PartioEndpointInitializer partioInit = new PartioEndpointInitializer(clients.Partio, settings.Seed.OllamaBaseUrl, logging);
-                Task partioSeed = Task.Run(() => partioInit.InitializeAsync(shutdown.Token), shutdown.Token);
+                // Default model runners are seeded synchronously into the native store by FirstBootSeeder
+                // (create-only, so operator edits persist across restarts).
                 Task maintenance = MaintenanceLoopAsync(database, settings, logging, shutdown.Token);
 
                 ManualResetEventSlim quit = new ManualResetEventSlim(false);
@@ -242,16 +239,6 @@ namespace Pneuma.Server
             {
                 DocumentAtom = new DocumentAtomClient(
                     integrations.DocumentAtom.Endpoint,
-                    resilience.TimeoutMilliseconds,
-                    resilience.MaxConcurrentRequests,
-                    resilience.RetryCount,
-                    resilience.RetryDelayMilliseconds),
-                Partio = new PartioClient(
-                    integrations.Partio.Endpoint,
-                    integrations.Partio.BearerToken ?? String.Empty,
-                    integrations.Partio.EmbeddingEndpointId,
-                    integrations.Partio.CompletionEndpointId,
-                    integrations.Partio.TenantId,
                     resilience.TimeoutMilliseconds,
                     resilience.MaxConcurrentRequests,
                     resilience.RetryCount,

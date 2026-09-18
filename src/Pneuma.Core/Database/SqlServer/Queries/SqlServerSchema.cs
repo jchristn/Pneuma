@@ -132,6 +132,38 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF COL_LENGTH('dbo.ingestionjobs', 'labelsjson') IS NULL ALTER TABLE dbo.ingestionjobs ADD labelsjson NVARCHAR(MAX);",
                     "IF COL_LENGTH('dbo.ingestionjobs', 'tagsjson') IS NULL ALTER TABLE dbo.ingestionjobs ADD tagsjson NVARCHAR(MAX);"
                 }));
+                list.Add(new SchemaMigration(16, "Add subject consumer-chat publish flag and link content hash", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'publishedforchat') IS NULL ALTER TABLE dbo.subjects ADD publishedforchat INT NOT NULL DEFAULT 1;",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'contenthash') IS NULL ALTER TABLE dbo.subjectlinks ADD contenthash NVARCHAR(MAX);"
+                }));
+                list.Add(new SchemaMigration(17, "Add subject chunking configuration", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'chunkstrategy') IS NULL ALTER TABLE dbo.subjects ADD chunkstrategy NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.subjects', 'chunkmaxtokens') IS NULL ALTER TABLE dbo.subjects ADD chunkmaxtokens INT NOT NULL DEFAULT 256;",
+                    "IF COL_LENGTH('dbo.subjects', 'chunkoverlaptokens') IS NULL ALTER TABLE dbo.subjects ADD chunkoverlaptokens INT NOT NULL DEFAULT 32;"
+                }));
+                list.Add(new SchemaMigration(18, "Add subject reranker type", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjects', 'rerankertype') IS NULL ALTER TABLE dbo.subjects ADD rerankertype NVARCHAR(64) NOT NULL DEFAULT 'LlmListwise';"
+                }));
+                list.Add(new SchemaMigration(19, "Add model runner provider-specific fields", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.modelrunners', 'deployment') IS NULL ALTER TABLE dbo.modelrunners ADD deployment NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'apiversion') IS NULL ALTER TABLE dbo.modelrunners ADD apiversion NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'region') IS NULL ALTER TABLE dbo.modelrunners ADD region NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'project') IS NULL ALTER TABLE dbo.modelrunners ADD project NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'accesskeyid') IS NULL ALTER TABLE dbo.modelrunners ADD accesskeyid NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'sessiontokenencrypted') IS NULL ALTER TABLE dbo.modelrunners ADD sessiontokenencrypted NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'contextsize') IS NULL ALTER TABLE dbo.modelrunners ADD contextsize INT NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(20, "Add per-subject prompt overrides", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.subjectprompts', N'U') IS NULL CREATE TABLE dbo.subjectprompts (" +
+                        "id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, promptkey NVARCHAR(128) NOT NULL, " +
+                        "content NVARCHAR(MAX), mergemode NVARCHAR(16) NOT NULL DEFAULT 'Append', createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectprompts_key' AND object_id = OBJECT_ID(N'dbo.subjectprompts')) CREATE UNIQUE INDEX idx_subjectprompts_key ON dbo.subjectprompts (tenantid, subjectid, promptkey);"
+                }));
                 return list;
             }
         }

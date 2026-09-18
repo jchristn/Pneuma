@@ -64,6 +64,13 @@ namespace Pneuma.Core.Models
         /// <summary>UTC timestamp of the last successful ingestion, if any.</summary>
         public DateTime? LastIngestedUtc { get; set; } = null;
 
+        /// <summary>
+        /// Content hash (hex SHA-256) of the source bytes as of the last successful ingestion. Used for delta
+        /// detection: a re-ingestion whose freshly-fetched content hashes to this same value skips the expensive
+        /// extract/classify/embed/index work and completes immediately. Null until the first successful ingest.
+        /// </summary>
+        public string? ContentHash { get; set; } = null;
+
         /// <summary>Last error message, if the most recent ingestion failed.</summary>
         public string? LastError { get; set; } = null;
 

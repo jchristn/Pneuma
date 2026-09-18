@@ -79,6 +79,9 @@ namespace Pneuma.Core.Database
         /// <summary>Prompt methods.</summary>
         public IPromptMethods Prompts { get; protected set; } = null!;
 
+        /// <summary>Per-subject prompt override methods.</summary>
+        public ISubjectPromptMethods SubjectPrompts { get; protected set; } = null!;
+
         /// <summary>Persisted chat-turn (history) methods.</summary>
         public IChatTurnMethods ChatTurns { get; protected set; } = null!;
 

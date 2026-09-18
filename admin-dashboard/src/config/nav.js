@@ -38,7 +38,7 @@ export const NAV_GROUPS = [
   {
     labelKey: 'nav.groupConfiguration',
     items: [
-      { section: 'model-runners', labelKey: 'nav.modelRunners', icon: 'cpu', tip: 'Embedding and completion model endpoints (proxied to Partio) that power ingestion and answering.' },
+      { section: 'model-runners', labelKey: 'nav.modelRunners', icon: 'cpu', tip: 'Embedding and completion model endpoints that power ingestion and answering.' },
       { section: 'prompts', labelKey: 'nav.prompts', icon: 'chat', tip: 'System and ingestion prompt templates the models use. Edit to tune tone and behavior.' }
     ]
   },

@@ -18,7 +18,7 @@ services:
       POSTGRES_PASSWORD: 'pneuma'
     volumes:
       - pneuma-postgres-data:/var/lib/postgresql/data
-      # Creates the per-service databases (less3, litegraph, partio, recalldb) on first init and enables
+      # Creates the per-service databases (less3, litegraph, recalldb) on first init and enables
       # the vector/pg_trgm extensions in the recalldb database.
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
@@ -55,7 +55,7 @@ services:
   # ------------------------------------------------------------------
   litegraph:
     container_name: 'litegraph'
-    image: 'jchristn77/litegraph:v7.0.0'
+    image: 'jchristn77/litegraph:v9.0.0'
     ports:
       - '8701:8701'
     volumes:
@@ -79,7 +79,7 @@ services:
 
   litegraph-ui:
     container_name: 'litegraph-ui'
-    image: 'jchristn77/litegraph-ui:v7.0.0'
+    image: 'jchristn77/litegraph-ui:v9.0.0'
     ports:
       - '3001:3000'
     environment:
@@ -174,50 +174,6 @@ services:
       start_period: 20s
 
   # ------------------------------------------------------------------
-  # Chunking + embedding + summarization: Partio + dashboard
-  # ------------------------------------------------------------------
-  partio-server:
-    container_name: 'partio-server'
-    # Pinned to the Partio 0.5.0 release (adds per-endpoint MaxQueueDepth request queueing).
-    image: 'jchristn77/partio-server:v0.5.0'
-    ports:
-      - '8400:8400'
-    depends_on:
-      ollama:
-        condition: service_healthy
-      pneuma-postgres:
-        condition: service_healthy
-    volumes:
-      - partio-data:/app
-      # Override the baked-in settings so the server binds all interfaces (not container loopback).
-      - ./partio/partio.json:/app/partio.json
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -fsS http://localhost:8400/ || exit 1']
-      interval: 5s
-      timeout: 2s
-      retries: 2
-      start_period: 40s
-
-  partio-dashboard:
-    container_name: 'partio-dashboard'
-    # Pinned to the Partio 0.5.0 release (adds per-endpoint MaxQueueDepth request queueing).
-    image: 'jchristn77/partio-dashboard:v0.5.0'
-    ports:
-      - '8401:8401'
-    environment:
-      # Browser-reachable Partio server URL (host-published port).
-      PARTIO_SERVER_URL: 'http://localhost:8400'
-    depends_on:
-      partio-server:
-        condition: service_healthy
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -fsS http://localhost:8401/ || exit 1']
-      interval: 5s
-      timeout: 2s
-      retries: 2
-      start_period: 20s
-
-  # ------------------------------------------------------------------
   # Retrieval store (vector + full-text search): RecallDB + dashboard
   # ------------------------------------------------------------------
   recalldb-server:
@@ -282,8 +238,6 @@ services:
       litegraph:
         condition: service_healthy
       documentatom:
-        condition: service_healthy
-      partio-server:
         condition: service_healthy
       recalldb-server:
         condition: service_healthy
@@ -430,7 +384,6 @@ volumes:
   litegraph-data:
   less3-data:
   documentatom-data:
-  partio-data:
   ollama-data:
   pneuma-prometheus-data:
   pneuma-tempo-data:

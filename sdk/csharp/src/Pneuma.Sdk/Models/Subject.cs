@@ -44,16 +44,16 @@ namespace Pneuma.Sdk.Models
         /// <summary>Ask-page subtitle shown beneath the subject's name in the user dashboard.</summary>
         public string? Tagline { get; set; } = null;
 
-        /// <summary>Partio embedding endpoint id used to vectorize this subject's content and queries. Required to ingest.</summary>
+        /// <summary>Embedding endpoint id used to vectorize this subject's content and queries. Required to ingest.</summary>
         public string? EmbeddingModel { get; set; } = null;
 
-        /// <summary>Partio completion endpoint id used for this subject's ingestion inference and answering. Required to ingest.</summary>
+        /// <summary>Completion endpoint id used for this subject's ingestion inference and answering. Required to ingest.</summary>
         public string? InferenceModel { get; set; } = null;
 
-        /// <summary>Optional Partio completion endpoint id used to re-rank retrieved passages before answering.</summary>
+        /// <summary>Optional completion endpoint id used to re-rank retrieved passages before answering.</summary>
         public string? RerankingModel { get; set; } = null;
 
-        /// <summary>Optional Partio completion endpoint id used to rewrite the question into a retrieval query.</summary>
+        /// <summary>Optional completion endpoint id used to rewrite the question into a retrieval query.</summary>
         public string? PromptRewriteModel { get; set; } = null;
 
         /// <summary>RecallDB collection id where this subject's chunks are stored and searched. Required to ingest.</summary>

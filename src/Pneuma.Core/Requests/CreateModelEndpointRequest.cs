@@ -1,7 +1,9 @@
 namespace Pneuma.Core.Requests
 {
+    using Pneuma.Core.Enums;
+
     /// <summary>
-    /// Request to create or update a Partio model endpoint via the Pneuma model-runner proxy.
+    /// Request to create or update a model endpoint (model runner).
     /// </summary>
     public class CreateModelEndpointRequest
     {
@@ -10,33 +12,54 @@ namespace Pneuma.Core.Requests
         /// <summary>Endpoint type: "Embedding" or "Completion".</summary>
         public string? Type { get; set; } = null;
 
+        /// <summary>Provider family. When null, the provider is inferred from <see cref="ApiFormat"/>.</summary>
+        public ModelRunnerProviderEnum? Provider { get; set; } = null;
+
         /// <summary>Human-readable name.</summary>
         public string? Name { get; set; } = null;
 
         /// <summary>Underlying model identifier.</summary>
         public string? Model { get; set; } = null;
 
-        /// <summary>Upstream provider URL (e.g. "http://ollama:11434").</summary>
+        /// <summary>Upstream provider URL (e.g. "http://127.0.0.1:11434").</summary>
         public string? Endpoint { get; set; } = null;
 
         /// <summary>API format (e.g. "Ollama", "OpenAI").</summary>
         public string? ApiFormat { get; set; } = null;
 
-        /// <summary>Provider API key (write-only; forwarded to Partio, never returned).</summary>
+        /// <summary>Provider API key, or the Azure/Vertex bearer token, or (for Bedrock) the AWS secret access key. Write-only; never returned.</summary>
         public string? ApiKey { get; set; } = null;
+
+        /// <summary>Azure OpenAI deployment name (required for AzureOpenAI).</summary>
+        public string? Deployment { get; set; } = null;
+
+        /// <summary>Azure OpenAI API version.</summary>
+        public string? ApiVersion { get; set; } = null;
+
+        /// <summary>Cloud region (required for Bedrock and Vertex).</summary>
+        public string? Region { get; set; } = null;
+
+        /// <summary>Cloud project (required for Vertex).</summary>
+        public string? Project { get; set; } = null;
+
+        /// <summary>AWS access key id (required for Bedrock).</summary>
+        public string? AccessKeyId { get; set; } = null;
+
+        /// <summary>AWS session token (Bedrock temporary credentials). Write-only; never returned.</summary>
+        public string? SessionToken { get; set; } = null;
 
         /// <summary>Whether the endpoint is active.</summary>
         public bool Active { get; set; } = true;
 
         /// <summary>
-        /// Maximum number of concurrent requests Partio will send to this endpoint. Minimum 1 (Partio clamps).
-        /// Default 2 to match Partio's canonical default.
+        /// Maximum number of concurrent requests sent to this endpoint. Minimum 1 (clamped).
+        /// Default 2.
         /// </summary>
         public int MaxConcurrentRequests { get; set; } = 2;
 
         /// <summary>
         /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>
-        /// upstream calls are in flight. Minimum 0 (Partio clamps). Default 0 — over-limit requests are rejected
+        /// upstream calls are in flight. Minimum 0 (clamped). Default 0 — over-limit requests are rejected
         /// immediately rather than queued.
         /// </summary>
         public int MaxQueueDepth { get; set; } = 0;
@@ -47,13 +70,13 @@ namespace Pneuma.Core.Requests
         /// </summary>
         public int ContextSize { get; set; } = 0;
 
-        /// <summary>Maximum upstream request timeout in milliseconds (Partio clamps to >= 1).</summary>
+        /// <summary>Maximum upstream request timeout in milliseconds (clamped to >= 1).</summary>
         public int MaximumTimeoutMs { get; set; } = 60000;
 
-        /// <summary>Whether Partio runs background health checks against this endpoint.</summary>
+        /// <summary>Whether background health checks run against this endpoint.</summary>
         public bool HealthCheckEnabled { get; set; } = false;
 
-        /// <summary>Health check probe URL. Blank lets Partio derive it from the endpoint + API format.</summary>
+        /// <summary>Health check probe URL. Blank derives it from the endpoint + API format.</summary>
         public string? HealthCheckUrl { get; set; } = null;
 
         /// <summary>Health check HTTP method: "GET" or "HEAD".</summary>

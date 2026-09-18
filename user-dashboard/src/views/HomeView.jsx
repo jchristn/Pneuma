@@ -21,7 +21,7 @@ export default function HomeView() {
       .then((resp) => {
         if (cancelled) return;
         const items = resp?.objects || resp?.items || [];
-        setSubjects(items.filter((s) => s.active !== false && (s.deletionStatus == null || s.deletionStatus === 'None')));
+        setSubjects(items.filter((s) => s.active !== false && s.publishedForChat !== false && (s.deletionStatus == null || s.deletionStatus === 'None')));
       })
       .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load subjects'); })
       .finally(() => { if (!cancelled) setLoading(false); });

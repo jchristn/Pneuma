@@ -7,17 +7,17 @@ namespace Pneuma.Server.Services
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Database;
+    using Pneuma.Core.Models;
     using Pneuma.Core.Responses;
     using SyslogLogging;
 
     /// <summary>
-    /// Background monitor that health-checks the model endpoints defined in Partio. Endpoints are
-    /// enumerated from Partio on a fixed interval, deduplicated by base URL, and each unique base URL is
-    /// probed once per tick; the result is shared by every endpoint on that host. State (uptime, history,
-    /// consecutive counts, latency) is accumulated in memory with healthy/unhealthy hysteresis and is not
-    /// persisted. Consumers project the per-base-URL state onto individual endpoints via <see cref="BuildStatus"/>.
+    /// Background monitor that health-checks the configured model runners. Runners are enumerated from the
+    /// native store on a fixed interval, deduplicated by base URL, and each unique base URL is probed once
+    /// per tick; the result is shared by every endpoint on that host. State (uptime, history, consecutive
+    /// counts, latency) is accumulated in memory with healthy/unhealthy hysteresis and is not persisted.
+    /// Consumers project the per-base-URL state onto individual endpoints via <see cref="BuildStatus"/>.
     /// </summary>
     public class ModelHealthMonitor
     {
@@ -30,7 +30,7 @@ namespace Pneuma.Server.Services
         private const int _MaxHistoryRecords = 500;
         private static readonly TimeSpan _HistoryRetention = TimeSpan.FromHours(24);
 
-        private readonly IPartioClient _Partio;
+        private readonly DatabaseDriverBase _Db;
         private readonly LoggingModule _Logging;
         private readonly HttpClient _Http;
         private readonly ConcurrentDictionary<string, BaseUrlHealthState> _States = new ConcurrentDictionary<string, BaseUrlHealthState>(StringComparer.OrdinalIgnoreCase);
@@ -41,11 +41,11 @@ namespace Pneuma.Server.Services
         #region Constructors-and-Factories
 
         /// <summary>Instantiate the model health monitor.</summary>
-        /// <param name="partio">Partio client used to enumerate the configured model endpoints.</param>
+        /// <param name="db">Database driver used to enumerate the configured model runners.</param>
         /// <param name="logging">Logging module.</param>
-        public ModelHealthMonitor(IPartioClient partio, LoggingModule logging)
+        public ModelHealthMonitor(DatabaseDriverBase db, LoggingModule logging)
         {
-            _Partio = partio ?? throw new ArgumentNullException(nameof(partio));
+            _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Http = new HttpClient();
             _Http.Timeout = TimeSpan.FromSeconds(30);
@@ -67,7 +67,7 @@ namespace Pneuma.Server.Services
         /// Project the current per-base-URL health state onto a single model endpoint. When the endpoint's
         /// base URL has not yet been probed, the returned status carries no timestamps (a "pending" state).
         /// </summary>
-        /// <param name="endpointId">Partio endpoint id.</param>
+        /// <param name="endpointId">endpoint id.</param>
         /// <param name="name">Endpoint name.</param>
         /// <param name="type">Endpoint type ("Embedding" or "Completion").</param>
         /// <param name="baseUrl">The endpoint's base URL.</param>
@@ -159,8 +159,7 @@ namespace Pneuma.Server.Services
         private async Task RefreshAndProbeAsync(CancellationToken token)
         {
             HashSet<string> active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CollectBaseUrls(await _Partio.ListEmbeddingEndpointsAsync(token).ConfigureAwait(false), active);
-            CollectBaseUrls(await _Partio.ListCompletionEndpointsAsync(token).ConfigureAwait(false), active);
+            CollectBaseUrls(await _Db.ModelRunners.EnumerateAsync(null, token).ConfigureAwait(false), active);
 
             // Drop state for base URLs no longer referenced by any active endpoint.
             foreach (string existing in new List<string>(_States.Keys))
@@ -177,13 +176,13 @@ namespace Pneuma.Server.Services
             await Task.WhenAll(probes).ConfigureAwait(false);
         }
 
-        private static void CollectBaseUrls(List<PartioEndpoint> endpoints, HashSet<string> into)
+        private static void CollectBaseUrls(List<ModelRunner> runners, HashSet<string> into)
         {
-            if (endpoints == null) return;
-            foreach (PartioEndpoint endpoint in endpoints)
+            if (runners == null) return;
+            foreach (ModelRunner runner in runners)
             {
-                if (endpoint == null || !endpoint.Active) continue;
-                string key = NormalizeBaseUrl(endpoint.Endpoint);
+                if (runner == null || !runner.Active) continue;
+                string key = NormalizeBaseUrl(runner.BaseUrl);
                 if (!String.IsNullOrEmpty(key)) into.Add(key);
             }
         }
@@ -210,8 +209,9 @@ namespace Pneuma.Server.Services
                         int statusCode = (int)response.StatusCode;
                         result.StatusCode = statusCode;
                         result.LatencyMs = sw.Elapsed.TotalMilliseconds;
-                        // Any HTTP response below 500 means the host is reachable and serving; 5xx is treated as unhealthy.
-                        result.Success = statusCode < 500;
+                        // Only a 2xx response counts as healthy. A 4xx (e.g. 401 Unauthorized, 404 Not Found) or
+                        // 5xx means the endpoint is not actually serving requests, so it must not read as healthy.
+                        result.Success = statusCode >= 200 && statusCode < 300;
                         result.Error = result.Success ? null : "Base URL returned HTTP " + statusCode + ".";
                     }
                 }

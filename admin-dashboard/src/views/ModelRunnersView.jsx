@@ -7,7 +7,39 @@ import Modal from '../components/Modal';
 import { HealthHistogram, HealthDetailModal } from '../components/HealthHistogram';
 
 const TYPES = ['Embedding', 'Completion'];
-const API_FORMATS = ['Ollama', 'OpenAI', 'Gemini'];
+
+// All providers Pneuma can drive natively. Values match the backend ModelEndpoint `provider` enum;
+// labels are provider brand names (not translated).
+const PROVIDERS = [
+  'OpenAI', 'OpenAICompatible', 'Gemini', 'Ollama', 'AzureOpenAI', 'Anthropic', 'Bedrock', 'VoyageAI', 'VertexAI'
+];
+const PROVIDER_LABELS = {
+  OpenAI: 'OpenAI',
+  OpenAICompatible: 'OpenAI-Compatible',
+  Gemini: 'Google Gemini',
+  Ollama: 'Ollama',
+  AzureOpenAI: 'Azure OpenAI',
+  Anthropic: 'Anthropic',
+  Bedrock: 'AWS Bedrock',
+  VoyageAI: 'Voyage AI',
+  VertexAI: 'Google Vertex AI'
+};
+
+// Anthropic exposes no embeddings API; Voyage AI exposes no completion API. Constrain the picker so an
+// invalid provider/type pairing can't be created.
+function providersForType(type) {
+  return PROVIDERS.filter((p) => {
+    if (type === 'Embedding' && p === 'Anthropic') return false;
+    if (type === 'Completion' && p === 'VoyageAI') return false;
+    return true;
+  });
+}
+
+const isAzure = (v) => v.provider === 'AzureOpenAI';
+const isBedrock = (v) => v.provider === 'Bedrock';
+const isVertex = (v) => v.provider === 'VertexAI';
+const hasProviderExtras = (v) => isAzure(v) || isBedrock(v) || isVertex(v);
+
 const HEALTH_POLL_MS = 15000;
 
 function typeTone(type) {
@@ -50,7 +82,7 @@ function ValidationModal({ state, onClose, onRetry }) {
             <div style={{ display: 'contents' }}><dt>{t('modelRunners.type')}</dt><dd>{data.type || '—'}</dd></div>
             <div style={{ display: 'contents' }}><dt>{t('modelRunners.model')}</dt><dd>{data.model || '—'}</dd></div>
             <div style={{ display: 'contents' }}><dt>{t('modelRunners.endpoint')}</dt><dd className="wrap">{data.endpoint || '—'}</dd></div>
-            <div style={{ display: 'contents' }}><dt>{t('modelRunners.apiFormat')}</dt><dd>{data.apiFormat || '—'}</dd></div>
+            <div style={{ display: 'contents' }}><dt>{t('modelRunners.provider')}</dt><dd>{(data.provider && (PROVIDER_LABELS[data.provider] || data.provider)) || '—'}</dd></div>
           </dl>
           <table className="data-table">
             <thead>
@@ -158,43 +190,60 @@ function ModelRunnersView() {
 
   const columns = [
     { key: 'type', label: t('modelRunners.type'), render: (r) => <StatusPill label={r.type} tone={typeTone(r.type)} /> },
-    { key: 'name', label: 'Name', render: (r) => r.name || '—' },
+    { key: 'name', label: t('modelRunners.name'), render: (r) => r.name || '—' },
     { key: 'model', label: t('modelRunners.model'), render: (r) => r.model || '—' },
     { key: 'endpoint', label: t('modelRunners.endpoint'), cellClass: 'wrap', sortable: false, render: (r) => r.endpoint || '—' },
-    { key: 'apiFormat', label: t('modelRunners.apiFormat'), render: (r) => r.apiFormat || '—' },
-    { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: 'Live reachability of the endpoint, polled periodically. Click a health cell for recent history.' },
-    { key: 'active', label: 'Active', tip: 'Whether this endpoint is currently in use.', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> }
+    { key: 'provider', label: t('modelRunners.provider'), render: (r) => (r.provider && (PROVIDER_LABELS[r.provider] || r.provider)) || '—' },
+    { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: t('modelRunners.healthTip') },
+    { key: 'active', label: t('modelRunners.active'), tip: t('modelRunners.activeColTip'), render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> }
   ];
 
   const formFields = [
-    { name: '__sec_basic', type: 'section', label: 'Basic' },
-    { name: 'type', label: t('modelRunners.type'), type: 'select', required: true, default: 'Embedding', options: TYPES.map((x) => ({ value: x, label: x })), tip: 'Embedding endpoints turn text into vectors for search; Completion endpoints generate answers. Pick which role this model serves.' },
-    { name: 'name', label: 'Name', tip: 'A human-readable label for this endpoint (e.g. "local-embed"). Does not affect behavior.' },
-    { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text', tip: "The provider's model identifier exactly as it expects it — e.g. 'nomic-embed-text' for embeddings or 'llama3.2' for chat." },
-    { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'http://ollama:11434', tip: 'Base URL of the provider serving this model. For the bundled Ollama use http://ollama:11434.' },
-    { name: 'apiFormat', label: t('modelRunners.apiFormat'), type: 'select', default: 'Ollama', options: API_FORMATS.map((x) => ({ value: x, label: x })), tip: 'The wire protocol this endpoint speaks. Ollama for the local runner; OpenAI/Gemini for those hosted APIs.' },
-    { name: 'apiKey', label: 'API Key', type: 'password', tip: 'Secret key for hosted providers. Leave blank for a keyless local Ollama. Leave blank when editing to keep the stored key unchanged.' },
+    { name: '__sec_basic', type: 'section', label: t('modelRunners.sectionBasic') },
+    { name: 'type', label: t('modelRunners.type'), type: 'select', required: true, default: 'Embedding', options: TYPES.map((x) => ({ value: x, label: x })), tip: t('modelRunners.typeTip') },
+    { name: 'name', label: t('modelRunners.name'), tip: t('modelRunners.nameTip') },
+    {
+      name: 'provider', label: t('modelRunners.provider'), type: 'select', required: true, default: 'OpenAI',
+      options: (v) => providersForType(v.type).map((p) => ({ value: p, label: PROVIDER_LABELS[p] })),
+      hint: (v) => (v.type === 'Embedding' ? t('modelRunners.providerHelpEmbedding') : t('modelRunners.providerHelpCompletion')),
+      tip: t('modelRunners.providerTip'),
+      render: (r) => (r.provider && (PROVIDER_LABELS[r.provider] || r.provider)) || '—'
+    },
+    { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text', tip: t('modelRunners.modelTip') },
+    { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'https://api.openai.com', tip: t('modelRunners.endpointTip') },
+    { name: 'apiKey', label: t('modelRunners.apiKey'), type: 'password', editPlaceholder: t('modelRunners.secretUnchanged'), tip: t('modelRunners.apiKeyTip') },
 
-    { name: '__sec_request', type: 'section', label: 'Request Handling' },
-    { name: 'active', label: 'Active', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'When off, this endpoint is kept but not used for ingestion or answering.' },
-    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Cap on simultaneous requests Partio opens to this endpoint. Keep low for a single local model so each inference runs unshared and avoids upstream timeouts; raise for scaled hosted APIs.' },
-    { name: 'maxQueueDepth', label: t('modelRunners.maxQueueDepth'), type: 'number', default: 0, min: 0, placeholder: '0', tip: 'How many requests may wait for a slot once the concurrency cap is hit. 0 rejects over-limit requests immediately (429); raise it to let ingestion bursts queue instead of bouncing. A queued request that waits past the endpoint timeout returns 504.' },
-    { name: 'maximumTimeoutMs', label: 'Request Timeout (ms)', type: 'number', default: 60000, min: 1000, step: 1000, placeholder: '60000', tip: 'Upper bound in milliseconds for an upstream request before it is aborted. Distinct from the health check timeout.' },
-    { name: 'contextSize', label: t('modelRunners.contextSize'), type: 'number', default: 0, min: 0, placeholder: '8192', tip: 'Completion models only: the model’s context window in tokens (e.g. 8192). When the chat history approaches this, the conversation is automatically compacted into a summary. 0 disables compaction.' },
+    // Provider-specific settings. Shown only for the providers that require them.
+    { name: '__sec_provider', type: 'section', label: t('modelRunners.sectionProvider'), visibleWhen: hasProviderExtras },
+    { name: 'deployment', label: t('modelRunners.deployment'), visibleWhen: isAzure, placeholder: 'my-gpt4o-deployment', tip: t('modelRunners.deploymentTip') },
+    { name: 'apiVersion', label: t('modelRunners.apiVersion'), visibleWhen: isAzure, placeholder: '2024-02-01', tip: t('modelRunners.apiVersionTip') },
+    { name: 'region', label: t('modelRunners.region'), visibleWhen: (v) => isBedrock(v) || isVertex(v), placeholder: 'us-east-1', tip: t('modelRunners.regionTip') },
+    { name: 'project', label: t('modelRunners.project'), visibleWhen: isVertex, placeholder: 'my-gcp-project', tip: t('modelRunners.projectTip') },
+    { name: 'accessKeyId', label: t('modelRunners.accessKeyId'), visibleWhen: isBedrock, tip: t('modelRunners.accessKeyIdTip') },
+    { name: 'secretAccessKey', label: t('modelRunners.secretAccessKey'), type: 'password', visibleWhen: isBedrock, editPlaceholder: t('modelRunners.secretUnchanged'), tip: t('modelRunners.secretAccessKeyTip') },
+    { name: 'sessionToken', label: t('modelRunners.sessionToken'), type: 'password', visibleWhen: isBedrock, editPlaceholder: t('modelRunners.secretUnchanged'), tip: t('modelRunners.sessionTokenTip') },
 
-    { name: '__sec_health', type: 'section', label: 'Health Check' },
-    { name: 'healthCheckEnabled', label: 'Enable Health Checks', type: 'checkbox', default: true, omitIfEmpty: false, tip: 'Whether Partio periodically probes this endpoint for reachability.' },
-    { name: 'healthCheckUrl', label: 'Health Check URL', placeholder: 'Auto-derived from endpoint if blank', tip: 'URL Partio probes. Leave blank to let Partio derive it from the endpoint and API format.' },
-    { name: 'healthCheckMethod', label: 'Health Check Method', type: 'select', default: 'GET', options: ['GET', 'HEAD'].map((x) => ({ value: x, label: x })), tip: 'HTTP method used for the health probe.' },
-    { name: 'healthCheckIntervalMs', label: 'Interval (ms)', type: 'number', default: 30000, min: 1000, step: 1000, placeholder: '30000', tip: 'Milliseconds between health checks.' },
-    { name: 'healthCheckTimeoutMs', label: 'Check Timeout (ms)', type: 'number', default: 5000, min: 100, step: 100, placeholder: '5000', tip: 'Per-check HTTP timeout in milliseconds.' },
-    { name: 'healthCheckExpectedStatusCode', label: 'Expected Status Code', type: 'number', default: 200, min: 100, placeholder: '200', tip: 'HTTP status code that counts as a healthy response.' },
-    { name: 'healthyThreshold', label: 'Healthy Threshold', type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Consecutive successful checks required to mark the endpoint healthy.' },
-    { name: 'unhealthyThreshold', label: 'Unhealthy Threshold', type: 'number', default: 2, min: 1, placeholder: '2', tip: 'Consecutive failed checks required to mark the endpoint unhealthy.' },
-    { name: 'healthCheckUseAuth', label: 'Include API key in health check', type: 'checkbox', default: false, omitIfEmpty: false, tip: "Send the endpoint's API key with health probes, for hosted providers that require auth to respond." }
+    { name: '__sec_request', type: 'section', label: t('modelRunners.sectionRequest') },
+    { name: 'active', label: t('modelRunners.active'), type: 'checkbox', default: true, omitIfEmpty: false, tip: t('modelRunners.activeTip') },
+    { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: t('modelRunners.maxConcurrencyTip') },
+    { name: 'maxQueueDepth', label: t('modelRunners.maxQueueDepth'), type: 'number', default: 0, min: 0, placeholder: '0', tip: t('modelRunners.maxQueueDepthTip') },
+    { name: 'maximumTimeoutMs', label: t('modelRunners.requestTimeout'), type: 'number', default: 60000, min: 1000, step: 1000, placeholder: '60000', tip: t('modelRunners.requestTimeoutTip') },
+    { name: 'contextSize', label: t('modelRunners.contextSize'), type: 'number', default: 0, min: 0, placeholder: '8192', tip: t('modelRunners.contextSizeTip') },
+
+    { name: '__sec_health', type: 'section', label: t('modelRunners.sectionHealth') },
+    { name: 'healthCheckEnabled', label: t('modelRunners.healthCheckEnabled'), type: 'checkbox', default: true, omitIfEmpty: false, tip: t('modelRunners.healthCheckEnabledTip') },
+    { name: 'healthCheckUrl', label: t('modelRunners.healthCheckUrl'), placeholder: t('modelRunners.healthCheckUrlPlaceholder'), tip: t('modelRunners.healthCheckUrlTip') },
+    { name: 'healthCheckMethod', label: t('modelRunners.healthCheckMethod'), type: 'select', default: 'GET', options: ['GET', 'HEAD'].map((x) => ({ value: x, label: x })), tip: t('modelRunners.healthCheckMethodTip') },
+    { name: 'healthCheckIntervalMs', label: t('modelRunners.healthCheckInterval'), type: 'number', default: 30000, min: 1000, step: 1000, placeholder: '30000', tip: t('modelRunners.healthCheckIntervalTip') },
+    { name: 'healthCheckTimeoutMs', label: t('modelRunners.healthCheckTimeout'), type: 'number', default: 5000, min: 100, step: 100, placeholder: '5000', tip: t('modelRunners.healthCheckTimeoutTip') },
+    { name: 'healthCheckExpectedStatusCode', label: t('modelRunners.healthCheckExpectedStatus'), type: 'number', default: 200, min: 100, placeholder: '200', tip: t('modelRunners.healthCheckExpectedStatusTip') },
+    { name: 'healthyThreshold', label: t('modelRunners.healthyThreshold'), type: 'number', default: 2, min: 1, placeholder: '2', tip: t('modelRunners.healthyThresholdTip') },
+    { name: 'unhealthyThreshold', label: t('modelRunners.unhealthyThreshold'), type: 'number', default: 2, min: 1, placeholder: '2', tip: t('modelRunners.unhealthyThresholdTip') },
+    { name: 'healthCheckUseAuth', label: t('modelRunners.healthCheckUseAuth'), type: 'checkbox', default: false, omitIfEmpty: false, tip: t('modelRunners.healthCheckUseAuthTip') }
   ];
 
-  const detailFields = formFields.filter((f) => f.type !== 'section' && f.name !== 'apiKey');
+  const SECRET_FIELDS = ['apiKey', 'secretAccessKey', 'sessionToken'];
+  const detailFields = formFields.filter((f) => f.type !== 'section' && !SECRET_FIELDS.includes(f.name));
 
   return (
     <>

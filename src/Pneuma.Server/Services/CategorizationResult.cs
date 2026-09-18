@@ -19,6 +19,12 @@ namespace Pneuma.Server.Services
         /// <summary>The candidate subgraph (proposed nodes and relationships) to hydrate.</summary>
         public CandidateSubgraph Subgraph { get; set; } = new CandidateSubgraph();
 
+        /// <summary>
+        /// Hex SHA-256 of the fetched source bytes. Persisted onto the originating link when the job completes,
+        /// so a later re-ingestion of unchanged content can be detected and skipped.
+        /// </summary>
+        public string? ContentHash { get; set; } = null;
+
         #endregion
     }
 }

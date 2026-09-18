@@ -60,8 +60,11 @@ namespace Pneuma.Core.Graph
             foreach (CandidateNode candidate in subgraph.Nodes)
             {
                 // The ontology is admin-defined in natural language, so accept any non-empty node type
-                // the model emits (it becomes a LiteGraph label) rather than gating on the seeded set.
+                // the model emits (it becomes a LiteGraph label) rather than gating on the seeded set. It is
+                // canonicalized first (coerced to a built-in type when recognized, otherwise whitespace-collapsed)
+                // so casing/spelling variance does not fragment the ontology into near-duplicate labels.
                 if (String.IsNullOrWhiteSpace(candidate.NodeType) || String.IsNullOrWhiteSpace(candidate.Name)) continue;
+                candidate.NodeType = Ontology.CanonicalNodeType(candidate.NodeType);
 
                 string canonical = String.IsNullOrWhiteSpace(candidate.CanonicalName)
                     ? candidate.Name
@@ -98,8 +101,33 @@ namespace Pneuma.Core.Graph
             foreach (CandidateEdge candidate in subgraph.Edges)
             {
                 if (String.IsNullOrWhiteSpace(candidate.EdgeType)) continue;
+                // Canonicalize the relationship type (built-in when recognized, else UPPER_SNAKE) to curb drift.
+                candidate.EdgeType = Ontology.CanonicalEdgeType(candidate.EdgeType);
                 if (!refToId.TryGetValue(candidate.FromRef, out string? fromId)) continue;
                 if (!refToId.TryGetValue(candidate.ToRef, out string? toId)) continue;
+
+                double confidence = Math.Clamp(candidate.Confidence, 0.0, 1.0);
+
+                // Cross-source consolidation: if this relationship (same from/to/type) already exists — from an
+                // earlier source, or earlier in this same merge — accumulate its weight and corroboration count
+                // in place rather than creating a duplicate edge. Weight uses a noisy-OR so more corroborating
+                // sources push it toward 1.0 without ever exceeding it.
+                GraphEdge? existing = await FindExistingEdgeAsync(fromId, toId, candidate.EdgeType, token).ConfigureAwait(false);
+                if (existing != null && !String.IsNullOrEmpty(existing.Id))
+                {
+                    double oldWeight = ReadTagDouble(existing, Ontology.TagWeight, ReadTagDouble(existing, Ontology.TagConfidence, 0.0));
+                    int oldCount = ReadTagInt(existing, Ontology.TagCorroborationCount, 1);
+                    double newWeight = oldWeight + ((1.0 - oldWeight) * confidence);
+                    double bestConfidence = Math.Max(ReadTagDouble(existing, Ontology.TagConfidence, 0.0), confidence);
+
+                    existing.Tags[Ontology.TagWeight] = newWeight.ToString("F4", CultureInfo.InvariantCulture);
+                    existing.Tags[Ontology.TagCorroborationCount] = (oldCount + 1).ToString(CultureInfo.InvariantCulture);
+                    existing.Tags[Ontology.TagConfidence] = bestConfidence.ToString("F3", CultureInfo.InvariantCulture);
+
+                    await _Graph.UpdateEdgeAsync(existing, token).ConfigureAwait(false);
+                    if (!result.EdgeIds.Contains(existing.Id)) result.EdgeIds.Add(existing.Id);
+                    continue;
+                }
 
                 GraphEdge edge = new GraphEdge
                 {
@@ -108,7 +136,9 @@ namespace Pneuma.Core.Graph
                     ToNodeId = toId,
                     Tags = new Dictionary<string, string>
                     {
-                        { Ontology.TagConfidence, candidate.Confidence.ToString("F3", CultureInfo.InvariantCulture) },
+                        { Ontology.TagConfidence, confidence.ToString("F3", CultureInfo.InvariantCulture) },
+                        { Ontology.TagWeight, confidence.ToString("F4", CultureInfo.InvariantCulture) },
+                        { Ontology.TagCorroborationCount, "1" },
                         { Ontology.TagAssertedByJob, jobId }
                     }
                 };
@@ -124,6 +154,37 @@ namespace Pneuma.Core.Graph
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Find an existing edge of the given type between two nodes (in that direction), or null. Used to
+        /// consolidate a re-asserted relationship rather than creating a duplicate.
+        /// </summary>
+        private async Task<GraphEdge?> FindExistingEdgeAsync(string fromId, string toId, string edgeType, CancellationToken token)
+        {
+            List<GraphEdge> edges = await _Graph.GetEdgesAsync(fromId, token).ConfigureAwait(false);
+            foreach (GraphEdge edge in edges)
+            {
+                if (String.Equals(edge.FromNodeId, fromId, StringComparison.Ordinal)
+                    && String.Equals(edge.ToNodeId, toId, StringComparison.Ordinal)
+                    && String.Equals(edge.EdgeType, edgeType, StringComparison.Ordinal))
+                {
+                    return edge;
+                }
+            }
+            return null;
+        }
+
+        private static double ReadTagDouble(GraphEdge edge, string key, double fallback)
+        {
+            if (edge.Tags != null && edge.Tags.TryGetValue(key, out string? raw) && Double.TryParse(raw, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out double value)) return value;
+            return fallback;
+        }
+
+        private static int ReadTagInt(GraphEdge edge, string key, int fallback)
+        {
+            if (edge.Tags != null && edge.Tags.TryGetValue(key, out string? raw) && Int32.TryParse(raw, System.Globalization.NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)) return value;
+            return fallback;
+        }
 
         private static GraphNode BuildNode(CandidateNode candidate, string canonical, string tenantId, string subjectId, string jobId, string? sourceNodeId)
         {

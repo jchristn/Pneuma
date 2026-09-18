@@ -203,6 +203,33 @@ class ApiClient {
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
   }
 
+  // ------------------------------------------------------------------
+  // Prompts (global + per-subject)
+  // ------------------------------------------------------------------
+
+  // Global prompt catalog. Returns an array (or enumeration) of { id, key, name, description, content }.
+  async getPrompts(options = {}) {
+    return this._request('GET', '/v1.0/prompts', options);
+  }
+  // Update a global prompt by id. body carries the full prompt (key/description/content).
+  async updatePrompt(id, payload) {
+    return this._request('PUT', `/v1.0/prompts/${encodeURIComponent(id)}`, { body: payload });
+  }
+  // Per-subject prompt catalog: every prompt key with its effective content, the global default,
+  // any subject override, the resolved source ("Global"|"SubjectOverride"), and the override merge mode.
+  async getSubjectPrompts(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts`);
+  }
+  // Set (or clear) a subject-level override for one prompt key. body: { content, mergeMode }.
+  // An empty content clears the override so the subject reverts to the global default.
+  async updateSubjectPrompt(subjectId, key, body) {
+    return this._request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`, { body });
+  }
+  // Remove a subject-level override for one prompt key, reverting to the global default.
+  async deleteSubjectPrompt(subjectId, key) {
+    return this._request('DELETE', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`);
+  }
+
   // Ingestion jobs
   async getJobs({ status, ...options } = {}) {
     return this._request('GET', '/v1.0/jobs', { ...options, query: { status } });

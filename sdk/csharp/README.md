@@ -232,8 +232,9 @@ catch (PneumaException ex)
 The client exposes methods for: health; token validate/details/logout; tenants CRUD; users CRUD;
 credentials create/list/get/delete; roles, permissions, assignments, and audit; subjects CRUD;
 content links (submit/list/get/delete) and ingestion jobs (list/detail/restart); model runners CRUD;
-prompts CRUD; request history (list/summary/get/delete/bulk-delete); knowledge-graph
-node/neighbors/edges; full-text search; grounded query; and server settings (get/update).
+prompts CRUD; per-subject prompt overrides (list/set/delete); request history
+(list/summary/get/delete/bulk-delete); knowledge-graph node/neighbors/edges; full-text search;
+grounded query; and server settings (get/update).
 
 ## Test harness
 

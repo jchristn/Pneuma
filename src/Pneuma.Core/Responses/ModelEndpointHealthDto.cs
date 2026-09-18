@@ -10,7 +10,7 @@ namespace Pneuma.Core.Responses
     /// </summary>
     public class ModelEndpointHealthDto
     {
-        /// <summary>Partio endpoint identifier this status applies to.</summary>
+        /// <summary>endpoint identifier this status applies to.</summary>
         public string EndpointId { get; set; } = String.Empty;
 
         /// <summary>Human-readable endpoint name.</summary>

@@ -6,6 +6,37 @@ between releases, and the project will adopt semantic versioning at its stable 1
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-18
+
+### Removed
+- **Removed Partio; embedding, chunking, summarization, and model-endpoint management are now native.** The
+  external Partio service (`:8400`, chunking/embedding/summarization) has been dropped from the stack
+  entirely. Chunking now runs in-process in the new **`Pneuma.Chunking`** library (cl100k_base and BERT
+  tokenizers), and embedding and summarization run in-process via **PolyPrompt**. Pneuma manages model
+  endpoints natively (the `modelrunners` store and the unchanged `/v1.0/model-runners` routes) instead of
+  proxying them to Partio. The `partio-server` / `partio-dashboard` containers and the Partio integration
+  endpoint in `pneuma.json` are gone.
+
+### Added
+- **All nine PolyPrompt providers for embeddings and completions.** Model endpoints support **OpenAI,
+  OpenAICompatible, Gemini, Ollama, AzureOpenAI, Anthropic (completions only), Bedrock, VoyageAI (embeddings
+  only), and VertexAI**. Model-endpoint create/update now takes a `provider` plus provider-specific fields
+  (`deployment`, `apiVersion`, `region`, `project`, `accessKeyId`) and write-only secrets (`apiKey`,
+  `secretAccessKey`, `sessionToken`, never returned on read).
+- **Per-subject prompt system with operator-selectable merge.** New routes `GET /v1.0/subjects/{id}/prompts`,
+  `PUT /v1.0/subjects/{id}/prompts/{key}`, and `DELETE /v1.0/subjects/{id}/prompts/{key}` let an operator
+  override any keyed prompt per subject with an **Append** or **Replace** merge mode over the global default;
+  a subject with no override falls back to the global prompt.
+- **Provider dropdown in the admin dashboard Model Endpoints UI**, with the provider-specific fields and
+  write-only secret inputs surfaced per selected provider.
+- **New `Pneuma.Chunking` library** — in-process document chunking with cl100k_base and BERT tokenizers,
+  replacing Partio's chunking stage.
+
+### Changed
+- **Schema migrations 19 (model-runner provider fields) and 20 (`subjectprompts`)** apply automatically on
+  startup.
+- **PolyPrompt upgraded to 2.6.0.**
+
 ### Added
 - **Broader MCP write/management surface + facet discovery.** New MCP tools make the platform fully operable by
   an agent, each RBAC-mapped exactly like its REST twin: conversation threads `pneuma_get_thread` /

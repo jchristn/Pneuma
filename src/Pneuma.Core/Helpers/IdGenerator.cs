@@ -76,6 +76,10 @@ namespace Pneuma.Core.Helpers
         /// <returns>Prompt identifier.</returns>
         public static string GeneratePromptId() => Generate(Constants.PromptPrefix);
 
+        /// <summary>Generate a per-subject prompt override identifier.</summary>
+        /// <returns>Subject prompt identifier.</returns>
+        public static string GenerateSubjectPromptId() => Generate(Constants.SubjectPromptPrefix);
+
         /// <summary>Generate a source identifier.</summary>
         /// <returns>Source identifier.</returns>
         public static string GenerateSourceId() => Generate(Constants.SourcePrefix);

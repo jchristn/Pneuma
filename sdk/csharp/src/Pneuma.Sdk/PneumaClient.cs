@@ -546,6 +546,43 @@ namespace Pneuma.Sdk
 
         #endregion
 
+        #region Public-Methods-Subject-Prompts
+
+        /// <summary>List a subject's effective prompts, one per key, showing the global baseline, any
+        /// subject-level override, and the resolved effective content.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The subject's prompts.</returns>
+        public Task<List<SubjectPromptDto>> ListSubjectPromptsAsync(string subjectId, CancellationToken token = default)
+        {
+            return SendAsync<List<SubjectPromptDto>>(HttpMethod.Get, "/v1.0/subjects/" + Escape(subjectId) + "/prompts", null, token);
+        }
+
+        /// <summary>Set (create or update) a subject-level prompt override for a given key.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="key">Prompt key to override.</param>
+        /// <param name="request">The override content and merge mode.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The subject's effective prompt for the key after the update.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<SubjectPromptDto> SetSubjectPromptAsync(string subjectId, string key, SubjectPromptUpdateRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<SubjectPromptDto>(HttpMethod.Put, "/v1.0/subjects/" + Escape(subjectId) + "/prompts/" + Escape(key), request, token);
+        }
+
+        /// <summary>Delete a subject-level prompt override for a given key, reverting the key to the global prompt.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="key">Prompt key whose override to remove.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        public Task DeleteSubjectPromptAsync(string subjectId, string key, CancellationToken token = default)
+        {
+            return SendCoreAsync(HttpMethod.Delete, "/v1.0/subjects/" + Escape(subjectId) + "/prompts/" + Escape(key), null, token);
+        }
+
+        #endregion
+
         #region Public-Methods-History-And-Feedback
 
         /// <summary>List persisted chat turns (newest first), optionally scoped to a subject.</summary>
@@ -622,7 +659,7 @@ namespace Pneuma.Sdk
             return SendAsync<BulkSubmitLinkResponse>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/links/bulk", request, token);
         }
 
-        /// <summary>List the Partio endpoints available for ingestion, grouped by usage.</summary>
+        /// <summary>List the model endpoints available for ingestion, grouped by usage.</summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The available embedding and completion endpoints.</returns>
         public Task<IngestionEndpointsResponse> ListIngestionEndpointsAsync(CancellationToken token = default)
@@ -688,7 +725,7 @@ namespace Pneuma.Sdk
             return SendCoreAsync(HttpMethod.Get, "/v1.0/links/" + Escape(id) + "/atoms", null, token);
         }
 
-        /// <summary>Get a link's stored Partio chunks pipeline artifact as raw JSON.</summary>
+        /// <summary>Get a link's stored chunks pipeline artifact as raw JSON.</summary>
         /// <param name="id">Link identifier.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The chunks artifact as a raw JSON string, or null if empty.</returns>
@@ -698,7 +735,7 @@ namespace Pneuma.Sdk
             return SendCoreAsync(HttpMethod.Get, "/v1.0/links/" + Escape(id) + "/chunks", null, token);
         }
 
-        /// <summary>Get a link's stored Partio embeddings (vectors) pipeline artifact as raw JSON.</summary>
+        /// <summary>Get a link's stored embeddings (vectors) pipeline artifact as raw JSON.</summary>
         /// <param name="id">Link identifier.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The vectors artifact as a raw JSON string, or null if empty.</returns>

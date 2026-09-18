@@ -52,6 +52,9 @@ namespace Pneuma.Core
         /// <summary>Prompt identifier prefix.</summary>
         public const string PromptPrefix = "prm_";
 
+        /// <summary>Per-subject prompt override identifier prefix.</summary>
+        public const string SubjectPromptPrefix = "sp_";
+
         /// <summary>Source identifier prefix.</summary>
         public const string SourcePrefix = "src_";
 

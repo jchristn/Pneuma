@@ -3,8 +3,10 @@ namespace Pneuma.Server.Services
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Caching;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
@@ -42,6 +44,9 @@ namespace Pneuma.Server.Services
         private readonly IngestionJournal _Journal;
         private readonly IngestionStages _Stages;
         private readonly int _StageTimeoutSeconds;
+        private readonly int _MaxAttempts;
+        private readonly int _RetryBackoffBaseMs;
+        private readonly int _RetryBackoffMaxMs;
         private readonly Dictionary<IngestionStageEnum, SemaphoreSlim> _StageGates;
 
         #endregion
@@ -51,7 +56,7 @@ namespace Pneuma.Server.Services
         /// <summary>Instantiate the processor.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="documentAtom">DocumentAtom client.</param>
-        /// <param name="partio">Partio client.</param>
+        /// <param name="processor">Semantic processor (chunk/embed/summarize).</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="vectors">Vector repository (RecallDB) that stores chunk content + embeddings.</param>
         /// <param name="blobs">Blob store.</param>
@@ -65,7 +70,7 @@ namespace Pneuma.Server.Services
         public IngestionProcessor(
             DatabaseDriverBase db,
             IAtomizer documentAtom,
-            IPartioClient partio,
+            ISemanticProcessor processor,
             IGraphRepositoryFactory graphFactory,
             IVectorRepository vectors,
             IBlobStore blobs,
@@ -86,10 +91,15 @@ namespace Pneuma.Server.Services
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (retrieval == null) throw new ArgumentNullException(nameof(retrieval));
             _StageTimeoutSeconds = settings.StageTimeoutSeconds;
+            _MaxAttempts = settings.MaxAttempts;
+            _RetryBackoffBaseMs = settings.RetryBackoffBaseMs;
+            _RetryBackoffMaxMs = settings.RetryBackoffMaxMs;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _Journal = new IngestionJournal(db, logging);
-            _Stages = new IngestionStages(db, partio, graphFactory, vectors, artifacts, _Journal, logging);
+            // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
+            EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
+            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, logging);
             _StageGates = BuildStageGates(settings.StageConcurrency);
         }
 
@@ -130,47 +140,71 @@ namespace Pneuma.Server.Services
                 jobSpan?.SetTag("pneuma.source.url", job.SourceUrl);
                 PneumaMetrics.RecordIngestionJob("started");
 
-                try
-                {
-                    await _Journal.RecordEventAsync(job, IngestionStageEnum.Pending, IngestionStatusEnum.Processing,
-                        "Ingestion started for " + job.SourceUrl + ".", 0, token).ConfigureAwait(false);
+                await _Journal.RecordEventAsync(job, IngestionStageEnum.Pending, IngestionStatusEnum.Processing,
+                    "Ingestion started for " + job.SourceUrl + ".", 0, token).ConfigureAwait(false);
 
-                    // Stage 1 — Categorization: fetch, atomize, and classify into a candidate plan.
-                    CategorizationResult? categorization = await CategorizeAsync(job, jobSpan, token).ConfigureAwait(false);
-                    if (categorization == null) return; // a categorization failure was already recorded
+                // Each claim gets up to MaxAttempts inline attempts: a transient failure (a stage timeout or an
+                // exception from a subordinate service) is retried after an exponential backoff rather than
+                // failing the job outright. Deterministic hard fails (unknown type, no cells, unchanged content)
+                // return a null categorization and are never retried; an operator "Stop" and server shutdown are
+                // handled distinctly and never retried.
+                int attempt = 0;
+                while (true)
+                {
+                    attempt++;
 
-                    // Stage 2 — Hydration: commit the (auto-approved) candidate plan. There is no manual
-                    // approval gate; categorization flows straight into hydration.
-                    await HydrateAsync(job, categorization, token).ConfigureAwait(false);
-                    jobSpan?.SetOk(null);
-                }
-                catch (JobCancelledException)
-                {
-                    // Operator pressed "Stop": the job is already marked Cancelled; record it and finish cleanly.
-                    _Logging.Info("[IngestionProcessor] job " + job.Id + " cancelled by operator.");
-                    PneumaMetrics.RecordIngestionJob("cancelled");
-                    jobSpan?.SetError("Cancelled by operator.");
-                    await _Journal.RecordEventAsync(job, job.Stage, IngestionStatusEnum.Cancelled, "Ingestion stopped by operator.", 0, token).ConfigureAwait(false);
-                    await _Journal.UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, "Cancelled by operator.", token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (token.IsCancellationRequested)
-                {
-                    // Server shutdown — let the worker observe cancellation without marking the job failed.
-                    throw;
-                }
-                catch (OperationCanceledException)
-                {
-                    string message = "Stage '" + job.Stage + "' timed out after " + _StageTimeoutSeconds + " seconds.";
-                    _Logging.Warn("[IngestionProcessor] job " + job.Id + " " + message);
-                    jobSpan?.SetError(message);
-                    await _Journal.FailAsync(job, job.Stage, message, token).ConfigureAwait(false);
-                }
-                catch (Exception e)
-                {
-                    _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed: " + e.Message);
-                    jobSpan?.RecordException(e, true);
-                    jobSpan?.SetError(e.Message);
-                    await _Journal.FailAsync(job, job.Stage, e.Message, token).ConfigureAwait(false);
+                    // A fresh attempt records its own stage events, so clear any in-place failure marker left by
+                    // a contended stage on the previous attempt.
+                    job.StageFailureRecorded = false;
+
+                    try
+                    {
+                        // Stage 1 — Categorization: fetch, atomize, and classify into a candidate plan.
+                        CategorizationResult? categorization = await CategorizeAsync(job, jobSpan, token).ConfigureAwait(false);
+                        if (categorization == null) return; // a hard fail (or delta skip) was already recorded
+
+                        // Stage 2 — Hydration: commit the (auto-approved) candidate plan. There is no manual
+                        // approval gate; categorization flows straight into hydration.
+                        await HydrateAsync(job, categorization, token).ConfigureAwait(false);
+                        jobSpan?.SetOk(null);
+                        return;
+                    }
+                    catch (JobCancelledException)
+                    {
+                        // Operator pressed "Stop": the job is already marked Cancelled; record it and finish cleanly.
+                        _Logging.Info("[IngestionProcessor] job " + job.Id + " cancelled by operator.");
+                        PneumaMetrics.RecordIngestionJob("cancelled");
+                        jobSpan?.SetError("Cancelled by operator.");
+                        await _Journal.RecordEventAsync(job, job.Stage, IngestionStatusEnum.Cancelled, "Ingestion stopped by operator.", 0, token).ConfigureAwait(false);
+                        await _Journal.UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, "Cancelled by operator.", token).ConfigureAwait(false);
+                        return;
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        // Server shutdown — let the worker observe cancellation without marking the job failed.
+                        throw;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // A per-stage timeout is treated as transient and retried.
+                        string message = "Stage '" + job.Stage + "' timed out after " + _StageTimeoutSeconds + " seconds.";
+                        if (await TryScheduleRetryAsync(job, attempt, message, token).ConfigureAwait(false)) continue;
+                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " " + message);
+                        jobSpan?.SetError(message);
+                        await _Journal.FailAsync(job, job.Stage, message, token).ConfigureAwait(false);
+                        return;
+                    }
+                    catch (Exception e)
+                    {
+                        // Server shutdown surfacing as a generic exception must not mark the job failed.
+                        if (token.IsCancellationRequested) throw;
+                        if (await TryScheduleRetryAsync(job, attempt, e.Message, token).ConfigureAwait(false)) continue;
+                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed: " + e.Message);
+                        jobSpan?.RecordException(e, true);
+                        jobSpan?.SetError(e.Message);
+                        await _Journal.FailAsync(job, job.Stage, e.Message, token).ConfigureAwait(false);
+                        return;
+                    }
                 }
             }
         }
@@ -186,6 +220,25 @@ namespace Pneuma.Server.Services
                 result => "Content retrieval complete — fetched " + result.Length + " byte(s) from " + job.SourceUrl + ".",
                 token).ConfigureAwait(false);
             await _Journal.TryStoreAsync("source", () => _Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
+
+            // Delta detection: hash the fetched bytes and, if they are identical to what the link last ingested
+            // successfully, skip the expensive type-detect / extract / classify / merge / embed / index work and
+            // complete immediately. Re-processing identical content is deterministic, so skipping is safe and
+            // saves the LLM + embedding cost. A previously-failed link has no stored hash and always re-processes.
+            string contentHash = ComputeContentHash(data);
+            SubjectLink? existingLink = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
+            if (existingLink != null
+                && existingLink.Status == SubjectLinkStatusEnum.Ingested
+                && !String.IsNullOrEmpty(existingLink.ContentHash)
+                && String.Equals(existingLink.ContentHash, contentHash, StringComparison.Ordinal))
+            {
+                await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
+                    "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
+                    0, token).ConfigureAwait(false);
+                await _Journal.CompleteAsync(job, token, contentHash).ConfigureAwait(false);
+                jobSpan?.SetOk(null);
+                return null;
+            }
 
             TypeDetectResult detected = await RunStageAsync(job, IngestionStageEnum.TypeDetection,
                 stageToken => _DocumentAtom.DetectTypeAsync(data, stageToken),
@@ -231,7 +284,7 @@ namespace Pneuma.Server.Services
                 " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + provenance + ".",
                 0, token).ConfigureAwait(false);
 
-            return new CategorizationResult { Cells = cells, Subgraph = subgraph };
+            return new CategorizationResult { Cells = cells, Subgraph = subgraph, ContentHash = contentHash };
         }
 
         private async Task HydrateAsync(IngestionJob job, CategorizationResult categorization, CancellationToken token)
@@ -253,12 +306,12 @@ namespace Pneuma.Server.Services
                 result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
                 token).ConfigureAwait(false);
 
-            List<PartioChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
+            List<SemanticChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
                 stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, merge.CellNodeIds, summaries, stageToken),
                 result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
                 token).ConfigureAwait(false);
 
-            List<PartioChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
+            List<SemanticChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
                 stageToken => _Stages.EmbedChunksAsync(job, chunks, stageToken),
                 result => "Embedding complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
                 token).ConfigureAwait(false);
@@ -275,12 +328,67 @@ namespace Pneuma.Server.Services
                 "Hydration complete — knowledge graph and search index updated.",
                 0, token).ConfigureAwait(false);
 
-            await _Journal.CompleteAsync(job, token).ConfigureAwait(false);
+            await _Journal.CompleteAsync(job, token, categorization.ContentHash).ConfigureAwait(false);
+        }
+
+        /// <summary>Compute the hex SHA-256 of the fetched source bytes, used for re-ingestion delta detection.</summary>
+        /// <param name="data">The fetched source bytes.</param>
+        /// <returns>A lowercase hex SHA-256 string.</returns>
+        private static string ComputeContentHash(byte[] data)
+        {
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(data ?? Array.Empty<byte>());
+                System.Text.StringBuilder builder = new System.Text.StringBuilder(hash.Length * 2);
+                for (int i = 0; i < hash.Length; i++) builder.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+                return builder.ToString();
+            }
         }
 
         private async Task<byte[]> DownloadAsync(IngestionJob job, CancellationToken token)
         {
             return await _Fetcher.FetchAsync(job.SourceUrl, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Decide whether a transiently-failed attempt should be retried and, if so, back off before the next
+        /// one. Returns true when the caller should retry (having waited the backoff), false when attempts are
+        /// exhausted and the job should fail. Bumps the persisted attempt count and records a "retrying" event
+        /// so the contention is visible in the follow-logs. Propagates cancellation on server shutdown.
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <param name="attempt">The 1-based attempt number that just failed.</param>
+        /// <param name="reason">The failure reason to surface in the retry event.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True to retry; false to give up.</returns>
+        private async Task<bool> TryScheduleRetryAsync(IngestionJob job, int attempt, string reason, CancellationToken token)
+        {
+            if (attempt >= _MaxAttempts) return false;
+
+            int delayMs = ComputeBackoffMs(attempt);
+            job.AttemptCount = job.AttemptCount + 1;
+            await _Journal.UpdateJobAsync(job, token).ConfigureAwait(false);
+            await _Journal.RecordEventAsync(job, job.Stage, IngestionStatusEnum.Processing,
+                "Attempt " + attempt.ToString(CultureInfo.InvariantCulture) + " of " + _MaxAttempts.ToString(CultureInfo.InvariantCulture) +
+                " failed (" + reason + "); retrying in " + (delayMs / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "s.",
+                0, token).ConfigureAwait(false);
+
+            // Any in-place failure marker from a contended stage on this attempt is cleared at the top of the
+            // next loop iteration; the backoff delay observes shutdown by throwing (handled by the caller).
+            if (delayMs > 0) await Task.Delay(delayMs, token).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <summary>Exponential backoff for the given attempt: base·2^(attempt-1), capped at the configured maximum.</summary>
+        /// <param name="attempt">The 1-based attempt number that just failed.</param>
+        /// <returns>The backoff delay in milliseconds.</returns>
+        private int ComputeBackoffMs(int attempt)
+        {
+            if (_RetryBackoffBaseMs <= 0) return 0;
+            double scaled = _RetryBackoffBaseMs * Math.Pow(2, attempt - 1);
+            if (scaled > _RetryBackoffMaxMs) scaled = _RetryBackoffMaxMs;
+            if (scaled > Int32.MaxValue) scaled = Int32.MaxValue;
+            return (int)scaled;
         }
 
         private async Task<T> RunStageAsync<T>(

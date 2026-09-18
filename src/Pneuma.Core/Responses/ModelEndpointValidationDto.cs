@@ -13,7 +13,7 @@ namespace Pneuma.Core.Responses
     {
         #region Public-Members
 
-        /// <summary>Partio endpoint identifier that was validated.</summary>
+        /// <summary>endpoint identifier that was validated.</summary>
         public string EndpointId { get; set; } = String.Empty;
 
         /// <summary>Human-readable endpoint name.</summary>

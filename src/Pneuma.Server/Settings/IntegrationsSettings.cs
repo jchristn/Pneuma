@@ -8,9 +8,6 @@ namespace Pneuma.Server.Settings
         /// <summary>DocumentAtom settings.</summary>
         public DocumentAtomSettings DocumentAtom { get; set; } = new DocumentAtomSettings();
 
-        /// <summary>Partio settings.</summary>
-        public PartioSettings Partio { get; set; } = new PartioSettings();
-
         /// <summary>RecallDB settings (retrieval store: vector + full-text search).</summary>
         public RecallDbSettings RecallDb { get; set; } = new RecallDbSettings();
 

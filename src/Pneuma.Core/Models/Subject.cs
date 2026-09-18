@@ -85,25 +85,32 @@ namespace Pneuma.Core.Models
         public string? OntologyDefinitionPrompt { get; set; } = null;
 
         /// <summary>
-        /// Partio embedding endpoint id used to vectorize this subject's content at ingestion and to embed
+        /// embedding endpoint id used to vectorize this subject's content at ingestion and to embed
         /// queries when answering about it. Required before links can be ingested or questions answered.
         /// </summary>
         public string? EmbeddingModel { get; set; } = null;
 
         /// <summary>
-        /// Partio completion endpoint id used for this subject's inference (ingestion classification/
+        /// completion endpoint id used for this subject's inference (ingestion classification/
         /// summarization and answer generation). Required before links can be ingested or questions answered.
         /// </summary>
         public string? InferenceModel { get; set; } = null;
 
         /// <summary>
-        /// Optional Partio completion endpoint id used to re-rank retrieved passages by relevance before
+        /// Optional completion endpoint id used to re-rank retrieved passages by relevance before
         /// answering. Null disables the reranking step.
         /// </summary>
         public string? RerankingModel { get; set; } = null;
 
         /// <summary>
-        /// Optional Partio completion endpoint id used to rewrite the user's question into a retrieval query
+        /// Which reranking strategy this subject uses: LLM listwise (via <see cref="RerankingModel"/>, the
+        /// default) or a dedicated cross-encoder rerank endpoint (configured globally). When set to
+        /// cross-encoder but none is configured, reranking falls back to the LLM listwise path.
+        /// </summary>
+        public RerankerTypeEnum RerankerType { get; set; } = RerankerTypeEnum.LlmListwise;
+
+        /// <summary>
+        /// Optional completion endpoint id used to rewrite the user's question into a retrieval query
         /// before searching. Null disables the prompt-rewrite step.
         /// </summary>
         public string? PromptRewriteModel { get; set; } = null;
@@ -113,6 +120,26 @@ namespace Pneuma.Core.Models
         /// dimensionality must match <see cref="EmbeddingModel"/>. Required before links can be ingested.
         /// </summary>
         public string? Collection { get; set; } = null;
+
+        /// <summary>
+        /// Chunking strategy for this subject's ingested content (e.g. "FixedTokenCount"). Null uses the
+        /// platform default. Lets short-form and long-form subjects chunk differently.
+        /// </summary>
+        public string? ChunkStrategy { get; set; } = null;
+
+        /// <summary>Target chunk size in tokens for this subject's ingestion. Clamped to [16, 8192]. Default 256.</summary>
+        public int ChunkMaxTokens
+        {
+            get { return _ChunkMaxTokens; }
+            set { _ChunkMaxTokens = Math.Clamp(value, 16, 8192); }
+        }
+
+        /// <summary>Overlap between adjacent chunks in tokens for this subject's ingestion. Clamped to [0, 4096]. Default 32.</summary>
+        public int ChunkOverlapTokens
+        {
+            get { return _ChunkOverlapTokens; }
+            set { _ChunkOverlapTokens = Math.Clamp(value, 0, 4096); }
+        }
 
         /// <summary>Default <see cref="RerankingPrompt"/>, applied at creation when none is supplied.</summary>
         public const string DefaultRerankingPrompt = "Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.";
@@ -155,6 +182,14 @@ namespace Pneuma.Core.Models
         /// <summary>Whether the subject archive is enabled.</summary>
         public bool Active { get; set; } = true;
 
+        /// <summary>
+        /// Whether this subject is published to the end-user (consumer) chat experience. When false, the subject
+        /// is hidden from the consumer dashboard's subject list and its ask page is unavailable, so an operator
+        /// can review a freshly-built archive before exposing it. Operator dashboards always see it regardless.
+        /// Default true, so existing subjects remain visible without any action.
+        /// </summary>
+        public bool PublishedForChat { get; set; } = true;
+
         /// <summary>Whether the subject is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 
@@ -172,6 +207,8 @@ namespace Pneuma.Core.Models
         private string _TenantId = String.Empty;
         private string _DisplayName = String.Empty;
         private int _HistoryRetentionDays = 90;
+        private int _ChunkMaxTokens = 256;
+        private int _ChunkOverlapTokens = 32;
 
         #endregion
     }

@@ -72,6 +72,7 @@ namespace Pneuma.Core.Database.Sqlite
             IngestionJobEvents = new IngestionJobEventMethods(this);
             ModelRunners = new ModelRunnerMethods(this);
             Prompts = new PromptMethods(this);
+            SubjectPrompts = new SubjectPromptMethods(this);
             ChatTurns = new ChatTurnMethods(this);
             ChatFeedback = new ChatFeedbackMethods(this);
             ChatTurnPerfEvents = new ChatTurnPerfEventMethods(this);

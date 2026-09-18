@@ -209,6 +209,31 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<GraphEdge> UpdateEdgeAsync(GraphEdge edge, CancellationToken token = default)
+        {
+            if (edge == null) throw new ArgumentNullException(nameof(edge));
+            if (String.IsNullOrWhiteSpace(edge.Id)) throw new ArgumentException("Edge id is required for an update.", nameof(edge));
+            string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
+
+            object requestBody = new
+            {
+                GUID = edge.Id,
+                From = edge.FromNodeId,
+                To = edge.ToNodeId,
+                Name = ClampField(edge.EdgeType, _MaxNameLength),
+                Cost = 1,
+                Labels = new List<string> { ClampField(edge.EdgeType, _MaxLabelLength) ?? String.Empty },
+                Tags = ClampTagKeys(edge.Tags)
+            };
+
+            await SendAsync(HttpMethod.Put,
+                _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/edges/" + edge.Id,
+                JsonSerializer.Serialize(requestBody, _RequestJson), token, isWrite: true).ConfigureAwait(false);
+
+            return edge;
+        }
+
+        /// <inheritdoc />
         public async Task<GraphNode?> ReadNodeAsync(string nodeId, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(nodeId)) throw new ArgumentNullException(nameof(nodeId));
@@ -363,6 +388,99 @@ namespace Pneuma.Core.Integrations.Implementations
             }
 
             return edges;
+        }
+
+        /// <inheritdoc />
+        public async Task<GraphSubgraph> GetSubgraphAsync(string nodeId, int maxDepth, int maxNodes, int maxEdges, CancellationToken token = default)
+        {
+            GraphSubgraph subgraph = new GraphSubgraph();
+            if (String.IsNullOrWhiteSpace(nodeId)) return subgraph;
+            try
+            {
+                string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
+                string url = _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/nodes/" + nodeId + "/subgraph"
+                    + "?maxDepth=" + maxDepth.ToString() + "&maxNodes=" + maxNodes.ToString() + "&maxEdges=" + maxEdges.ToString() + "&incldata=true";
+                string body = await SendAsync(HttpMethod.Get, url, null, token).ConfigureAwait(false);
+
+                using (JsonDocument doc = JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
+                {
+                    JsonElement nodeArray = FindNodeArray(doc.RootElement);
+                    if (nodeArray.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement item in nodeArray.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Object) subgraph.Nodes.Add(MapNode(item));
+                        }
+                    }
+                    JsonElement edgeArray = FindEdgeArray(doc.RootElement);
+                    if (edgeArray.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement item in edgeArray.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Object) subgraph.Edges.Add(MapEdge(item));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return new GraphSubgraph();
+            }
+            return subgraph;
+        }
+
+        /// <inheritdoc />
+        public async Task<CommunityDetectionResult> DetectCommunitiesAsync(bool writeBack, int maxIterations, CancellationToken token = default)
+        {
+            CommunityDetectionResult result = new CommunityDetectionResult();
+            try
+            {
+                string graph = await EnsureGraphAsync(token).ConfigureAwait(false);
+                object requestBody = new
+                {
+                    AlgorithmType = "Louvain",
+                    WriteBack = writeBack,
+                    MaxIterations = maxIterations < 1 ? 100 : maxIterations
+                };
+                string body = await SendAsync(HttpMethod.Post,
+                    _BaseUrl + "/v1.0/tenants/" + _TenantGuid + "/graphs/" + graph + "/algorithms",
+                    JsonSerializer.Serialize(requestBody, _RequestJson), token, isWrite: writeBack).ConfigureAwait(false);
+
+                using (JsonDocument doc = JsonDocument.Parse(String.IsNullOrWhiteSpace(body) ? "{}" : body))
+                {
+                    JsonElement root = doc.RootElement;
+                    result.CommunityCount = GetIntProperty(root, "CommunityCount", "communityCount") ?? 0;
+                    if (TryGetProperty(root, out JsonElement nodes, "Nodes", "nodes") && nodes.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement item in nodes.EnumerateArray())
+                        {
+                            if (item.ValueKind != JsonValueKind.Object) continue;
+                            string? id = GetStringProperty(item, "NodeGUID", "NodeGuid", "nodeGuid", "GUID", "guid");
+                            if (String.IsNullOrEmpty(id)) continue;
+                            long? community = GetLongProperty(item, "Community", "community");
+                            if (community == null) continue;
+                            result.Nodes.Add(new NodeCommunity
+                            {
+                                NodeId = id!,
+                                Name = GetStringProperty(item, "Name", "name") ?? String.Empty,
+                                Community = community.Value
+                            });
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return new CommunityDetectionResult();
+            }
+            return result;
+        }
+
+        /// <inheritdoc />
+        public Task DeleteNodeAsync(string nodeId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(nodeId)) return Task.CompletedTask;
+            return DeleteResourceAsync("nodes", nodeId, token);
         }
 
         /// <inheritdoc />
@@ -644,6 +762,24 @@ namespace Pneuma.Core.Integrations.Implementations
             if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.String)
             {
                 return value.GetString();
+            }
+            return null;
+        }
+
+        private static int? GetIntProperty(JsonElement element, params string[] names)
+        {
+            if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed))
+            {
+                return parsed;
+            }
+            return null;
+        }
+
+        private static long? GetLongProperty(JsonElement element, params string[] names)
+        {
+            if (TryGetProperty(element, out JsonElement value, names) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long parsed))
+            {
+                return parsed;
             }
             return null;
         }

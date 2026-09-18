@@ -429,7 +429,13 @@ export class PneumaClient {
     }
 
     /**
-     * List the Partio endpoints available for ingestion, grouped by usage.
+     * List the model endpoints available for ingestion, grouped by usage.
+     * Each entry has `id`, `type` ("Embedding" | "Completion"), `name`, `model`,
+     * `endpoint`, `apiFormat`, `provider` (OpenAI | OpenAICompatible | Gemini |
+     * Ollama | AzureOpenAI | Anthropic | Bedrock | VoyageAI | VertexAI),
+     * `deployment`, `apiVersion`, `region`, `project`, `accessKeyId` and `active`.
+     * Secret material (`apiKey`, `secretAccessKey`, `sessionToken`) is write-only
+     * and never returned.
      * @returns {Promise<{ embedding: object[], completion: object[] }>}
      */
     listIngestionEndpoints() {
@@ -478,7 +484,7 @@ export class PneumaClient {
     }
 
     /**
-     * Get a link's stored Partio chunks pipeline artifact.
+     * Get a link's stored chunks pipeline artifact.
      * Rejects with a 404 error if that stage hasn't produced output yet.
      * @param {string} id @returns {Promise<object>}
      */
@@ -487,7 +493,7 @@ export class PneumaClient {
     }
 
     /**
-     * Get a link's stored Partio embeddings (vectors) pipeline artifact.
+     * Get a link's stored embeddings (vectors) pipeline artifact.
      * Rejects with a 404 error if that stage hasn't produced output yet.
      * @param {string} id @returns {Promise<object>}
      */
@@ -568,7 +574,15 @@ export class PneumaClient {
         return this.request('GET', '/v1.0/model-runners', { query: options });
     }
 
-    /** @param {object} runner CreateModelRunnerRequest @returns {Promise<object>} */
+    /**
+     * Create a model runner. `runner` accepts `name`, `provider` (OpenAI |
+     * OpenAICompatible | Gemini | Ollama | AzureOpenAI | Anthropic | Bedrock |
+     * VoyageAI | VertexAI), `endpoint`, `apiFormat`, `deployment`, `apiVersion`,
+     * `region`, `project`, `accessKeyId` and `active`. Secret material (`apiKey`,
+     * `secretAccessKey`, `sessionToken`) is write-only: it may be sent here but is
+     * never returned on reads.
+     * @param {object} runner @returns {Promise<object>}
+     */
     createModelRunner(runner) {
         return this.request('POST', '/v1.0/model-runners', { body: runner });
     }
@@ -617,6 +631,47 @@ export class PneumaClient {
     /** @param {string} id @returns {Promise<null>} */
     deletePrompt(id) {
         return this.request('DELETE', `/v1.0/prompts/${encodeURIComponent(id)}`);
+    }
+
+    // ==================== Subject Prompts ====================
+
+    /**
+     * List a subject's effective prompts, one per key. Each entry has `key`, `name`,
+     * `effectiveContent`, `globalContent`, `overrideContent` (may be null), `source`
+     * ("Global" | "SubjectOverride"), and `mergeMode` ("Append" | "Replace").
+     * @param {string} subjectId
+     * @returns {Promise<object[]>}
+     */
+    listSubjectPrompts(subjectId) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts`);
+    }
+
+    /**
+     * Set (create or update) a subject-level prompt override for a given key.
+     * @param {string} subjectId
+     * @param {string} key - The prompt key to override.
+     * @param {{ content: string, mergeMode?: ('Append'|'Replace') }} override
+     * @returns {Promise<object>} The subject's effective prompt for the key after the update.
+     */
+    setSubjectPrompt(subjectId, key, { content, mergeMode = 'Append' } = {}) {
+        return this.request(
+            'PUT',
+            `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`,
+            { body: { content, mergeMode } }
+        );
+    }
+
+    /**
+     * Delete a subject-level prompt override for a given key, reverting it to the global prompt.
+     * @param {string} subjectId
+     * @param {string} key
+     * @returns {Promise<null>}
+     */
+    deleteSubjectPrompt(subjectId, key) {
+        return this.request(
+            'DELETE',
+            `/v1.0/subjects/${encodeURIComponent(subjectId)}/prompts/${encodeURIComponent(key)}`
+        );
     }
 
     // ==================== Request History ====================

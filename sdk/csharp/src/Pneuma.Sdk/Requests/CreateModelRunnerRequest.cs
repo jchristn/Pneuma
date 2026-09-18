@@ -22,8 +22,29 @@ namespace Pneuma.Sdk.Requests
         /// <summary>Optional API type hint.</summary>
         public string? ApiType { get; set; } = null;
 
-        /// <summary>Plaintext API key (encrypted server-side; never returned).</summary>
+        /// <summary>Azure OpenAI deployment name (Azure OpenAI only).</summary>
+        public string? Deployment { get; set; } = null;
+
+        /// <summary>API version (for example the Azure OpenAI api-version).</summary>
+        public string? ApiVersion { get; set; } = null;
+
+        /// <summary>Region (for example Bedrock or Vertex AI).</summary>
+        public string? Region { get; set; } = null;
+
+        /// <summary>Project identifier (Vertex AI).</summary>
+        public string? Project { get; set; } = null;
+
+        /// <summary>Access key identifier (Bedrock).</summary>
+        public string? AccessKeyId { get; set; } = null;
+
+        /// <summary>Plaintext API key (write-only; encrypted server-side and never returned).</summary>
         public string? ApiKey { get; set; } = null;
+
+        /// <summary>Secret access key (Bedrock; write-only, encrypted server-side and never returned).</summary>
+        public string? SecretAccessKey { get; set; } = null;
+
+        /// <summary>Session token (Bedrock; write-only, encrypted server-side and never returned).</summary>
+        public string? SessionToken { get; set; } = null;
 
         /// <summary>Capabilities exposed by the runner.</summary>
         public List<ModelCapabilityEnum> Capabilities { get; set; } = new List<ModelCapabilityEnum>();

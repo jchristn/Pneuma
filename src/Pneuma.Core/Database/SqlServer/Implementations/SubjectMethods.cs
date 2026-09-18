@@ -23,17 +23,17 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, promptrewritemodel, collection, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
                 Sanitizer.Str(subject.UrlSlug) + ", " + Sanitizer.Bit(subject.ThinkingEnabled) + ", " +
                 Sanitizer.Str(subject.SystemPrompt) + ", " + Sanitizer.Str(subject.OntologyClassifyPrompt) + ", " +
                 Sanitizer.Str(subject.OntologyDefinitionPrompt) + ", " +
-                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
+                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.RerankerType.ToString()) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.ChunkStrategy) + ", " + Sanitizer.Num(subject.ChunkMaxTokens) + ", " + Sanitizer.Num(subject.ChunkOverlapTokens) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
                 Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
                 Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
-                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
+                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
                 Sanitizer.Ts(subject.CreatedUtc) + ", " + Sanitizer.Ts(subject.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return subject;
@@ -109,14 +109,19 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ", embeddingmodel = " + Sanitizer.Str(subject.EmbeddingModel) +
                 ", inferencemodel = " + Sanitizer.Str(subject.InferenceModel) +
                 ", rerankingmodel = " + Sanitizer.Str(subject.RerankingModel) +
+                ", rerankertype = " + Sanitizer.Str(subject.RerankerType.ToString()) +
                 ", promptrewritemodel = " + Sanitizer.Str(subject.PromptRewriteModel) +
                 ", collection = " + Sanitizer.Str(subject.Collection) +
+                ", chunkstrategy = " + Sanitizer.Str(subject.ChunkStrategy) +
+                ", chunkmaxtokens = " + Sanitizer.Num(subject.ChunkMaxTokens) +
+                ", chunkoverlaptokens = " + Sanitizer.Num(subject.ChunkOverlapTokens) +
                 ", rerankingprompt = " + Sanitizer.Str(subject.RerankingPrompt) +
                 ", promptrewriteprompt = " + Sanitizer.Str(subject.PromptRewritePrompt) +
                 ", retrievalfilterjson = " + Sanitizer.Str(subject.RetrievalFilterJson) +
                 ", historyretentiondays = " + Sanitizer.Num(subject.HistoryRetentionDays) +
                 ", deletionstatus = " + Sanitizer.Str(subject.DeletionStatus.ToString()) +
                 ", active = " + Sanitizer.Bit(subject.Active) +
+                ", publishedforchat = " + Sanitizer.Bit(subject.PublishedForChat) +
                 ", isprotected = " + Sanitizer.Bit(subject.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(subject.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(subject.TenantId) + " AND id = " + Sanitizer.Str(subject.Id) + ";";
@@ -188,14 +193,19 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 EmbeddingModel = RowReader.GetNullableString(row, "embeddingmodel"),
                 InferenceModel = RowReader.GetNullableString(row, "inferencemodel"),
                 RerankingModel = RowReader.GetNullableString(row, "rerankingmodel"),
+                RerankerType = RowReader.GetEnum<RerankerTypeEnum>(row, "rerankertype", RerankerTypeEnum.LlmListwise),
                 PromptRewriteModel = RowReader.GetNullableString(row, "promptrewritemodel"),
                 Collection = RowReader.GetNullableString(row, "collection"),
+                ChunkStrategy = RowReader.GetNullableString(row, "chunkstrategy"),
+                ChunkMaxTokens = RowReader.GetInt(row, "chunkmaxtokens"),
+                ChunkOverlapTokens = RowReader.GetInt(row, "chunkoverlaptokens"),
                 RerankingPrompt = RowReader.GetNullableString(row, "rerankingprompt"),
                 PromptRewritePrompt = RowReader.GetNullableString(row, "promptrewriteprompt"),
                 RetrievalFilterJson = RowReader.GetNullableString(row, "retrievalfilterjson"),
                 HistoryRetentionDays = RowReader.GetInt(row, "historyretentiondays"),
                 DeletionStatus = RowReader.GetEnum<SubjectDeletionStatusEnum>(row, "deletionstatus", SubjectDeletionStatusEnum.None),
                 Active = RowReader.GetBool(row, "active"),
+                PublishedForChat = RowReader.GetBool(row, "publishedforchat"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")

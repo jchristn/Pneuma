@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>1701;1702;CS1591</NoWarn>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Joel Christner</Authors>
     <Description>Pneuma (Pneuma - information brought to life) core library: models, data layer, security, graph, and ingestion.</Description>
     <IncludeSymbols>true</IncludeSymbols>
@@ -25,11 +25,15 @@
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
-    <PackageReference Include="PolyPrompt" Version="2.2.0" />
+    <PackageReference Include="PolyPrompt" Version="2.6.0" />
     <PackageReference Include="PrettyId" Version="2.0.1" />
     <PackageReference Include="RestWrapper" Version="3.2.0" />
     <PackageReference Include="SyslogLogging" Version="2.2.1" />
     <PackageReference Include="Timestamps" Version="1.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pneuma.Chunking\Pneuma.Chunking.csproj" />
   </ItemGroup>
 
 </Project>

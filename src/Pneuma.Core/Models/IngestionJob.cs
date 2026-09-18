@@ -86,10 +86,10 @@ namespace Pneuma.Core.Models
         /// <summary>BLOB storage key of the persisted raw artifact.</summary>
         public string? BlobKey { get; set; } = null;
 
-        /// <summary>Chosen Partio embedding endpoint identifier (e.g. "default"); null to resolve server-side.</summary>
+        /// <summary>Chosen embedding endpoint identifier; null to resolve server-side.</summary>
         public string? EmbeddingEndpointId { get; set; } = null;
 
-        /// <summary>Chosen Partio completion endpoint identifier (e.g. "default"); null to resolve server-side.</summary>
+        /// <summary>Chosen completion endpoint identifier; null to resolve server-side.</summary>
         public string? CompletionEndpointId { get; set; } = null;
 
         /// <summary>RecallDB collection identifier the ingested chunks are stored in and searched from.</summary>

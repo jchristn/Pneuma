@@ -11,6 +11,9 @@ namespace Pneuma.Core.Responses
         /// <summary>The query that was executed.</summary>
         public string Query { get; set; } = String.Empty;
 
+        /// <summary>The retrieval mode used ("FullText", "Vector", or "Hybrid").</summary>
+        public string Mode { get; set; } = "Hybrid";
+
         /// <summary>Representative node results, most relevant first.</summary>
         public List<SearchNodeResult> Results { get; set; } = new List<SearchNodeResult>();
     }

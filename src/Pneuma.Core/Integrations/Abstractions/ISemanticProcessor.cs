@@ -9,7 +9,7 @@ namespace Pneuma.Core.Integrations.Abstractions
     /// Provider-neutral semantic processor. <see cref="ProcessAsync"/> rolls chunking, embedding, and
     /// summarization into one call; <see cref="SummarizeAsync"/>, <see cref="ChunkAsync"/>, and
     /// <see cref="EmbedAsync"/> expose the same operations as discrete steps so a pipeline can run and time
-    /// each independently. Backed today by Partio.
+    /// each independently.
     /// </summary>
     public interface ISemanticProcessor
     {
@@ -23,9 +23,10 @@ namespace Pneuma.Core.Integrations.Abstractions
 
         /// <summary>Chunk a cell of text into text chunks, without embedding them.</summary>
         /// <param name="text">Cell text.</param>
+        /// <param name="options">Optional chunking configuration (strategy, size, overlap); backend defaults when null.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The produced chunks (no embeddings).</returns>
-        Task<List<PartioChunk>> ChunkAsync(string text, CancellationToken token = default);
+        Task<List<SemanticChunk>> ChunkAsync(string text, ChunkingOptions? options = null, CancellationToken token = default);
 
         /// <summary>Embed a batch of texts, returning one vector per input in the same order.</summary>
         /// <param name="texts">Texts to embed.</param>
@@ -45,6 +46,6 @@ namespace Pneuma.Core.Integrations.Abstractions
         /// <param name="completionEndpointId">Optional completion endpoint id; when null the endpoint is resolved server-side.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The process result.</returns>
-        Task<PartioProcessResult> ProcessAsync(string text, bool summarize, string? summarizationPrompt = null, string? embeddingEndpointId = null, string? completionEndpointId = null, CancellationToken token = default);
+        Task<SemanticProcessResult> ProcessAsync(string text, bool summarize, string? summarizationPrompt = null, string? embeddingEndpointId = null, string? completionEndpointId = null, CancellationToken token = default);
     }
 }

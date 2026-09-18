@@ -5,6 +5,7 @@ namespace Pneuma.Server
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Storage;
@@ -34,7 +35,6 @@ namespace Pneuma.Server
         private readonly IVectorRepository _Vectors;
         private readonly IInvertedIndex _Search;
         private readonly ICollectionStore _Collections;
-        private readonly IPartioClient _Partio;
         private readonly TenantProvisioningService _Provisioning;
         private readonly ModelHealthMonitor _ModelHealth;
         private readonly ModelRunnerGate _ModelRunnerGate;
@@ -60,7 +60,6 @@ namespace Pneuma.Server
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="search">Full-text search client (RecallDB).</param>
         /// <param name="collections">Collection store (RecallDB).</param>
-        /// <param name="partio">Partio client.</param>
         /// <param name="provisioning">Tenant provisioning service (subordinate-service resources on tenant creation).</param>
         /// <param name="artifacts">Per-stage S3 artifact store, used by the artifact-view endpoints.</param>
         /// <param name="blobs">Blob store, used for cascading deletion of a link's raw ingested blobs.</param>
@@ -76,7 +75,6 @@ namespace Pneuma.Server
             IVectorRepository vectors,
             IInvertedIndex search,
             ICollectionStore collections,
-            IPartioClient partio,
             TenantProvisioningService provisioning,
             ModelHealthMonitor modelHealth,
             IArtifactStore artifacts,
@@ -93,7 +91,6 @@ namespace Pneuma.Server
             if (vectors == null) throw new ArgumentNullException(nameof(vectors));
             if (search == null) throw new ArgumentNullException(nameof(search));
             if (collections == null) throw new ArgumentNullException(nameof(collections));
-            if (partio == null) throw new ArgumentNullException(nameof(partio));
             if (provisioning == null) throw new ArgumentNullException(nameof(provisioning));
             if (modelHealth == null) throw new ArgumentNullException(nameof(modelHealth));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
@@ -110,7 +107,6 @@ namespace Pneuma.Server
             _Vectors = vectors;
             _Search = search;
             _Collections = collections;
-            _Partio = partio;
             _Provisioning = provisioning;
             _ModelHealth = modelHealth;
             _ModelRunnerGate = new ModelRunnerGate(_Settings.ModelRunner.MaxConcurrentRequests, _Settings.ModelRunner.MaxQueueDepth);
@@ -188,23 +184,29 @@ namespace Pneuma.Server
             new AuditRoutes(_Database, _Authorization).Register(_Server);
             CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs);
             new SubjectRoutes(_Database, _Authorization, cascade).Register(_Server);
+            new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
             new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, cascade, _Collections).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization, cascade).Register(_Server);
-            new IngestionEndpointRoutes(_Partio, _Authorization).Register(_Server);
+            new IngestionEndpointRoutes(_Database, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);
-            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, _Partio, _Settings.Retrieval, _Authentication.Cipher, _Logging);
-            ModelRunnerValidationService modelValidation = new ModelRunnerValidationService(_Partio, groundedQuery, _Authentication.Cipher, _Logging);
-            new ModelRunnerRoutes(_Partio, _Authorization, _ModelHealth, modelValidation).Register(_Server);
+            HttpCrossEncoderReranker crossEncoderReranker = new HttpCrossEncoderReranker(
+                _Settings.Retrieval.CrossEncoderRerankUrl, _Settings.Retrieval.CrossEncoderRerankModel, _Settings.Retrieval.CrossEncoderRerankApiKey, _Logging);
+            NativeSemanticProcessor semanticProcessor = new NativeSemanticProcessor(_Database, _Authentication.Cipher, _Logging);
+            GroundedQueryService groundedQuery = new GroundedQueryService(_Database, _Search, _Collections, _GraphFactory, _Vectors, semanticProcessor, _Settings.Retrieval, _Authentication.Cipher, _Logging, crossEncoderReranker);
+            ModelRunnerValidationService modelValidation = new ModelRunnerValidationService(_Database, _Authentication.Cipher, _Logging);
+            new ModelRunnerRoutes(_Database, _Authorization, _ModelHealth, modelValidation, _Authentication.Cipher).Register(_Server);
             new PromptRoutes(_Database, _Authorization).Register(_Server);
             new GraphRoutes(_Database, _Authorization, _GraphFactory).Register(_Server);
-            new SearchRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory).Register(_Server);
+            new SearchRoutes(_Database, _Authorization, groundedQuery).Register(_Server);
             new QueryRoutes(_Authorization, groundedQuery, _ModelRunnerGate, _Logging).Register(_Server);
+            CommunityService communityService = new CommunityService(_Database, _GraphFactory, groundedQuery, _Settings.Retrieval, _Logging);
+            new CommunityRoutes(_Database, _Authorization, communityService).Register(_Server);
             new EvalRoutes(_Database, _Authorization, groundedQuery, _Logging).Register(_Server);
             new FacetRoutes(_Database, _Authorization).Register(_Server);
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _Partio, _ModelHealth).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);

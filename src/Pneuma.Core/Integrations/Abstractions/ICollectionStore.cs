@@ -8,7 +8,7 @@ namespace Pneuma.Core.Integrations.Abstractions
     /// <summary>
     /// Provider-neutral administration of tenants and their vector collections in the retrieval store
     /// (RecallDB). RecallDB is the authority for tenants and collections; Pneuma proxies management to it
-    /// per-tenant rather than keeping local state, mirroring how model endpoints are proxied to Partio.
+    /// per-tenant rather than keeping local state, mirroring how model endpoints are managed.
     /// Every operation is scoped to a RecallDB tenant (the Pneuma tenant id is used as the RecallDB tenant id).
     /// </summary>
     public interface ICollectionStore

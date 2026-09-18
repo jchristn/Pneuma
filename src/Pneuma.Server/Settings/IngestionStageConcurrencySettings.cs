@@ -56,7 +56,7 @@ namespace Pneuma.Server.Settings
             set { _Summarization = Math.Clamp(value, 1, 256); }
         }
 
-        /// <summary>Concurrent chunking calls (Partio). Default 8.</summary>
+        /// <summary>Concurrent chunking calls. Default 8.</summary>
         public int Chunking
         {
             get { return _Chunking; }

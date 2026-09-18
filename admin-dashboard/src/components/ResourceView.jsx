@@ -18,15 +18,18 @@ function getId(item, idField) {
   return item.id ?? item.guid ?? item.Id ?? item.GUID ?? item.GUID ?? item.userId ?? item.name;
 }
 
-function PasswordField({ field, value, common, labelClass, tip, fullClass }) {
+function PasswordField({ field, value, common, labelClass, tip, fullClass, editing }) {
   const { t } = useTranslation();
   const [reveal, setReveal] = useState(false);
   const hasValue = !!(value ?? '');
+  // When editing an existing record, write-only secrets are never returned from the API, so show an
+  // "unchanged" placeholder and only submit a value when the operator types a new one.
+  const placeholder = editing && field.editPlaceholder ? field.editPlaceholder : common.placeholder;
   return (
     <div className={`field${fullClass}`}>
       <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
       <div className="password-field">
-        <input {...common} type={reveal ? 'text' : 'password'} />
+        <input {...common} placeholder={placeholder} type={reveal ? 'text' : 'password'} />
         <button
           type="button"
           className="password-toggle"
@@ -43,10 +46,11 @@ function PasswordField({ field, value, common, labelClass, tip, fullClass }) {
   );
 }
 
-function FieldInput({ field, value, onChange }) {
+function FieldInput({ field, value, onChange, editing = false }) {
   const tip = field.tip || undefined;
   const labelClass = tip ? 'has-tip' : undefined;
   const fullClass = field.fullWidth ? ' field-full' : '';
+  const hintEl = field.hint ? <small className="field-hint">{field.hint}</small> : null;
   if (field.type === 'section') {
     return <div className="form-section-heading field-full" title={tip}>{field.label}</div>;
   }
@@ -77,6 +81,7 @@ function FieldInput({ field, value, onChange }) {
             <option key={o.value} value={o.value} title={o.tip}>{o.label}</option>
           ))}
         </select>
+        {hintEl}
       </div>
     );
   }
@@ -123,13 +128,14 @@ function FieldInput({ field, value, onChange }) {
   }
   if (field.type === 'password') {
     return (
-      <PasswordField field={field} value={value} common={common} labelClass={labelClass} tip={tip} fullClass={fullClass} />
+      <PasswordField field={field} value={value} common={common} labelClass={labelClass} tip={tip} fullClass={fullClass} editing={editing} />
     );
   }
   return (
-    <div className="field">
+    <div className={`field${fullClass}`}>
       <label htmlFor={common.id} className={labelClass} title={tip}>{field.label}</label>
       <input {...common} type={field.type || 'text'} />
+      {hintEl}
     </div>
   );
 }
@@ -140,7 +146,7 @@ function emptyDefault(field) {
   return '';
 }
 
-function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabled = false, notice = null, twoColumn = false }) {
+function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabled = false, notice = null, twoColumn = false, editing = false }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(() => {
     const v = {};
@@ -177,6 +183,8 @@ function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabl
       const body = {};
       fields.forEach((f) => {
         if (f.type === 'section') return;
+        // Conditionally-shown fields (e.g. provider-specific) are excluded from the payload when hidden.
+        if (typeof f.visibleWhen === 'function' && !f.visibleWhen(values)) return;
         if (f.readOnly && !f.includeReadOnly) return;
         let val = values[f.name];
         if (f.type === 'number' && val !== '' && val !== null) val = Number(val);
@@ -193,9 +201,13 @@ function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabl
   return (
     <form onSubmit={submit}>
       <div className={twoColumn ? 'form-grid form-grid-2col' : 'form-grid'}>
-        {fields.map((f) => (
-          <FieldInput key={f.name} field={f} value={values[f.name]} onChange={change} />
-        ))}
+        {fields.map((f) => {
+          if (typeof f.visibleWhen === 'function' && !f.visibleWhen(values)) return null;
+          let resolved = f;
+          if (typeof f.options === 'function') resolved = { ...resolved, options: f.options(values) };
+          if (typeof f.hint === 'function') resolved = { ...resolved, hint: f.hint(values) };
+          return <FieldInput key={f.name} field={resolved} value={values[f.name]} onChange={change} editing={editing} />;
+        })}
       </div>
       {notice && <div className="error-message" style={{ marginTop: '1rem' }}>{notice}</div>}
       {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}
@@ -423,7 +435,7 @@ function ResourceView({
         <Modal title={t('resource.editTitle', { name: singular })} size={modalSize}
           subtitle={<span className="copyable-id"><code>{String(getId(modal.item, idField))}</code><CopyButton value={String(getId(modal.item, idField))} label={null} /></span>}
           onClose={() => setModal(null)}>
-          <ResourceForm fields={formFields} initial={modal.item} onSubmit={(body) => doUpdate(modal.item, body)} onCancel={() => setModal(null)} submitLabel={t('common.save')} twoColumn={twoColumnForm} />
+          <ResourceForm fields={formFields} initial={modal.item} onSubmit={(body) => doUpdate(modal.item, body)} onCancel={() => setModal(null)} submitLabel={t('common.save')} twoColumn={twoColumnForm} editing />
         </Modal>
       )}
       {modal?.type === 'view' && (

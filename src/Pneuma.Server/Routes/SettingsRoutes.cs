@@ -137,7 +137,6 @@ namespace Pneuma.Server.Routes
                 "auth.adminApiKeys",
                 "database.password",
                 "integrations.recallDb.bearerToken",
-                "integrations.partio.bearerToken",
                 "integrations.liteGraph.bearerToken",
                 "s3.accessKey",
                 "s3.secretKey",

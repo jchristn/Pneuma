@@ -352,6 +352,9 @@ export default function AskView() {
     apiClient.getSubjectBySlug(slug)
       .then((s) => {
         if (cancelled) return;
+        // A subject not published to the consumer experience is treated as unavailable here, so its ask page
+        // cannot be reached even by direct URL while an operator is still reviewing it.
+        if (s && s.publishedForChat === false) { setSubject(null); setSubjectMissing(true); return; }
         setSubject(s);
         // Proactively warm this subject's answering model so the first question isn't slow to first token.
         apiClient.warmup(s?.id || null).catch(() => {});

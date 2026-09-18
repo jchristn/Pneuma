@@ -5,9 +5,9 @@ namespace Pneuma.Server.Services
     using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Database;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Integrations;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
@@ -19,8 +19,9 @@ namespace Pneuma.Server.Services
     /// Actively validates a model endpoint by exercising the exact runtime path it serves. A completion
     /// endpoint is checked with a basic completion and a tool-calling round-trip (the same tool-capable,
     /// streaming call agentic chat makes — the path that silently fails when a model or endpoint does not
-    /// support function calling). An embedding endpoint is checked with a live embedding request through
-    /// Partio. Each probe is time-bounded so a wedged upstream fails cleanly rather than hanging the request.
+    /// support function calling). An embedding endpoint is checked with a live embedding request. The client
+    /// is built directly from the stored model runner via <see cref="ModelClientFactory"/>. Each probe is
+    /// time-bounded so a wedged upstream fails cleanly rather than hanging the request.
     /// </summary>
     public class ModelRunnerValidationService
     {
@@ -31,8 +32,7 @@ namespace Pneuma.Server.Services
         // is generous enough that a genuinely working reasoning endpoint is not misreported as a timeout.
         private static readonly TimeSpan _ProbeTimeout = TimeSpan.FromSeconds(60);
 
-        private readonly IPartioClient _Partio;
-        private readonly GroundedQueryService _Query;
+        private readonly DatabaseDriverBase _Db;
         private readonly Aes256Cipher _Cipher;
         private readonly LoggingModule _Logging;
 
@@ -41,19 +41,16 @@ namespace Pneuma.Server.Services
         #region Constructors-and-Factories
 
         /// <summary>Instantiate the model runner validation service.</summary>
-        /// <param name="partio">Partio client (endpoint lookup and embedding probe).</param>
-        /// <param name="query">Grounded query service (resolves a Partio completion endpoint into a transient runner).</param>
-        /// <param name="cipher">Cipher for decrypting the resolved runner's auth material.</param>
+        /// <param name="db">Database driver (native model-runner store).</param>
+        /// <param name="cipher">Cipher for decrypting the runner's auth material.</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public ModelRunnerValidationService(IPartioClient partio, GroundedQueryService query, Aes256Cipher cipher, LoggingModule logging)
+        public ModelRunnerValidationService(DatabaseDriverBase db, Aes256Cipher cipher, LoggingModule logging)
         {
-            if (partio == null) throw new ArgumentNullException(nameof(partio));
-            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (db == null) throw new ArgumentNullException(nameof(db));
             if (cipher == null) throw new ArgumentNullException(nameof(cipher));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
-            _Partio = partio;
-            _Query = query;
+            _Db = db;
             _Cipher = cipher;
             _Logging = logging;
         }
@@ -64,34 +61,29 @@ namespace Pneuma.Server.Services
 
         /// <summary>
         /// Validate a model endpoint by id, exercising the completion (and tool-calling) or embedding path per
-        /// its type. Returns null when no endpoint with the given id exists.
+        /// its type. When no type is supplied it is inferred from the runner's capabilities. Returns null when
+        /// no runner with the given id exists.
         /// </summary>
-        /// <param name="endpointId">Partio endpoint id (completion or embedding).</param>
+        /// <param name="endpointId">Model runner id.</param>
+        /// <param name="type">Optional endpoint type hint ("Embedding" or "Completion").</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The validation result, or null when the endpoint is not found.</returns>
+        /// <returns>The validation result, or null when the runner is not found.</returns>
         public async Task<ModelEndpointValidationDto?> ValidateAsync(string endpointId, string? type, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(endpointId)) return null;
 
             try
             {
-                // The endpoint type must be honored when supplied: Partio seeds the default embedding and default
-                // completion endpoints with the SAME id ("default"), so probing completion-first would validate the
-                // wrong endpoint for the default embedding. Only fall back to probing both when type is unknown.
-                bool wantCompletion = String.Equals(type, "completion", StringComparison.OrdinalIgnoreCase);
-                bool wantEmbedding = String.Equals(type, "embedding", StringComparison.OrdinalIgnoreCase);
+                ModelRunner? runner = await _Db.ModelRunners.ReadAsync(endpointId, token).ConfigureAwait(false);
+                if (runner == null) return null;
 
-                if (wantCompletion || !wantEmbedding)
-                {
-                    PartioEndpoint? completion = await _Partio.ReadEndpointAsync("completion", endpointId, token).ConfigureAwait(false);
-                    if (completion != null) return await ValidateCompletionAsync(completion, token).ConfigureAwait(false);
-                    if (wantCompletion) return null;
-                }
+                bool wantEmbedding = String.Equals(type, "embedding", StringComparison.OrdinalIgnoreCase)
+                    || (String.IsNullOrWhiteSpace(type)
+                        && runner.Capabilities.Contains(ModelCapabilityEnum.Embedding)
+                        && !runner.Capabilities.Contains(ModelCapabilityEnum.Completion));
 
-                PartioEndpoint? embedding = await _Partio.ReadEndpointAsync("embedding", endpointId, token).ConfigureAwait(false);
-                if (embedding != null) return await ValidateEmbeddingAsync(embedding, token).ConfigureAwait(false);
-
-                return null;
+                if (wantEmbedding) return await ValidateEmbeddingAsync(runner, token).ConfigureAwait(false);
+                return await ValidateCompletionAsync(runner, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -121,25 +113,10 @@ namespace Pneuma.Server.Services
 
         #region Private-Methods
 
-        private async Task<ModelEndpointValidationDto> ValidateCompletionAsync(PartioEndpoint endpoint, CancellationToken token)
+        private async Task<ModelEndpointValidationDto> ValidateCompletionAsync(ModelRunner runner, CancellationToken token)
         {
-            ModelEndpointValidationDto result = NewResult(endpoint, "Completion");
-
-            ModelRunner? runner = await _Query.ResolveCompletionRunnerByIdAsync(endpoint.Id, token).ConfigureAwait(false);
-            if (runner == null)
-            {
-                result.Ok = false;
-                result.Checks.Add(new ModelEndpointValidationCheck
-                {
-                    Name = "Resolve endpoint",
-                    Ok = false,
-                    Error = "The completion endpoint could not be resolved into a runnable model configuration."
-                });
-                return result;
-            }
-
-            string? apiKey = DecryptKey(runner);
-            CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
+            ModelEndpointValidationDto result = NewResult(runner, "Completion");
+            CompletionClientBase client = BuildClient(runner);
 
             ModelEndpointValidationCheck completionCheck = await RunCompletionProbeAsync(client, token).ConfigureAwait(false);
             result.Checks.Add(completionCheck);
@@ -154,13 +131,20 @@ namespace Pneuma.Server.Services
             return result;
         }
 
-        private async Task<ModelEndpointValidationDto> ValidateEmbeddingAsync(PartioEndpoint endpoint, CancellationToken token)
+        private async Task<ModelEndpointValidationDto> ValidateEmbeddingAsync(ModelRunner runner, CancellationToken token)
         {
-            ModelEndpointValidationDto result = NewResult(endpoint, "Embedding");
-            ModelEndpointValidationCheck check = await RunEmbeddingProbeAsync(endpoint.Id, token).ConfigureAwait(false);
+            ModelEndpointValidationDto result = NewResult(runner, "Embedding");
+            ModelEndpointValidationCheck check = await RunEmbeddingProbeAsync(runner, token).ConfigureAwait(false);
             result.Checks.Add(check);
             result.Ok = check.Ok;
             return result;
+        }
+
+        private CompletionClientBase BuildClient(ModelRunner runner)
+        {
+            string? apiKey = DecryptOrNull(runner.AuthMaterialEncrypted);
+            string? sessionToken = DecryptOrNull(runner.SessionTokenEncrypted);
+            return ModelClientFactory.Create(runner, apiKey, _Logging, sessionToken);
         }
 
         private async Task<ModelEndpointValidationCheck> RunCompletionProbeAsync(CompletionClientBase client, CancellationToken token)
@@ -276,7 +260,7 @@ namespace Pneuma.Server.Services
             return check;
         }
 
-        private async Task<ModelEndpointValidationCheck> RunEmbeddingProbeAsync(string endpointId, CancellationToken token)
+        private async Task<ModelEndpointValidationCheck> RunEmbeddingProbeAsync(ModelRunner runner, CancellationToken token)
         {
             ModelEndpointValidationCheck check = new ModelEndpointValidationCheck { Name = "Embedding" };
             Stopwatch stopwatch = Stopwatch.StartNew();
@@ -284,17 +268,19 @@ namespace Pneuma.Server.Services
             {
                 try
                 {
-                    List<List<float>> vectors = await _Partio.EmbedAsync(new List<string> { "Pneuma model endpoint validation probe." }, endpointId, cts.Token).ConfigureAwait(false);
+                    CompletionClientBase client = BuildClient(runner);
+                    EmbeddingOptions options = new EmbeddingOptions { Model = runner.DefaultEmbeddingModel ?? runner.DefaultModel };
+                    EmbeddingResponse response = await client.EmbedAsync("Pneuma model endpoint validation probe.", options, cts.Token).ConfigureAwait(false);
                     check.DurationMs = stopwatch.Elapsed.TotalMilliseconds;
-                    if (vectors != null && vectors.Count > 0 && vectors[0] != null && vectors[0].Count > 0)
+                    if (response != null && response.Success && response.Embeddings.Count > 0 && response.Embeddings[0].Embedding != null && response.Embeddings[0].Embedding.Length > 0)
                     {
                         check.Ok = true;
-                        check.Detail = "Returned a " + vectors[0].Count + "-dimensional embedding vector.";
+                        check.Detail = "Returned a " + response.Embeddings[0].Embedding.Length + "-dimensional embedding vector.";
                     }
                     else
                     {
                         check.Ok = false;
-                        check.Error = "The embedding request returned no vector.";
+                        check.Error = response == null ? "No response from the model." : (response.Error ?? "The embedding request returned no vector.");
                     }
                 }
                 catch (Exception e)
@@ -318,16 +304,16 @@ namespace Pneuma.Server.Services
                 + "). This endpoint can serve completions and summarization, but not agentic (tool-using) chat.";
         }
 
-        private static ModelEndpointValidationDto NewResult(PartioEndpoint endpoint, string type)
+        private static ModelEndpointValidationDto NewResult(ModelRunner runner, string type)
         {
             return new ModelEndpointValidationDto
             {
-                EndpointId = endpoint.Id,
-                Name = endpoint.Name,
+                EndpointId = runner.Id,
+                Name = runner.Name,
                 Type = type,
-                Model = endpoint.Model,
-                Endpoint = endpoint.Endpoint,
-                ApiFormat = endpoint.ApiFormat,
+                Model = runner.DefaultModel ?? runner.DefaultEmbeddingModel,
+                Endpoint = runner.BaseUrl,
+                ApiFormat = runner.ApiType,
                 CheckedUtc = DateTime.UtcNow
             };
         }
@@ -356,12 +342,12 @@ namespace Pneuma.Server.Services
             return cts;
         }
 
-        private string? DecryptKey(ModelRunner runner)
+        private string? DecryptOrNull(string? encrypted)
         {
-            if (String.IsNullOrEmpty(runner.AuthMaterialEncrypted)) return null;
+            if (String.IsNullOrEmpty(encrypted)) return null;
             try
             {
-                return _Cipher.Decrypt(runner.AuthMaterialEncrypted);
+                return _Cipher.Decrypt(encrypted);
             }
             catch (Exception)
             {

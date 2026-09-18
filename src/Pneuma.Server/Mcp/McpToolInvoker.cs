@@ -47,10 +47,9 @@ namespace Pneuma.Server.Mcp
         /// <param name="gate">Model-runner concurrency gate applied to the grounded-answer tool.</param>
         /// <param name="logging">Logging module (used by the eval management tools).</param>
         /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
-        /// <param name="partio">Partio client used to enumerate model endpoints for the health tools.</param>
         /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, IPartioClient partio, ModelHealthMonitor health)
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -61,13 +60,12 @@ namespace Pneuma.Server.Mcp
             if (gate == null) throw new ArgumentNullException(nameof(gate));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             if (settings == null) throw new ArgumentNullException(nameof(settings));
-            if (partio == null) throw new ArgumentNullException(nameof(partio));
             if (health == null) throw new ArgumentNullException(nameof(health));
             _Authz = authz;
             _Entities = new McpEntityTools(db);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
             _Management = new McpManagementTools(db, query, logging);
-            _Ops = new McpOpsTools(db, settings, partio, health);
+            _Ops = new McpOpsTools(db, settings, health);
             _Gate = gate;
         }
 

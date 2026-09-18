@@ -4,7 +4,7 @@
 <h1 align="center">Pneuma — breathing life into your information</h1>
 
 <p align="center">
-  <strong>v0.1.0 · ALPHA</strong><br>
+  <strong>v0.3.0 · ALPHA</strong><br>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/C%23-.NET-512bd4.svg" alt="C# / .NET">
   <img src="https://img.shields.io/badge/Docker-Compose-2496ed.svg" alt="Docker Compose">
@@ -53,14 +53,14 @@ Pneuma ships as a fully orchestrated **Docker Compose** stack: one command bring
 ## Who Pneuma is for
 
 - **Data engineers & data users** — turn a pile of unstructured documents and pages into a **structured, queryable knowledge graph** with typed entities, relationships, provenance, and rights — without hand-rolling an extraction pipeline. Explore it visually, search it, and pull it into downstream systems over a clean REST API.
-- **AI engineers** — get a **production-grade RAG backend** out of the box: hybrid retrieval, graph-neighbor expansion, prompt rewrite, optional LLM re-ranking, conversation compaction, cited answers with an explicit "insufficient support" refusal, a built-in LLM-judged evaluation harness, and a first-class **MCP** surface so agents drive the platform through the same auth and audit path as everything else. Bring your own model — OpenAI, Gemini, or fully offline **Ollama**.
+- **AI engineers** — get a **production-grade RAG backend** out of the box: hybrid retrieval, graph-neighbor expansion, prompt rewrite, optional LLM re-ranking, conversation compaction, cited answers with an explicit "insufficient support" refusal, a built-in LLM-judged evaluation harness, and a first-class **MCP** surface so agents drive the platform through the same auth and audit path as everything else. Bring your own model — OpenAI, Azure OpenAI, OpenAI-compatible, Gemini, Vertex AI, Anthropic, Bedrock, Voyage AI, or fully offline **Ollama**.
 - **Software developers** — a self-hostable platform with an **OpenAPI-described REST API**, C#/JS/Python SDKs, multi-tenant **RBAC** with a full audit trail, request-history capture, Prometheus metrics + OpenTelemetry traces, and a provider-neutral data layer that runs on PostgreSQL, SQLite, MySQL, or SQL Server. One `docker compose up` and you're building.
 
 ---
 
 ## Features
 
-- **Ingestion pipeline** — Submit a document or URL and Pneuma runs it through an explicit **Categorize** phase (fetch → type-detect → extract semantic cells → classify into the ontology) and a **Hydrate** phase (merge into the graph, chunk, embed, and index), with per-stage live logs, prompt-provenance capture for reproducibility, and best-effort artifact storage (source, atoms, chunks, vectors, subgraph) in S3.
+- **Ingestion pipeline** — Submit a document or URL and Pneuma runs it through an explicit **Categorize** phase (fetch → type-detect → extract semantic cells → classify into the ontology) and a **Hydrate** phase (merge into the graph, chunk, embed, and index), with per-stage live logs, prompt-provenance capture for reproducibility, and best-effort artifact storage (source, atoms, chunks, vectors, subgraph) in S3. Chunking (in the **`Pneuma.Chunking`** library), embedding, and summarization all run in-process — no external processing service.
 - **Editable, natural-language ontology** — The ontology that drives classification is a **prompt you can rewrite** — reshape the graph's node and edge types (Subject, Person, Organization, Work, Collection, Event, Place, Topic, …) without touching code. The graph merge accepts whatever types your ontology defines.
 - **Knowledge graph** — Every source becomes provenance-anchored nodes and edges in **LiteGraph**, with entity resolution (canonical-name dedup), per-tenant isolation, and a node explorer for contents, links, adjacent nodes, relationships, rights, and authority.
 - **Hybrid retrieval & grounded answers** — Blends lexical (full-text) and semantic (vector) search over **RecallDB** (Postgres + pgvector) with optional **graph-neighbor expansion**, optional **prompt rewrite** and **LLM re-ranking**, and returns a cited answer or an explicit refusal. One shared service backs both the REST and MCP answer paths.
@@ -71,7 +71,7 @@ Pneuma ships as a fully orchestrated **Docker Compose** stack: one command bring
 - **Analytics** — Per-subject rollups: turn volume, latency percentiles (p50/p95/p99), per-stage timing, throughput, and feedback trends, rendered with hand-rolled SVG charts.
 - **Model Context Protocol (MCP)** — An in-process MCP endpoint (`POST /mcp`, JSON-RPC 2.0) exposes ~35 read/management tools — search, graph traversal, grounded query (with `metadataFilter`), subjects, jobs, links, threads, history, feedback, analytics, eval, request history, settings, and model-endpoint health — each **RBAC-mapped and audited** exactly like its REST twin, with bounded, paged enumerations.
 - **Multi-tenant RBAC, fully audited** — Accounts, tenants, admins, users, credentials (email/password sessions or `access_`/`secret_` API keys), roles, permissions, and assignments, with explicit-deny > permit > implicit-deny evaluation and **every decision — including admin bypasses — persisted to the audit stream**.
-- **Bring your own model** — LLM access goes through a provider-neutral layer (**PolyPrompt**): OpenAI, Gemini, or local **Ollama** so you can run **fully offline** or plug in a hosted model with a key.
+- **Bring your own model** — LLM access goes through a provider-neutral layer (**PolyPrompt**). Model endpoints are managed natively by Pneuma and cover all nine providers for embeddings and completions: **OpenAI, OpenAI-compatible, Gemini, Ollama, Azure OpenAI, Anthropic** (completions only), **Bedrock, Voyage AI** (embeddings only), and **Vertex AI** — so you can run **fully offline** on Ollama or plug in a hosted model with a key. Endpoints take a `provider` plus provider-specific fields (deployment, API version, region, project, access-key id) and write-only secrets.
 - **Observability** — Prometheus metrics for HTTP, ingestion, integrations, and the retrieval/answer path; OpenTelemetry/Tempo traces with per-stage spans; and provisioned, domain-sectioned **Grafana** dashboards. See [`TELEMETRY.md`](TELEMETRY.md).
 - **Operator surfaces** — Three React dashboards (admin, subject, user) with Home, Request History (+ inspector), an OpenAPI-driven API Explorer, Settings, History, Feedback, Analytics, Evaluation, and a grounded **Ask** experience — light/dark themes, responsive, i18n-ready.
 - **Provider-neutral persistence** — A handwritten, provider-neutral data layer runs on **PostgreSQL**, SQLite, MySQL, or SQL Server, with versioned, idempotent, tracked migrations and idempotent first-boot seeding.
@@ -102,10 +102,9 @@ The Docker Compose stack orchestrates the following. Pneuma's own images are pub
 | **admin-dashboard** | 3010 | Full operator dashboard (React/Vite, nginx): tenants, users, RBAC, subjects, links, ingestion, collections, model runners, prompts, history, feedback, analytics, eval, settings. |
 | **subject-dashboard** | 3011 | Creator dashboard: manage subjects, submit links, follow ingestion, ask, review history/feedback/analytics, run evals. |
 | **user-dashboard** | 3012 | Consumer dashboard: browse subjects and use the grounded **Ask** experience. |
-| **pneuma-postgres** | 15432 | PostgreSQL 17 with **pgvector** installed. Backs Pneuma, RecallDB, LiteGraph, Partio, and Less3. |
+| **pneuma-postgres** | 15432 | PostgreSQL 17 with **pgvector** installed. Backs Pneuma, RecallDB, LiteGraph, and Less3. |
 | **litegraph** / litegraph-ui | 8701 / 3001 | Knowledge-graph store (nodes, edges, labels, tags) and its management UI. |
 | **documentatom** / documentatom-ui | 8000 / 3002 | Document type detection + semantic cell extraction, and its UI. |
-| **partio-server** / partio-dashboard | 8400 / 8401 | Chunking, embedding, and summarization service, and its UI. Manages embedding/completion endpoints. |
 | **recalldb-server** / recalldb-dashboard | 8600 / 8601 | Vector + full-text retrieval store (Postgres/pgvector) and its UI. |
 | **ollama** | 11434 | Local LLM inference engine (embeddings + completions) for fully offline operation. |
 | **less3** | — | S3-compatible object storage for pipeline artifacts (source, atoms, chunks, vectors, subgraph). |
@@ -124,11 +123,19 @@ The full port + default-credential list is in [`docker/PORTS.md`](docker/PORTS.m
 
 ### Configuration
 
-Configuration is a mounted `docker/pneuma.json`: web server, CORS, logging, database, auth, request-history capture, ingestion concurrency, integration endpoints (DocumentAtom, Partio, RecallDB, LiteGraph, S3), retrieval tuning, model-runner gate, telemetry, and first-boot seeding. Secrets can be overridden with `PNEUMA_*` environment variables. Most settings are also editable at runtime from the admin **Settings** page (`GET/PUT /v1.0/settings`), with secrets masked on read; changes that require a restart are annotated.
+Configuration is a mounted `docker/pneuma.json`: web server, CORS, logging, database, auth, request-history capture, ingestion concurrency, integration endpoints (DocumentAtom, RecallDB, LiteGraph, S3), retrieval tuning, model-runner gate, telemetry, and first-boot seeding. Secrets can be overridden with `PNEUMA_*` environment variables. Most settings are also editable at runtime from the admin **Settings** page (`GET/PUT /v1.0/settings`), with secrets masked on read; changes that require a restart are annotated.
 
 ### Factory reset
 
 To wipe the stack back to factory defaults (fresh databases, seeded admin, and starter configuration), use `docker/reset.bat` (Windows). To pull the latest published images and restart, use `docker/update.bat`.
+
+### Upgrading to v0.3.0
+
+v0.3.0 removes Partio and manages model endpoints natively. Because Partio no longer supplies embedding/completion endpoints, on upgrade:
+
+1. Pull the new images and restart (`docker/update.bat`, or `docker compose pull && docker compose up -d`). Schema **migrations 19 (model-runner provider fields) and 20 (`subjectprompts`) apply automatically** on first boot.
+2. **Re-create your model endpoints** from the admin **Model Endpoints** page — pick a `provider`, fill in its provider-specific fields, and supply the write-only secrets. Default endpoints are seeded (Ollama), so an offline stack works out of the box.
+3. **Re-select each subject's embedding and inference models** (and any optional reranking / prompt-rewrite models) so ingestion and answering point at the new endpoints.
 
 ---
 
@@ -142,7 +149,7 @@ Subject submits a link  →  queued ingestion job  →  worker pool
   2. DocumentAtom   semantic cell extraction
   3. PolyPrompt     classify cells → candidate subgraph (your ontology)
   4. LiteGraph      merge subgraph → Cell + entity nodes, record node/edge IDs
-  5. Partio         summarize + chunk + embed
+  5. Pneuma         summarize + chunk (Pneuma.Chunking) + embed, all in-process
   6. RecallDB       store chunk text + vectors, each linked back to its graph node
 ```
 
@@ -213,22 +220,24 @@ Enumerations are **bounded and paged** (`EnumerationResult` envelope: advance `s
                        ┌───────────────────────────────┐
                        │  Pneuma Server (C# / Watson)  │
                        │  REST /v1.0  +  MCP /mcp      │
+                       │  in-process chunk / embed /   │
+                       │  summarize (PolyPrompt)       │
                        │  Port 8080                    │
-                       └──┬─────┬─────┬─────┬─────┬────┘
-              ┌───────────┘     │     │     │     └───────────┐
-              ▼                 ▼     ▼     ▼                 ▼
+                       └──┬─────┬─────┬─────┬──────────┘
+              ┌───────────┘     │     │     └───────────┐
+              ▼                 ▼     ▼                 ▼
      ┌────────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────┐
-     │  DocumentAtom  │ │  LiteGraph │ │  RecallDB  │ │     Partio     │
-     │ (extract cells)│ │  (graph)   │ │(vec+text)  │ │(chunk/embed)   │
-     │   Port 8000    │ │  Port 8701 │ │  Port 8600 │ │   Port 8400    │
-     └────────────────┘ └─────┬──────┘ └─────┬──────┘ └───────┬────────┘
-                              │              │                │
-                              ▼              ▼                ▼
-                       ┌────────────┐ ┌────────────┐  ┌────────────────┐
-                       │ PostgreSQL │ │   Less3    │  │     Ollama     │
-                       │ + pgvector │ │ (S3 store) │  │ (LLM inference)│
-                       │ Port 15432 │ └────────────┘  │   Port 11434   │
-                       └────────────┘                 └────────────────┘
+     │  DocumentAtom  │ │  LiteGraph │ │  RecallDB  │ │ Model endpoints│
+     │ (extract cells)│ │  (graph)   │ │(vec+text)  │ │ Ollama/OpenAI/…│
+     │   Port 8000    │ │  Port 8701 │ │  Port 8600 │ │  (PolyPrompt)  │
+     └────────────────┘ └─────┬──────┘ └─────┬──────┘ └────────────────┘
+                              │              │
+                              ▼              ▼
+                       ┌────────────┐ ┌────────────┐
+                       │ PostgreSQL │ │   Less3    │
+                       │ + pgvector │ │ (S3 store) │
+                       │ Port 15432 │ └────────────┘
+                       └────────────┘
 
 Observability: Prometheus (9090) · Tempo (3200) · Grafana (3000)
 ```
@@ -239,9 +248,9 @@ Observability: Prometheus (9090) · Tempo (3200) · Grafana (3000)
 | Control-plane DB | **PostgreSQL** (SQLite / MySQL / SQL Server also supported via a provider-neutral data layer) |
 | Knowledge graph | **LiteGraph** |
 | Type detection / cell extraction | **DocumentAtom** |
-| Chunking / embedding / summarization | **Partio** |
+| Chunking / embedding / summarization | In-process — **`Pneuma.Chunking`** (cl100k_base + BERT tokenizers) + **PolyPrompt** |
 | Retrieval store (vector + full-text) | **RecallDB** (Postgres + pgvector) |
-| LLM access | **PolyPrompt** (OpenAI, Gemini, Ollama / local) |
+| LLM access | **PolyPrompt** (OpenAI, OpenAI-compatible, Gemini, Ollama, Azure OpenAI, Anthropic, Bedrock, Voyage AI, Vertex AI) |
 | Object storage | **Less3** (S3-compatible) via **Blobject** |
 | Observability | **Prometheus**, **Grafana**, **Tempo** |
 | Dashboards | Three React / Vite apps: **admin**, **subject**, **user** |
@@ -265,9 +274,9 @@ REST_API.md · MCP_API.md · TELEMETRY.md · CHANGELOG.md
 Pneuma's five images (`jchristn77/pneuma-server`, `-postgres`, `-admin-ui`, `-subject-ui`, `-user-ui`) are built and pushed with the repo-root `build-*.bat` scripts, each taking a version tag:
 
 ```bat
-build-all.bat v0.1.0          :: build + push all five
-build-server.bat v0.1.0       :: just the server
-build-admin-ui.bat v0.1.0     :: just the admin dashboard
+build-all.bat v0.3.0          :: build + push all five
+build-server.bat v0.3.0       :: just the server
+build-admin-ui.bat v0.3.0     :: just the admin dashboard
 ```
 
 Each script uses `docker buildx` to publish multi-architecture (`linux/amd64` + `linux/arm64`) images tagged `:latest` and `:<tag>`. The Compose stack references the pinned images, so a deployment `docker compose pull`s rather than building from source.

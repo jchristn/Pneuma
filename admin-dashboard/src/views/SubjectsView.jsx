@@ -86,6 +86,7 @@ function SubjectsView() {
     { key: 'description', label: 'Description', cellClass: 'wrap', sortable: false, render: (r) => r.description || '—' },
     { key: 'urlSlug', label: 'Slug', render: (r) => r.urlSlug ? <code className="cell-id">{r.urlSlug}</code> : '—' },
     { key: 'thinkingEnabled', label: 'Thinking', sortable: false, render: (r) => <StatusPill label={r.thinkingEnabled ? 'On' : 'Off'} tone={r.thinkingEnabled ? 'success' : 'neutral'} /> },
+    { key: 'publishedForChat', label: 'Consumer Chat', sortable: false, render: (r) => <StatusPill label={r.publishedForChat === false ? 'Hidden' : 'Published'} tone={r.publishedForChat === false ? 'neutral' : 'success'} /> },
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];
   const formFields = [
@@ -98,12 +99,25 @@ function SubjectsView() {
     // Line 3
     { name: 'graphRootNodeId', label: 'Graph Root Node ID', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify, tip: 'The knowledge-graph root node id for this subject. Auto-derived from the display name; override only if you need a specific slug.' },
     { name: 'thinkingEnabled', label: 'Show Thinking', type: 'checkbox', tip: 'When on, model reasoning is shown in a collapsible section (with a Thinking-time statistic) for chats about this subject. Off hides it. Applies to all chats about this subject.' },
+    { name: 'publishedForChat', label: 'Available in Consumer Chat', type: 'checkbox', default: true, tip: 'When on, this subject appears in the end-user (consumer) dashboard and its ask page is reachable. Turn it off to withhold a subject from end users while you review its archive; operator dashboards always see it. On by default.' },
     // Models & collection — required to ingest links or answer questions about this subject.
     { name: 'embeddingModel', label: 'Embedding Model', type: 'select', required: true, placeholder: 'Select a model', options: embeddingOptions, default: soleDefault(embeddingOptions), tip: 'The embedding endpoint used to vectorize this subject’s content at ingestion and to embed queries when answering. Must match the collection’s dimensionality. Required to ingest links.' },
     { name: 'inferenceModel', label: 'Inference Model', type: 'select', required: true, placeholder: 'Select a model', options: completionOptions, default: soleDefault(completionOptions), tip: 'The completion endpoint used for this subject’s ingestion inference (classification/summarization) and answer generation. Required to ingest links or answer questions.' },
     { name: 'collection', label: 'Collection', type: 'select', required: true, placeholder: 'Select a collection', options: collectionOptions, default: soleDefault(collectionOptions), tip: 'The RecallDB collection where this subject’s chunks are stored and searched. Choose one whose dimensionality matches the embedding model. Required to ingest links.' },
     { name: 'rerankingModel', label: 'Reranking Model (optional)', type: 'select', placeholder: 'None', omitIfEmpty: false, options: completionOptions, tip: 'Optional completion endpoint used to re-rank retrieved passages by relevance before answering. Leave as None to skip reranking.' },
+    { name: 'rerankerType', label: 'Reranker Type', type: 'select', default: 'LlmListwise', options: [
+      { value: 'LlmListwise', label: 'LLM listwise' },
+      { value: 'CrossEncoder', label: 'Cross-encoder (dedicated endpoint)' }
+    ], tip: 'How retrieved passages are reordered before answering. LLM listwise uses the reranking model above. Cross-encoder uses the globally-configured rerank endpoint (server settings); if none is configured it falls back to LLM listwise.' },
     { name: 'promptRewriteModel', label: 'Prompt Rewrite Model (optional)', type: 'select', placeholder: 'None', omitIfEmpty: false, options: completionOptions, tip: 'Optional completion endpoint used to rewrite the user’s question into a retrieval query before searching. Leave as None to skip prompt rewriting.' },
+    // Chunking configuration — how this subject's content is split for retrieval (applies to new ingestions).
+    { name: 'chunkStrategy', label: 'Chunking Strategy', type: 'select', default: 'FixedTokenCount', options: [
+      { value: 'FixedTokenCount', label: 'Fixed token count' },
+      { value: 'SentenceBased', label: 'Sentence based' },
+      { value: 'ParagraphBased', label: 'Paragraph based' }
+    ], tip: 'How this subject’s content is split into chunks for retrieval. Fixed token count uses the size/overlap below; sentence- and paragraph-based split on natural boundaries. Applies to new ingestions.' },
+    { name: 'chunkMaxTokens', label: 'Chunk Size (tokens)', type: 'number', default: 256, min: 16, tip: 'Target chunk size in tokens for fixed-token-count chunking. Larger chunks give more context per hit; smaller chunks give finer-grained retrieval. Default 256.' },
+    { name: 'chunkOverlapTokens', label: 'Chunk Overlap (tokens)', type: 'number', default: 32, min: 0, tip: 'How many tokens adjacent chunks share, so context is not lost at chunk boundaries. Default 32.' },
     // Full-width prompts
     { name: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_SYSTEM_PROMPT, tip: 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.' },
     { name: 'rerankingPrompt', label: 'Reranking Prompt', type: 'textarea', rows: 3, fullWidth: true, default: DEFAULT_RERANKING_PROMPT, tip: 'Used only when a reranking model is set. Appended after the global reranking prompt to guide how passages are ordered by relevance.' },

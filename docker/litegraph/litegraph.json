@@ -27,48 +27,12 @@
   "Rest": {
     "Hostname": "*",
     "Port": 8701,
-    "Prefix": "http://*:8701/",
-    "Protocols": {
-      "EnableHttp1": true,
-      "EnableHttp2": false,
-      "EnableHttp3": false,
-      "EnableHttp2Cleartext": false,
-      "MaxConcurrentStreams": 100,
-      "Http2": {
-        "HeaderTableSize": 4096,
-        "EnablePush": false,
-        "MaxConcurrentStreams": 100,
-        "InitialWindowSize": 65535,
-        "MaxFrameSize": 16384,
-        "MaxHeaderListSize": 65536
-      },
-      "Http3": {
-        "MaxFieldSectionSize": 0,
-        "QpackMaxTableCapacity": 0,
-        "QpackBlockedStreams": 0,
-        "EnableDatagram": false
-      },
-      "IdleTimeoutMs": 120000
-    },
-    "AltSvc": {
-      "Enabled": false,
-      "Port": 0,
-      "Http3Alpn": "h3",
-      "MaxAgeSeconds": 86400
-    },
     "IO": {
-      "Http1": {
-        "PoolMaxRetainedPerType": 256,
-        "ResponseHeaderTemplateCacheSize": 256,
-        "StatusLineCacheSize": 64
-      },
       "StreamBufferSize": 65536,
       "MaxRequests": 1024,
       "ReadTimeoutMs": 10000,
       "MaxIncomingHeadersSize": 65536,
-      "EnableKeepAlive": false,
-      "MaxRequestBodySize": 0,
-      "MaxHeaderCount": 64
+      "EnableKeepAlive": false
     },
     "Ssl": {
       "Enable": false,
@@ -100,25 +64,7 @@
       "Routing": false,
       "Requests": false,
       "Responses": false
-    },
-    "Timeout": {
-      "DefaultTimeout": "00:00:00"
-    },
-    "WebSockets": {
-      "Enable": false,
-      "MaxMessageSize": 16777216,
-      "ReceiveBufferSize": 65536,
-      "CloseHandshakeTimeoutMs": 5000,
-      "AllowClientSuppliedGuid": false,
-      "ClientGuidHeaderName": "x-guid",
-      "SupportedVersions": [
-        "13"
-      ],
-      "EnableHttp1": true,
-      "EnableHttp2": false,
-      "EnableHttp3": false
-    },
-    "UseMachineHostname": false
+    }
   },
   "LiteGraph": {
     "AdminBearerToken": "litegraphadmin",
@@ -133,14 +79,15 @@
       "Username": "pneuma",
       "Password": "pneuma",
       "Schema": "litegraph",
+      "ConnectionString": null,
       "MaxConnections": 32,
       "CommandTimeoutSeconds": 30
     },
+    "MaxConcurrentOperations": 4,
     "Transactions": {
       "MaxOperations": 1000,
       "MaxTimeoutSeconds": 60
     },
-    "MaxConcurrentOperations": 4,
     "InMemory": false
   },
   "Encryption": {
@@ -168,7 +115,9 @@
     "EnablePrometheus": true,
     "EnableOpenTelemetry": true,
     "EnableOtlpExporter": false,
+    "OtlpEndpoint": null,
     "OtlpProtocol": "grpc",
+    "OtlpHeaders": null,
     "OtlpTimeoutMilliseconds": 10000,
     "MetricsPath": "/metrics",
     "ServiceName": "LiteGraph.Server"

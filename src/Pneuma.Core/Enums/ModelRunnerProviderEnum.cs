@@ -15,6 +15,16 @@ namespace Pneuma.Core.Enums
         /// <summary>Ollama or other local runner.</summary>
         Ollama,
         /// <summary>An OpenAI-compatible endpoint (vLLM, LM Studio, etc.).</summary>
-        OpenAICompatible
+        OpenAICompatible,
+        /// <summary>Azure OpenAI Service (requires a deployment name and API version).</summary>
+        AzureOpenAI,
+        /// <summary>Anthropic API. Completions only; Anthropic exposes no embeddings API.</summary>
+        Anthropic,
+        /// <summary>Amazon Bedrock (requires an AWS region and static credentials).</summary>
+        Bedrock,
+        /// <summary>Voyage AI. Embeddings only.</summary>
+        VoyageAI,
+        /// <summary>Google Vertex AI (requires a project, region, and credential).</summary>
+        VertexAI
     }
 }

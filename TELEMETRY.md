@@ -47,8 +47,8 @@ stay bounded.
   in `performanceJson` and surfaced in the dashboard History detail and Analytics views).
 
 ### Integrations
-- `pneuma_integration_requests_total{service,operation,outcome}` — outbound calls to RecallDB, Partio,
-  LiteGraph, DocumentAtom, PolyPrompt, by outcome (ok/error).
+- `pneuma_integration_requests_total{service,operation,outcome}` — outbound calls to RecallDB,
+  LiteGraph, DocumentAtom, PolyPrompt (embeddings/completions/summarization), by outcome (ok/error).
 - `pneuma_integration_request_duration_seconds{service,operation}` — per-integration latency histogram.
 
 ### Authorization / uptime
@@ -63,7 +63,7 @@ Traces are emitted over OTLP and stored in Tempo. Spans exist for:
   `pneuma.subject.id`) with a child span per pipeline stage (`stage:<Name>`), so a slow job's stage breakdown
   is visible in one trace.
 - **Requests & integrations** — request capture and downstream integration calls carry spans, tagged with the
-  service and operation, so a slow answer resolves to the specific RecallDB/Partio/LiteGraph call that caused
+  service and operation, so a slow answer resolves to the specific RecallDB/PolyPrompt/LiteGraph call that caused
   it.
 
 Per-turn answer telemetry is additionally persisted structurally on each chat turn (`performanceJson`, the
@@ -116,7 +116,7 @@ The observability dashboards are split by domain — open the one that matches y
   (`prompt_rewrite` / `retrieval` / `rerank` / `tool` / `final_inference`). Use it to see whether answer
   slowness is generation, retrieval, or reranking.
 - **Pneuma — Integrations** — request and error rate by service and the p95 latency per service+operation. When
-  an answer or ingestion is slow, this tells you whether a downstream (RecallDB/Partio/LiteGraph/DocumentAtom)
+  an answer or ingestion is slow, this tells you whether a downstream (RecallDB/PolyPrompt/LiteGraph/DocumentAtom)
   is the cause.
 
 ## 7. Reading traces
@@ -132,7 +132,7 @@ For a single slow request rather than an aggregate:
 ## 8. Typical workflows
 
 - **"Ingestion feels slow."** Ingestion row → per-stage p95. The tallest stage is the bottleneck; if it's
-  `Embedding`/`Classification`, check the Integrations row for Partio latency, then open the job's trace.
+  `Embedding`/`Classification`, check the Integrations row for PolyPrompt (embedding/completion) latency, then open the job's trace.
 - **"Answers are slow."** Retrieval & Answer row → answer p95 + per-stage p95. If `final_inference` dominates
   it's the model; if `retrieval`/`rerank`, check RecallDB / the rerank model in Integrations.
 - **"Something is erroring."** Overview error ratio → HTTP status-class panel to find the route → Integrations

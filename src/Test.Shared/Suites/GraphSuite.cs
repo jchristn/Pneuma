@@ -94,6 +94,82 @@ namespace Test.Shared.Suites
                             if (graph.NodeCount != 0) throw new Exception("empty subgraph should create no nodes");
                             if (graph.EdgeCount != 0) throw new Exception("empty subgraph should create no edges");
                             if (result.NodeIds.Count != 0) throw new Exception("empty merge should report no node ids");
+                        }),
+
+                    new TestCaseDescriptor("Graph", "Ontology_Canonicalizes", "Ontology canonicalization coerces known type variants and preserves custom ones",
+                        executeAsync: ct =>
+                        {
+                            if (Ontology.CanonicalNodeType("organisation") != Ontology.NodeOrganization) throw new Exception("British 'organisation' should coerce to Organization");
+                            if (Ontology.CanonicalNodeType("  PERSON ") != Ontology.NodePerson) throw new Exception("casing/whitespace should coerce to Person");
+                            if (Ontology.CanonicalNodeType("topic") != Ontology.NodeTopic) throw new Exception("'topic' should coerce to Topic");
+                            if (Ontology.CanonicalNodeType("Gene") != "Gene") throw new Exception("a custom node type should be preserved");
+                            if (Ontology.CanonicalEdgeType("has part") != Ontology.EdgeHasPart) throw new Exception("'has part' should coerce to HAS_PART");
+                            if (Ontology.CanonicalEdgeType("created-by") != Ontology.EdgeCreatedBy) throw new Exception("'created-by' should coerce to CREATED_BY");
+                            if (Ontology.CanonicalEdgeType("works with") != "WORKS_WITH") throw new Exception("a custom edge should normalize to UPPER_SNAKE");
+                            return Task.CompletedTask;
+                        }),
+
+                    new TestCaseDescriptor("Graph", "Merge_CanonicalizesTypes", "Merge coerces a known node/edge type variant to its canonical ontology form",
+                        executeAsync: async ct =>
+                        {
+                            FakeLiteGraphClient graph = new FakeLiteGraphClient();
+                            SubgraphMerger merger = new SubgraphMerger(graph);
+                            CandidateSubgraph sub = new CandidateSubgraph
+                            {
+                                Nodes = new List<CandidateNode>
+                                {
+                                    new CandidateNode { Ref = "n1", NodeType = "organisation", Name = "ACME" },
+                                    new CandidateNode { Ref = "n2", NodeType = "work", Name = "Widget" }
+                                },
+                                Edges = new List<CandidateEdge> { new CandidateEdge { FromRef = "n1", ToRef = "n2", EdgeType = "published by" } }
+                            };
+                            MergeResult result = await merger.MergeAsync(sub, "ten_x", "sub_x", null, "job_x", ct);
+                            GraphNode? org = await graph.ReadNodeAsync(result.NodeIds[0], ct);
+                            if (org == null || org.NodeType != Ontology.NodeOrganization) throw new Exception("node type should be canonicalized to Organization, got " + (org?.NodeType ?? "null"));
+                            List<GraphEdge> edges = await graph.GetEdgesAsync(result.NodeIds[0], ct);
+                            bool hasPublishedBy = false;
+                            foreach (GraphEdge edge in edges) { if (edge.EdgeType == Ontology.EdgePublishedBy) hasPublishedBy = true; }
+                            if (!hasPublishedBy) throw new Exception("edge type 'published by' should be canonicalized to PUBLISHED_BY");
+                        }),
+
+                    new TestCaseDescriptor("Graph", "Merge_ConsolidatesEdgeWeight", "Re-asserting a relationship consolidates into one weighted edge (no duplicate)",
+                        executeAsync: async ct =>
+                        {
+                            FakeLiteGraphClient graph = new FakeLiteGraphClient();
+                            SubgraphMerger merger = new SubgraphMerger(graph);
+
+                            CandidateSubgraph First()
+                            {
+                                return new CandidateSubgraph
+                                {
+                                    Nodes = new List<CandidateNode>
+                                    {
+                                        new CandidateNode { Ref = "a", NodeType = "Person", Name = "Ada", CanonicalName = "Ada" },
+                                        new CandidateNode { Ref = "b", NodeType = "Organization", Name = "Acme", CanonicalName = "Acme" }
+                                    },
+                                    Edges = new List<CandidateEdge> { new CandidateEdge { FromRef = "a", ToRef = "b", EdgeType = "AFFILIATED_WITH", Confidence = 0.5 } }
+                                };
+                            }
+
+                            MergeResult r1 = await merger.MergeAsync(First(), "ten_x", "sub_x", null, "job_1", ct);
+                            int edgesAfterFirst = graph.EdgeCount;
+                            string personId = r1.NodeIds[0];
+
+                            // A second source asserts the same relationship: it must consolidate, not duplicate.
+                            await merger.MergeAsync(First(), "ten_x", "sub_x", null, "job_2", ct);
+                            if (graph.EdgeCount != edgesAfterFirst) throw new Exception("re-asserting a relationship should not add a duplicate edge; edge count went " + edgesAfterFirst + " -> " + graph.EdgeCount);
+
+                            List<GraphEdge> edges = await graph.GetEdgesAsync(personId, ct);
+                            GraphEdge? affiliated = null;
+                            foreach (GraphEdge edge in edges) { if (edge.EdgeType == Ontology.EdgeAffiliatedWith) affiliated = edge; }
+                            if (affiliated == null) throw new Exception("expected the AFFILIATED_WITH edge");
+                            if (!affiliated.Tags.TryGetValue(Ontology.TagCorroborationCount, out string? corr) || corr != "2") throw new Exception("corroboration count should be 2 after two assertions, got " + (corr ?? "null"));
+                            if (!affiliated.Tags.TryGetValue(Ontology.TagWeight, out string? weightRaw)
+                                || !Double.TryParse(weightRaw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double weight)
+                                || Math.Abs(weight - 0.75) > 0.001)
+                            {
+                                throw new Exception("noisy-OR weight should be 0.75 after two 0.5 assertions, got " + (weightRaw ?? "null"));
+                            }
                         })
                 });
         }

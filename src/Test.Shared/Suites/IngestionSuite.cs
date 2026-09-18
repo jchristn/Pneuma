@@ -4,6 +4,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.IO;
     using System.Threading.Tasks;
+    using Pneuma.Core.Caching;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
@@ -95,9 +96,10 @@ namespace Test.Shared.Suites
                             if (graph.NodeCount < 1) throw new Exception("no graph node was created");
                             if (recall.DocumentCount < 1) throw new Exception("no chunk document was stored in the collection");
 
-                            // Chunks are modeled as first-class Chunk nodes linked to their source.
-                            List<GraphNode> chunkNodes = await graph.SearchNodesByTagsAsync(new Dictionary<string, string> { { "nodeType", "Chunk" } }, 100, ct);
-                            if (chunkNodes.Count < 1) throw new Exception("expected at least one Chunk graph node");
+                            // Source content is modeled as Cell nodes linked to their source (chunks live only in
+                            // RecallDB, not the graph).
+                            List<GraphNode> cellNodes = await graph.SearchNodesByTagsAsync(new Dictionary<string, string> { { "nodeType", Ontology.NodeCell } }, 100, ct);
+                            if (cellNodes.Count < 1) throw new Exception("expected at least one Cell graph node");
 
                             SubjectLink link = await db.SubjectLinks.ReadAsync(context.TenantId, context.LinkId, ct) ?? throw new Exception("link gone");
                             if (link.Status != SubjectLinkStatusEnum.Ingested) throw new Exception("link should be Ingested");
@@ -239,6 +241,61 @@ namespace Test.Shared.Suites
                             if (await db.IngestionJobs.ReadAsync(context.TenantId, claimed.Id, ct) != null) throw new Exception("ingestion job not deleted");
                             if (await db.SubjectLinks.ReadAsync(context.TenantId, context.LinkId, ct) != null) throw new Exception("link not deleted");
                             if (await db.Subjects.ReadAsync(context.TenantId, context.SubjectId, ct) != null) throw new Exception("subject not deleted");
+                        }),
+
+                    new TestCaseDescriptor("Ingestion", "ChunkingOptions_ValidateAndClamp", "Chunking options coerce to supported strategies and clamp sizes/overlap",
+                        executeAsync: ct =>
+                        {
+                            ChunkingOptions options = new ChunkingOptions();
+                            if (options.Strategy != "FixedTokenCount") throw new Exception("default strategy should be FixedTokenCount");
+                            if (options.MaxTokens != 256 || options.OverlapCount != 32) throw new Exception("defaults should be 256 / 32");
+
+                            options.Strategy = "sentencebased";
+                            if (options.Strategy != "SentenceBased") throw new Exception("a case-insensitive match should canonicalize to SentenceBased");
+                            options.Strategy = "not-a-real-strategy";
+                            if (options.Strategy != "FixedTokenCount") throw new Exception("an unsupported strategy should fall back to FixedTokenCount");
+
+                            options.MaxTokens = 4;
+                            if (options.MaxTokens != 16) throw new Exception("MaxTokens should clamp up to 16");
+                            options.MaxTokens = 999999;
+                            if (options.MaxTokens != 8192) throw new Exception("MaxTokens should clamp down to 8192");
+                            options.OverlapCount = -5;
+                            if (options.OverlapCount != 0) throw new Exception("OverlapCount should clamp up to 0");
+
+                            foreach (string strategy in ChunkingOptions.SupportedStrategies)
+                            {
+                                if (String.IsNullOrWhiteSpace(strategy)) throw new Exception("supported strategies must be non-empty");
+                            }
+                            return Task.CompletedTask;
+                        }),
+
+                    new TestCaseDescriptor("Ingestion", "EmbeddingCache_HitsMissesAndLimit", "Embedding cache serves hits, isolates by model, copies entries, and disables at capacity 0",
+                        executeAsync: ct =>
+                        {
+                            EmbeddingCache cache = new EmbeddingCache(100);
+                            if (!cache.Enabled) throw new Exception("a positive capacity should enable the cache");
+
+                            List<float> vector = new List<float> { 0.1f, 0.2f, 0.3f };
+                            if (cache.TryGet("model-1", "hello world", out List<float> _)) throw new Exception("empty cache should miss");
+                            cache.Set("model-1", "hello world", vector);
+                            if (!cache.TryGet("model-1", "hello world", out List<float> got) || got.Count != 3 || Math.Abs(got[0] - 0.1f) > 1e-6f) throw new Exception("cache should hit after set");
+
+                            // The key includes the model, so a different embedding model must not collide.
+                            if (cache.TryGet("model-2", "hello world", out List<float> _)) throw new Exception("a different model should miss (key includes the model)");
+
+                            // A returned list is a copy: mutating it must not corrupt the stored entry.
+                            got[0] = 9.0f;
+                            cache.TryGet("model-1", "hello world", out List<float> again);
+                            if (Math.Abs(again[0] - 0.1f) > 1e-6f) throw new Exception("a cached entry must be isolated from caller mutation");
+                            if (cache.Count() != 1) throw new Exception("count should be 1, got " + cache.Count());
+
+                            // Capacity 0 disables the cache entirely.
+                            EmbeddingCache disabled = new EmbeddingCache(0);
+                            if (disabled.Enabled) throw new Exception("capacity 0 should disable the cache");
+                            disabled.Set("model-1", "x", vector);
+                            if (disabled.TryGet("model-1", "x", out List<float> _)) throw new Exception("a disabled cache must never hit");
+                            if (disabled.Count() != 0) throw new Exception("a disabled cache count should be 0");
+                            return Task.CompletedTask;
                         })
                 });
         }
@@ -252,7 +309,7 @@ namespace Test.Shared.Suites
             Pneuma.Server.Settings.IngestionSettings settings = new Pneuma.Server.Settings.IngestionSettings();
             Pneuma.Server.Settings.TelemetrySettings telemetrySettings = new Pneuma.Server.Settings.TelemetrySettings { Enabled = false };
             Pneuma.Server.Services.TelemetryService telemetry = new Pneuma.Server.Services.TelemetryService(telemetrySettings, logging);
-            return new IngestionProcessor(db, docAtom, new FakePartioClient(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), logging, telemetry);
+            return new IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), logging, telemetry);
         }
 
         // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the

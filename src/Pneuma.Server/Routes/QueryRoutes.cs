@@ -2,6 +2,7 @@ namespace Pneuma.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
     using Pneuma.Core.Models;
@@ -66,6 +67,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question of the corpus", "Search"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query/stream", QueryStreamAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question and stream the answer (SSE)", "Search"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query/global", QueryGlobalAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Ask a global/thematic question answered from a subject's community summaries", "Search"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/warmup", WarmupAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Warm the answering model so the first question is fast", "Search"));
         }
@@ -143,6 +146,56 @@ namespace Pneuma.Server.Routes
             }
         }
 
+        private async Task QueryGlobalAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await _Authz.AuthorizeAsync(rc, ResourceTypeEnum.GraphNode, OperationTypeEnum.Read, null, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 403, "Forbidden", "Not permitted.").ConfigureAwait(false);
+                return;
+            }
+
+            QueryRequest? request = RouteHelper.ReadBody<QueryRequest>(ctx);
+            if (request == null || String.IsNullOrWhiteSpace(request.Question))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A question is required.").ConfigureAwait(false);
+                return;
+            }
+            if (String.IsNullOrWhiteSpace(request.SubjectId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A subjectId is required for a global question.").ConfigureAwait(false);
+                return;
+            }
+
+            int max = Math.Clamp(request.MaxResults, 1, 20);
+            string tenantId = rc.TenantId ?? String.Empty;
+
+            IDisposable lease;
+            try
+            {
+                lease = await _Gate.AcquireAsync(ctx.Token).ConfigureAwait(false);
+            }
+            catch (ModelRunnerBusyException busy)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 429, "TooManyRequests", busy.Message).ConfigureAwait(false);
+                return;
+            }
+
+            using (lease)
+            {
+                GroundedAnswer answer = await _Query.AnswerGlobalAsync(tenantId, request.SubjectId!, request.Question, max, ctx.Token).ConfigureAwait(false);
+                QueryResponse response = new QueryResponse
+                {
+                    Answer = answer.Answer,
+                    Sources = answer.Sources,
+                    Grounded = answer.Grounded,
+                    Model = answer.AnswerModel,
+                    GenerationMs = answer.GenerationMs
+                };
+                await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
+            }
+        }
+
         private async Task QueryStreamAsync(HttpContextBase ctx)
         {
             RequestContext rc = RouteHelper.Context(ctx);
@@ -207,14 +260,19 @@ namespace Pneuma.Server.Routes
                     return;
                 }
 
-                GeneratedAnswer generated = await _Query.GenerateAnswerDetailedAsync(request.Question, sources, tenantId, runner, request.SubjectId, ctx.Token).ConfigureAwait(false);
-                string answer = generated.Text;
-
-                foreach (string chunk in SseWriter.SplitIntoChunks(answer, 48))
-                {
-                    ctx.Token.ThrowIfCancellationRequested();
-                    await sse.SendAsync(new { type = "delta", text = chunk }, false, ctx.Token).ConfigureAwait(false);
-                }
+                // Stream the answer's tokens as the model produces them (true streaming: first token is emitted
+                // as soon as it arrives, not after the whole answer is generated). The aggregated text is kept
+                // for the terminal event so a client that ignored the deltas still gets the full answer.
+                StringBuilder answerBuilder = new StringBuilder();
+                GeneratedAnswer generated = await _Query.GenerateAnswerStreamAsync(
+                    request.Question, sources, tenantId, runner, request.SubjectId,
+                    async (delta, deltaToken) =>
+                    {
+                        answerBuilder.Append(delta);
+                        await sse.SendAsync(new { type = "delta", text = delta }, false, deltaToken).ConfigureAwait(false);
+                    },
+                    ctx.Token).ConfigureAwait(false);
+                string answer = !String.IsNullOrEmpty(generated.Text) ? generated.Text : answerBuilder.ToString();
 
                 await sse.SendAsync(new
                 {

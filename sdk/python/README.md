@@ -200,6 +200,13 @@ brevity):
   `delete_model_runner(id)`
 - **Prompts**: `list_prompts()`, `create_prompt(prompt)`, `get_prompt(id)`,
   `update_prompt(id, prompt)`, `delete_prompt(id)`
+- **Subject prompts**: `list_subject_prompts(subject_id)`,
+  `set_subject_prompt(subject_id, key, content, merge_mode="Append")`,
+  `delete_subject_prompt(subject_id, key)` — list a subject's effective prompts
+  (each with `key`, `name`, `effectiveContent`, `globalContent`,
+  `overrideContent`, `source`, `mergeMode`), set a per-subject override
+  (`merge_mode` is `"Append"` or `"Replace"`), or remove an override to revert
+  to the global prompt
 - **Settings**: `get_settings()`, `update_settings(settings)`
 - **Request history**: `list_request_history(**filters)`,
   `request_history_summary(**filters)`, `get_request_history(id)`,

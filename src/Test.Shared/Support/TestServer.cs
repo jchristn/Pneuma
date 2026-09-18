@@ -98,8 +98,7 @@ namespace Test.Shared.Support
             TelemetryService telemetry = new TelemetryService(settings.Telemetry, logging);
 
             DiskBlobStore blobs = new DiskBlobStore(Path.Combine(dir, "blobs-" + Guid.NewGuid().ToString("N")));
-            FakePartioClient partio = new FakePartioClient();
-            ModelHealthMonitor modelHealth = new ModelHealthMonitor(partio, logging);
+            ModelHealthMonitor modelHealth = new ModelHealthMonitor(Database, logging);
             FakeRecallDbClient recall = new FakeRecallDbClient();
             Recall = recall;
             TenantProvisioningService provisioning = new TenantProvisioningService(
@@ -108,7 +107,7 @@ namespace Test.Shared.Support
                     new RecallDbTenantProvisioner(recall, "default", 8),
                     new LiteGraphTenantProvisioner(Database, new FakeLiteGraphTenantAdmin())
                 }, logging);
-            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, partio, provisioning, modelHealth, new NullArtifactStore(), blobs, logging, telemetry);
+            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, provisioning, modelHealth, new NullArtifactStore(), blobs, logging, telemetry);
             _Server.Start();
 
             BaseUrl = "http://127.0.0.1:" + port;

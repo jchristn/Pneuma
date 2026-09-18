@@ -14,10 +14,10 @@ namespace Pneuma.Server.Settings
         /// <summary>Bucket for atomized documents (DocumentAtom semantic cells).</summary>
         public string Atoms { get; set; } = "pneuma-atoms";
 
-        /// <summary>Bucket for chunked documents (Partio).</summary>
+        /// <summary>Bucket for chunked documents.</summary>
         public string Chunks { get; set; } = "pneuma-chunks";
 
-        /// <summary>Bucket for embeddings documents (Partio).</summary>
+        /// <summary>Bucket for embeddings documents.</summary>
         public string Embeddings { get; set; } = "pneuma-embeddings";
 
         /// <summary>Bucket for candidate-subgraph JSON documents (model classification output).</summary>

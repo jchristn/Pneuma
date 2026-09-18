@@ -30,6 +30,16 @@ namespace Pneuma.Core.Integrations.Abstractions
         /// <returns>The created edge.</returns>
         Task<GraphEdge> CreateEdgeAsync(GraphEdge edge, CancellationToken token = default);
 
+        /// <summary>
+        /// Update an existing edge's tags (identified by <see cref="GraphEdge.Id"/>), used to consolidate a
+        /// relationship's accumulated weight and corroboration count when it is asserted again rather than
+        /// creating a duplicate edge.
+        /// </summary>
+        /// <param name="edge">The edge to update; its <see cref="GraphEdge.Id"/> must be set.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated edge.</returns>
+        Task<GraphEdge> UpdateEdgeAsync(GraphEdge edge, CancellationToken token = default);
+
         /// <summary>Read a node by identifier.</summary>
         /// <param name="nodeId">Node identifier.</param>
         /// <param name="token">Cancellation token.</param>
@@ -65,6 +75,35 @@ namespace Pneuma.Core.Integrations.Abstractions
         /// <param name="token">Cancellation token.</param>
         /// <returns>Edges.</returns>
         Task<List<GraphEdge>> GetEdgesAsync(string nodeId, CancellationToken token = default);
+
+        /// <summary>
+        /// Extract a bounded, depth-limited subgraph reachable from a node (server-side breadth-first
+        /// traversal), returning the nodes reached within the hop depth and the edges among them. Enables
+        /// multi-hop retrieval expansion without client-side breadth-first fan-out.
+        /// </summary>
+        /// <param name="nodeId">The node to expand from.</param>
+        /// <param name="maxDepth">Maximum hop depth from the origin node.</param>
+        /// <param name="maxNodes">Maximum nodes to return (0 = unbounded).</param>
+        /// <param name="maxEdges">Maximum edges to return (0 = unbounded).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The extracted subgraph.</returns>
+        Task<GraphSubgraph> GetSubgraphAsync(string nodeId, int maxDepth, int maxNodes, int maxEdges, CancellationToken token = default);
+
+        /// <summary>
+        /// Run community detection (Louvain) over the graph, returning per-node community assignments. When
+        /// <paramref name="writeBack"/> is true, the community id is also persisted onto each node so it is
+        /// queryable; otherwise the assignment is only returned.
+        /// </summary>
+        /// <param name="writeBack">Whether to persist the community id onto each node.</param>
+        /// <param name="maxIterations">Maximum iterations for the algorithm.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The community assignments.</returns>
+        Task<CommunityDetectionResult> DetectCommunitiesAsync(bool writeBack, int maxIterations, CancellationToken token = default);
+
+        /// <summary>Delete a single node (and its attached edges) by identifier. Best-effort; a missing node is not an error.</summary>
+        /// <param name="nodeId">Node identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task DeleteNodeAsync(string nodeId, CancellationToken token = default);
 
         /// <summary>
         /// Delete every node and edge asserted by a given ingestion job (tagged with its id), used to
