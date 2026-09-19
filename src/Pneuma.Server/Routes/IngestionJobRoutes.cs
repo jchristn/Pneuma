@@ -157,11 +157,14 @@ namespace Pneuma.Server.Routes
                 IngestionJobEvent? latest = await LatestEventAsync(tenantId, job.Id, ctx.Token).ConfigureAwait(false);
                 if (latest != null && latest.Status == IngestionStatusEnum.Queued)
                 {
+                    // Still queued for the stage's concurrency slot: "time in state" is time spent waiting.
                     snapshot.WaitingForSlot.Add(ToLiveJob(job, latest.Stage, latest.CreatedUtc));
                 }
                 else if (latest != null && latest.Status == IngestionStatusEnum.Processing)
                 {
-                    snapshot.Running.Add(ToLiveJob(job, latest.Stage, latest.CreatedUtc));
+                    // Actively running the stage. The event's QueueDurationMs is the time it waited for the slot
+                    // (0 if it was uncontended), so running-since = the moment the slot was acquired.
+                    snapshot.Running.Add(ToLiveJob(job, latest.Stage, latest.CreatedUtc.AddMilliseconds(latest.QueueDurationMs)));
                 }
                 else
                 {

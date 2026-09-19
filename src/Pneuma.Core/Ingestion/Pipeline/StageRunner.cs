@@ -102,7 +102,22 @@ namespace Pneuma.Core.Ingestion.Pipeline
             try
             {
                 queueSw.Stop();
-                if (queuedEvent != null) queueMs = queueSw.Elapsed.TotalMilliseconds;
+                if (queuedEvent != null)
+                {
+                    queueMs = queueSw.Elapsed.TotalMilliseconds;
+                    // The slot is held and the stage is about to run: flip the "waiting for a slot" entry to
+                    // Processing (carrying the wait time) so the live view and the follow-logs show this step as
+                    // RUNNING, not still waiting — otherwise a job actively executing a contended stage looks
+                    // stuck in the queue for the stage's whole (possibly long) duration. Best-effort.
+                    try
+                    {
+                        await _Journal.ResolveEventAsync(queuedEvent, IngestionStatusEnum.Processing, "Running this step.", 0, queueMs, token).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        // Non-fatal: failing to flip the event does not affect the stage running.
+                    }
+                }
                 using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage.Stage, SpanKindEnum.Internal))
                 {
                     span?.SetTag("pneuma.stage", stage.Stage.ToString());
