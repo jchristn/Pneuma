@@ -49,14 +49,16 @@ function StageBadge({ stage }) {
 }
 
 // Shared column widths so the Step / Time-in-state / Job / Actions columns line up across all three tables.
+// The Document column has no fixed width: with table-layout:fixed it takes the remaining space and its cell
+// truncates the (often long) link with an ellipsis rather than widening the table off-screen.
 function LiveColgroup() {
   return (
     <colgroup>
       <col />
-      <col style={{ width: '14rem' }} />
-      <col style={{ width: '11rem' }} />
-      <col style={{ width: '10rem' }} />
-      <col style={{ width: '3.5rem' }} />
+      <col style={{ width: '12rem' }} />
+      <col style={{ width: '7rem' }} />
+      <col style={{ width: '8rem' }} />
+      <col style={{ width: '3rem' }} />
     </colgroup>
   );
 }
@@ -71,29 +73,31 @@ function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor }) {
       {items.length === 0 ? (
         <p style={{ color: 'var(--color-text-secondary)' }}>{t('live.none')}</p>
       ) : (
-        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-          <LiveColgroup />
-          <thead>
-            <tr>
-              <th>{t('live.document')}</th>
-              <th>{t('live.step')}</th>
-              <th>{t('live.inState')}</th>
-              <th>{t('live.job')}</th>
-              <th aria-label={t('common.actions')} />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.jobId}>
-                <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{item.sourceUrl}</td>
-                <td><StageBadge stage={item.stage} /></td>
-                <td><span className="mono">{formatElapsed(elapsedMs(item.stateSinceUtc, nowMs))}</span></td>
-                <td><CopyableId value={item.jobId} truncateLen={12} /></td>
-                <td style={{ textAlign: 'right' }}><ActionMenu items={actionsFor(item)} /></td>
+        <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+          <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+            <LiveColgroup />
+            <thead>
+              <tr>
+                <th>{t('live.document')}</th>
+                <th>{t('live.step')}</th>
+                <th>{t('live.inState')}</th>
+                <th>{t('live.job')}</th>
+                <th aria-label={t('common.actions')} />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.jobId}>
+                  <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{item.sourceUrl}</td>
+                  <td><StageBadge stage={item.stage} /></td>
+                  <td><span className="mono">{formatElapsed(elapsedMs(item.stateSinceUtc, nowMs))}</span></td>
+                  <td><CopyableId value={item.jobId} truncateLen={12} /></td>
+                  <td style={{ textAlign: 'right' }}><ActionMenu items={actionsFor(item)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
