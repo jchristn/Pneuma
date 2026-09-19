@@ -3,8 +3,9 @@ namespace Pneuma.Sdk.Responses
     using Pneuma.Sdk.Enums;
 
     /// <summary>
-    /// An embedding or completion model endpoint available for ingestion. Secret material
-    /// (API keys, secret access keys, session tokens) is write-only and is never returned.
+    /// An embedding or completion model endpoint available for ingestion. Secret material (API keys, secret
+    /// access keys, session tokens) is never returned in list responses; a single-endpoint read returns the
+    /// stored secret in the provider-appropriate field so it can be viewed.
     /// </summary>
     public class ModelEndpoint
     {
@@ -41,8 +42,17 @@ namespace Pneuma.Sdk.Responses
         /// <summary>Project identifier (Vertex AI).</summary>
         public string? Project { get; set; } = null;
 
-        /// <summary>Access key identifier (Bedrock). The matching secret access key is write-only.</summary>
+        /// <summary>Access key identifier (Bedrock). Non-secret; always returned.</summary>
         public string? AccessKeyId { get; set; } = null;
+
+        /// <summary>Provider API key. Returned only on a single-endpoint read of a non-Bedrock endpoint; null otherwise.</summary>
+        public string? ApiKey { get; set; } = null;
+
+        /// <summary>AWS secret access key (Bedrock). Returned only on a single-endpoint read of a Bedrock endpoint; null otherwise.</summary>
+        public string? SecretAccessKey { get; set; } = null;
+
+        /// <summary>AWS session token (Bedrock). Returned only on a single-endpoint read of a Bedrock endpoint; null otherwise.</summary>
+        public string? SessionToken { get; set; } = null;
 
         /// <summary>Whether the endpoint is active and available for selection.</summary>
         public bool Active { get; set; } = true;

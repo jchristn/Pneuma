@@ -290,7 +290,18 @@ namespace Pneuma.Server.Routes
             runner.UnhealthyThreshold = Math.Max(1, request.UnhealthyThreshold);
             runner.HealthCheckUseAuth = request.HealthCheckUseAuth;
             runner.Active = request.Active;
-            if (!String.IsNullOrEmpty(request.ApiKey)) runner.AuthMaterialEncrypted = _Cipher.Encrypt(request.ApiKey);
+
+            // The primary secret (AuthMaterialEncrypted) is the AWS secret access key for Bedrock and the API key
+            // (or Azure/Vertex token) for every other provider. Re-encrypt only when a new value is supplied so an
+            // edit that leaves the secret blank preserves the stored credential.
+            if (runner.Provider == ModelRunnerProviderEnum.Bedrock)
+            {
+                if (!String.IsNullOrEmpty(request.SecretAccessKey)) runner.AuthMaterialEncrypted = _Cipher.Encrypt(request.SecretAccessKey);
+            }
+            else
+            {
+                if (!String.IsNullOrEmpty(request.ApiKey)) runner.AuthMaterialEncrypted = _Cipher.Encrypt(request.ApiKey);
+            }
             if (!String.IsNullOrEmpty(request.SessionToken)) runner.SessionTokenEncrypted = _Cipher.Encrypt(request.SessionToken);
         }
 
@@ -339,6 +350,9 @@ namespace Pneuma.Server.Routes
         // includeSecrets: false so secrets are never emitted in bulk.
         private ModelEndpointDto ToDto(ModelRunner runner, bool includeSecrets = false)
         {
+            // For Bedrock the primary secret is the AWS secret access key; for everyone else it is the API key.
+            // Only a single-endpoint read (includeSecrets) decrypts and returns it, in the provider-appropriate field.
+            bool bedrock = runner.Provider == ModelRunnerProviderEnum.Bedrock;
             return new ModelEndpointDto
             {
                 Id = runner.Id,
@@ -348,7 +362,9 @@ namespace Pneuma.Server.Routes
                 Model = runner.DefaultModel ?? runner.DefaultEmbeddingModel,
                 Endpoint = runner.BaseUrl,
                 ApiFormat = runner.ApiType,
-                ApiKey = includeSecrets ? DecryptOrNull(runner.AuthMaterialEncrypted) : null,
+                ApiKey = (includeSecrets && !bedrock) ? DecryptOrNull(runner.AuthMaterialEncrypted) : null,
+                SecretAccessKey = (includeSecrets && bedrock) ? DecryptOrNull(runner.AuthMaterialEncrypted) : null,
+                SessionToken = (includeSecrets && bedrock) ? DecryptOrNull(runner.SessionTokenEncrypted) : null,
                 Deployment = runner.Deployment,
                 ApiVersion = runner.ApiVersion,
                 Region = runner.Region,

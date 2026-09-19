@@ -27,8 +27,11 @@ namespace Pneuma.Core.Requests
         /// <summary>API format (e.g. "Ollama", "OpenAI").</summary>
         public string? ApiFormat { get; set; } = null;
 
-        /// <summary>Provider API key, or the Azure/Vertex bearer token, or (for Bedrock) the AWS secret access key. Write-only; never returned.</summary>
+        /// <summary>Provider API key (also the Azure api-key / Vertex bearer token). Used as the primary secret for every provider except Bedrock, which uses <see cref="SecretAccessKey"/>. Write-only.</summary>
         public string? ApiKey { get; set; } = null;
+
+        /// <summary>AWS secret access key (required for Bedrock). Stored as the endpoint's primary secret. Write-only; returned only on a single-endpoint read for viewing.</summary>
+        public string? SecretAccessKey { get; set; } = null;
 
         /// <summary>Azure OpenAI deployment name (required for AzureOpenAI).</summary>
         public string? Deployment { get; set; } = null;

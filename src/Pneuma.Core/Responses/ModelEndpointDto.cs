@@ -33,10 +33,22 @@ namespace Pneuma.Core.Responses
         public string? ApiFormat { get; set; } = null;
 
         /// <summary>
-        /// Provider API key. Always null in responses — secrets are write-only and never returned.
-        /// Retained for wire-shape compatibility with the dashboard/SDK.
+        /// Provider API key. Null except on a single-endpoint read of a non-Bedrock endpoint, where the stored
+        /// key is decrypted and returned so an operator can view/edit it. Never returned in list responses.
         /// </summary>
         public string? ApiKey { get; set; } = null;
+
+        /// <summary>
+        /// AWS secret access key (Bedrock). Null except on a single-endpoint read of a Bedrock endpoint, where the
+        /// stored secret is decrypted and returned for viewing/editing. Never returned in list responses.
+        /// </summary>
+        public string? SecretAccessKey { get; set; } = null;
+
+        /// <summary>
+        /// AWS session token (Bedrock temporary credentials). Null except on a single-endpoint read of a Bedrock
+        /// endpoint. Never returned in list responses.
+        /// </summary>
+        public string? SessionToken { get; set; } = null;
 
         /// <summary>Azure OpenAI deployment name.</summary>
         public string? Deployment { get; set; } = null;
@@ -50,7 +62,7 @@ namespace Pneuma.Core.Responses
         /// <summary>Cloud project (Vertex).</summary>
         public string? Project { get; set; } = null;
 
-        /// <summary>AWS access key id (Bedrock). Non-secret; the secret access key is never returned.</summary>
+        /// <summary>AWS access key id (Bedrock). Non-secret; always returned. The secret access key is returned only on a single-endpoint read via <see cref="SecretAccessKey"/>.</summary>
         public string? AccessKeyId { get; set; } = null;
 
         /// <summary>Whether the endpoint is active.</summary>

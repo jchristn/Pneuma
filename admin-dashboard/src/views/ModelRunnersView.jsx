@@ -259,7 +259,16 @@ function ModelRunnersView() {
     },
     { name: 'model', label: t('modelRunners.model'), required: true, placeholder: 'nomic-embed-text', tip: t('modelRunners.modelTip') },
     { name: 'endpoint', label: t('modelRunners.endpoint'), required: true, placeholder: 'https://api.openai.com', tip: t('modelRunners.endpointTip') },
-    { name: 'apiKey', label: t('modelRunners.apiKey'), type: 'password', editPlaceholder: t('modelRunners.secretUnchanged'), tip: t('modelRunners.apiKeyTip') },
+    {
+      name: 'apiKey', label: t('modelRunners.apiKey'), type: 'password', visibleWhen: (v) => !isBedrock(v),
+      editPlaceholder: t('modelRunners.secretUnchanged'), tip: t('modelRunners.apiKeyTip'),
+      hint: (v) => {
+        if (v.provider === 'Gemini') return t('modelRunners.apiKeyHintGemini');
+        if (v.provider === 'Anthropic') return t('modelRunners.apiKeyHintAnthropic');
+        if (v.provider === 'VertexAI') return t('modelRunners.apiKeyHintVertex');
+        return '';
+      }
+    },
 
     // Provider-specific settings. Shown only for the providers that require them.
     { name: '__sec_provider', type: 'section', label: t('modelRunners.sectionProvider'), visibleWhen: hasProviderExtras },
@@ -295,7 +304,9 @@ function ModelRunnersView() {
   // here as a masked reveal; other write-only secrets stay out of the view.
   const detailFields = [
     ...formFields.filter((f) => f.type !== 'section' && !SECRET_FIELDS.includes(f.name)),
-    { name: 'apiKey', label: t('modelRunners.apiKey'), render: (r) => <SecretReveal value={r.apiKey} /> }
+    // The single-endpoint read returns the stored secret in the provider-appropriate field: the AWS secret
+    // access key for Bedrock, the API key for every other provider. Reveal whichever applies.
+    { name: 'credential', label: t('modelRunners.credential'), render: (r) => (isBedrock(r) ? <SecretReveal value={r.secretAccessKey} /> : <SecretReveal value={r.apiKey} />) }
   ];
 
   return (
