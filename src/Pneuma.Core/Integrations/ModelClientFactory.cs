@@ -103,8 +103,11 @@ namespace Pneuma.Core.Integrations
             if (!String.IsNullOrEmpty(runner.DefaultModel)) client.Model = runner.DefaultModel;
             else if (!String.IsNullOrEmpty(runner.DefaultEmbeddingModel)) client.Model = runner.DefaultEmbeddingModel;
 
-            // Bound each request so a hung or cold model call cannot hold a pipeline stage slot indefinitely.
-            if (runner.MaximumTimeoutMs > 0) client.TimeoutMs = runner.MaximumTimeoutMs;
+            // NOTE: we intentionally do NOT cap the per-call timeout at the endpoint's MaximumTimeoutMs. That
+            // default (60s) is far too short for slow local completion models (e.g. classifying a large document
+            // through a 4B model), and capping here canceled those calls mid-flight. Ingestion calls are already
+            // bounded by the per-stage timeout (StageTimeoutSeconds, whose cancellation token is passed to the
+            // call); query calls are bounded by the request lifecycle.
             return client;
         }
 
