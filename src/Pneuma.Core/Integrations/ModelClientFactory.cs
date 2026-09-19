@@ -102,6 +102,9 @@ namespace Pneuma.Core.Integrations
 
             if (!String.IsNullOrEmpty(runner.DefaultModel)) client.Model = runner.DefaultModel;
             else if (!String.IsNullOrEmpty(runner.DefaultEmbeddingModel)) client.Model = runner.DefaultEmbeddingModel;
+
+            // Bound each request so a hung or cold model call cannot hold a pipeline stage slot indefinitely.
+            if (runner.MaximumTimeoutMs > 0) client.TimeoutMs = runner.MaximumTimeoutMs;
             return client;
         }
 

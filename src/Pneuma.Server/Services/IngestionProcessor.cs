@@ -99,7 +99,7 @@ namespace Pneuma.Server.Services
             _Journal = new IngestionJournal(db, logging);
             // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
             EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
-            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, logging);
+            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, settings.SummarizationMinCellLength, settings.SummarizationConcurrency, logging);
             _StageGates = BuildStageGates(settings.StageConcurrency);
         }
 

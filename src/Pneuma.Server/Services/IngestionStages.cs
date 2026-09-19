@@ -43,6 +43,8 @@ namespace Pneuma.Server.Services
         private readonly IngestionJournal _Journal;
         private readonly EmbeddingCache _EmbeddingCache;
         private readonly LoggingModule _Logging;
+        private readonly int _SummarizationMinCellLength;
+        private readonly int _SummarizationConcurrency;
 
         #endregion
 
@@ -57,6 +59,8 @@ namespace Pneuma.Server.Services
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="journal">Journal for stage events and best-effort artifact writes.</param>
         /// <param name="embeddingCache">Bounded embedding cache so identical text is not re-embedded.</param>
+        /// <param name="summarizationMinCellLength">Minimum trimmed cell length (characters) to summarize; shorter cells are skipped.</param>
+        /// <param name="summarizationConcurrency">Maximum cells summarized concurrently within a single job.</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public IngestionStages(
@@ -68,6 +72,8 @@ namespace Pneuma.Server.Services
             IArtifactStore artifacts,
             IngestionJournal journal,
             EmbeddingCache embeddingCache,
+            int summarizationMinCellLength,
+            int summarizationConcurrency,
             LoggingModule logging)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
@@ -79,6 +85,8 @@ namespace Pneuma.Server.Services
             _Journal = journal ?? throw new ArgumentNullException(nameof(journal));
             _EmbeddingCache = embeddingCache ?? throw new ArgumentNullException(nameof(embeddingCache));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _SummarizationMinCellLength = summarizationMinCellLength < 0 ? 0 : summarizationMinCellLength;
+            _SummarizationConcurrency = summarizationConcurrency < 1 ? 1 : summarizationConcurrency;
             _Classifier = new PolyPromptClassifier(logging);
         }
 
@@ -230,21 +238,65 @@ namespace Pneuma.Server.Services
             ResolvedPrompt summarizeResolved = await new PromptResolver(_Db).ResolveAsync(job.TenantId, job.SubjectId, "cell.summarize", null, token).ConfigureAwait(false);
             string? summarizationPrompt = String.IsNullOrWhiteSpace(summarizeResolved.EffectiveContent) ? null : summarizeResolved.EffectiveContent;
 
-            List<CellSummary> summaries = new List<CellSummary>();
+            // Only summarize cells with enough substance to be worth a model call — short fragments (headings,
+            // captions, single list items) are skipped so a large document (hundreds of cells) does not fire a
+            // model call per trivial cell.
+            List<int> targets = new List<int>();
             for (int i = 0; i < cells.Count; i++)
             {
-                token.ThrowIfCancellationRequested();
-                ExtractedCell cell = cells[i];
-                if (String.IsNullOrWhiteSpace(cell.Text)) continue;
-                string summary = await _Processor.SummarizeAsync(cell.Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
-                if (!String.IsNullOrWhiteSpace(summary))
+                string? text = cells[i]?.Text;
+                if (!String.IsNullOrWhiteSpace(text) && text!.Trim().Length >= _SummarizationMinCellLength) targets.Add(i);
+            }
+            if (targets.Count == 0) return new List<CellSummary>();
+
+            // Summarize with bounded per-job concurrency (Task.WhenAll gated by a semaphore) so one document does
+            // not issue hundreds of serial model calls and monopolize its stage slot. A single cell's failure is
+            // non-fatal — it is logged and its summary skipped — so one bad cell cannot thrash the whole job;
+            // cancellation (operator stop / stage timeout) still propagates.
+            CellSummary?[] produced = new CellSummary?[targets.Count];
+            using (SemaphoreSlim gate = new SemaphoreSlim(_SummarizationConcurrency, _SummarizationConcurrency))
+            {
+                List<Task> tasks = new List<Task>(targets.Count);
+                for (int slot = 0; slot < targets.Count; slot++)
                 {
-                    summaries.Add(new CellSummary
+                    int resultIndex = slot;
+                    int cellIndex = targets[slot];
+                    tasks.Add(Task.Run(async () =>
                     {
-                        CellNodeId = (cellNodeIds != null && i < cellNodeIds.Count) ? cellNodeIds[i] : String.Empty,
-                        Text = summary
-                    });
+                        await gate.WaitAsync(token).ConfigureAwait(false);
+                        try
+                        {
+                            string summary = await _Processor.SummarizeAsync(cells[cellIndex].Text, summarizationPrompt, job.CompletionEndpointId, token).ConfigureAwait(false);
+                            if (!String.IsNullOrWhiteSpace(summary))
+                            {
+                                produced[resultIndex] = new CellSummary
+                                {
+                                    CellNodeId = (cellNodeIds != null && cellIndex < cellNodeIds.Count) ? cellNodeIds[cellIndex] : String.Empty,
+                                    Text = summary
+                                };
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception e)
+                        {
+                            _Logging.Warn("[IngestionStages] summarization of a cell failed (skipped): " + e.Message);
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }, token));
                 }
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+
+            List<CellSummary> summaries = new List<CellSummary>();
+            foreach (CellSummary? summary in produced)
+            {
+                if (summary != null) summaries.Add(summary);
             }
             return summaries;
         }

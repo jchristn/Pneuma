@@ -61,11 +61,38 @@ namespace Pneuma.Server.Settings
             set { _EmbeddingCacheSize = Math.Clamp(value, 0, 5000000); }
         }
 
-        /// <summary>Per-stage timeout in seconds.</summary>
+        /// <summary>
+        /// Ceiling, in seconds, for a single pipeline stage before it is cancelled and the job is retried.
+        /// Applies to every stage including the model-runner-bound ones (classification, summarization,
+        /// embedding), which can legitimately run long on large documents; keep it generous so a long but
+        /// progressing stage is not repeatedly cancelled into a full-job retry. Default 900; clamped to [5, 3600].
+        /// </summary>
         public int StageTimeoutSeconds
         {
             get { return _StageTimeoutSeconds; }
             set { _StageTimeoutSeconds = Math.Clamp(value, 5, 3600); }
+        }
+
+        /// <summary>
+        /// Minimum trimmed length, in characters, a cell must have to be summarized. Short fragments (headings,
+        /// captions, single list items) are skipped so summarization does not fire a model call per trivial cell
+        /// on large documents. Default 128; clamped to [0, 100000] (0 summarizes every non-empty cell).
+        /// </summary>
+        public int SummarizationMinCellLength
+        {
+            get { return _SummarizationMinCellLength; }
+            set { _SummarizationMinCellLength = Math.Clamp(value, 0, 100000); }
+        }
+
+        /// <summary>
+        /// Maximum number of cells a single job summarizes concurrently. Bounds the model calls one large
+        /// document can issue at once so summarization completes in bounded time instead of hundreds of serial
+        /// calls. Default 4; clamped to [1, 64].
+        /// </summary>
+        public int SummarizationConcurrency
+        {
+            get { return _SummarizationConcurrency; }
+            set { _SummarizationConcurrency = Math.Clamp(value, 1, 64); }
         }
 
         /// <summary>
@@ -108,7 +135,9 @@ namespace Pneuma.Server.Settings
         private int _RetryBackoffBaseMs = 2000;
         private int _RetryBackoffMaxMs = 60000;
         private int _EmbeddingCacheSize = 50000;
-        private int _StageTimeoutSeconds = 300;
+        private int _StageTimeoutSeconds = 900;
+        private int _SummarizationMinCellLength = 128;
+        private int _SummarizationConcurrency = 4;
         private int _BrowserNavigationTimeoutMs = 60000;
         private string _UserAgent = HttpContentFetcher.DefaultUserAgent;
 
