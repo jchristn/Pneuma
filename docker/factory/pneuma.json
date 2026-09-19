@@ -57,9 +57,9 @@
       "ContentRetrieval": 4,
       "TypeDetection": 8,
       "CellExtraction": 8,
-      "Classification": 1,
+      "Classification": 2,
       "GraphMerge": 8,
-      "Summarization": 1,
+      "Summarization": 4,
       "Chunking": 8,
       "Embedding": 1,
       "Indexing": 8

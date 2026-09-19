@@ -58,9 +58,9 @@
       "contentRetrieval": 4,
       "typeDetection": 8,
       "cellExtraction": 8,
-      "classification": 1,
+      "classification": 2,
       "graphMerge": 8,
-      "summarization": 1,
+      "summarization": 4,
       "chunking": 8,
       "embedding": 1,
       "indexing": 8
