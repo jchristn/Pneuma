@@ -1,5 +1,6 @@
 namespace Pneuma.Core.Graph
 {
+    using System;
     using System.Collections.Generic;
 
     /// <summary>
@@ -12,6 +13,15 @@ namespace Pneuma.Core.Graph
 
         /// <summary>Identifiers of edges created during merge.</summary>
         public List<string> EdgeIds { get; set; } = new List<string>();
+
+        /// <summary>
+        /// In-memory only (not persisted): map from a candidate node's <c>Ref</c> to its resolved graph node id,
+        /// carried from the node-merge step to the relationship-consolidation step so edges can be wired.
+        /// </summary>
+        public Dictionary<string, string> RefToId { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>In-memory only (not persisted): the provenance Source node id created for this merge, if any.</summary>
+        public string? SourceNodeId { get; set; } = null;
 
         /// <summary>
         /// Identifiers of the Cell nodes created for the source's extracted cells, aligned one-to-one with the

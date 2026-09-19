@@ -16,5 +16,13 @@ namespace Pneuma.Server.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>The graph GUID, or null when the graph could not be resolved/created.</returns>
         Task<string?> ProvisionAsync(string tenantGuid, string name, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete the LiteGraph tenant and everything it owns (graphs, nodes, edges, users, credentials).
+        /// Best-effort and idempotent — a missing tenant is a no-op. Used when a Pneuma tenant is deleted.
+        /// </summary>
+        /// <param name="tenantGuid">GUID of the LiteGraph tenant to delete.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task DeprovisionAsync(string tenantGuid, CancellationToken token = default);
     }
 }

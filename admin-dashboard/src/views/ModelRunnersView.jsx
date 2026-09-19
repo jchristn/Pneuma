@@ -42,6 +42,23 @@ const hasProviderExtras = (v) => isAzure(v) || isBedrock(v) || isVertex(v);
 
 const HEALTH_POLL_MS = 15000;
 
+// Masked reveal for a stored secret in the read-only detail view. The single-endpoint GET returns the
+// decrypted API key so an operator can inspect it here (a deliberate product decision); it stays masked
+// until revealed and is never shown in the list.
+function SecretReveal({ value }) {
+  const { t } = useTranslation();
+  const [show, setShow] = useState(false);
+  if (!value) return <span>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+      <code className="wrap">{show ? value : '•'.repeat(Math.min(24, value.length))}</code>
+      <button type="button" className="button-secondary button-small" onClick={() => setShow((s) => !s)}>
+        {show ? t('common.hide') : t('common.show')}
+      </button>
+    </span>
+  );
+}
+
 function typeTone(type) {
   if (type === 'Embedding') return 'info';
   if (type === 'Completion') return 'warning';
@@ -121,6 +138,7 @@ function ModelRunnersView() {
   const [health, setHealth] = useState({});
   const [healthModal, setHealthModal] = useState(null);
   const [validation, setValidation] = useState(null);
+  const [notice, setNotice] = useState('');
   const mounted = useRef(true);
 
   const loadHealth = useCallback(async () => {
@@ -154,6 +172,36 @@ function ModelRunnersView() {
       if (mounted.current) setHealthModal((m) => (m && m.id === row.id ? { ...m, loading: false } : m));
     }
   }, [apiClient, health]);
+
+  // "Pending" health: health checks are enabled for the endpoint (and it's active), but no probe has run
+  // yet — the same state renderHealth surfaces as "Pending". This mirrors renderHealth's `checked` test.
+  const isHealthPending = useCallback((row) => {
+    if (row.healthCheckEnabled !== true) return false;
+    if (row.active === false) return false;
+    const h = health[row.id];
+    const checked = h && (h.lastCheckUtc || h.LastCheckUtc);
+    return !checked;
+  }, [health]);
+
+  // Run a single health probe on demand and refresh the endpoint's health so the badge updates. Handles the
+  // backend's 400 (health checks disabled) and 404 (not found) with the app's notice pattern.
+  const runHealthCheck = useCallback(async (row) => {
+    const label = row.name || row.model || row.id;
+    try {
+      const dto = await apiClient.runModelEndpointHealthCheck(row.id);
+      if (mounted.current && dto) {
+        const id = dto.endpointId || dto.EndpointId || row.id;
+        setHealth((prev) => ({ ...prev, [id]: dto }));
+      }
+      if (mounted.current) setNotice(t('modelRunners.healthcheckSuccess', { name: label }));
+      loadHealth();
+    } catch (err) {
+      if (!mounted.current) return;
+      if (err?.status === 400) setNotice(t('modelRunners.healthcheckDisabled'));
+      else if (err?.status === 404) setNotice(t('modelRunners.healthcheckNotFound'));
+      else setNotice(`${t('modelRunners.healthcheckError')} ${err?.message || ''}`.trim());
+    }
+  }, [apiClient, loadHealth, t]);
 
   const runValidation = useCallback(async (row) => {
     const label = row.name || row.model || row.id;
@@ -243,7 +291,12 @@ function ModelRunnersView() {
   ];
 
   const SECRET_FIELDS = ['apiKey', 'secretAccessKey', 'sessionToken'];
-  const detailFields = formFields.filter((f) => f.type !== 'section' && !SECRET_FIELDS.includes(f.name));
+  // The detail view fetches the single endpoint (which returns the decrypted key), so surface the API key
+  // here as a masked reveal; other write-only secrets stay out of the view.
+  const detailFields = [
+    ...formFields.filter((f) => f.type !== 'section' && !SECRET_FIELDS.includes(f.name)),
+    { name: 'apiKey', label: t('modelRunners.apiKey'), render: (r) => <SecretReveal value={r.apiKey} /> }
+  ];
 
   return (
     <>
@@ -256,9 +309,11 @@ function ModelRunnersView() {
         formFields={formFields}
         detailFields={detailFields}
         idField="id"
+        fetchDetail
         duplicable
         duplicateTransform={(r) => ({ ...r, name: r.name ? `${r.name} (copy)` : '' })}
         extraActions={[
+          { key: 'startHealthcheck', label: t('modelRunners.startHealthcheck'), tip: t('modelRunners.startHealthcheckTip'), hidden: (row) => !isHealthPending(row), onClick: runHealthCheck },
           { key: 'validate', label: t('modelRunners.validate'), tip: t('modelRunners.validateTip'), onClick: runValidation }
         ]}
       />
@@ -271,6 +326,16 @@ function ModelRunnersView() {
           const row = { id: validation.id, type: validation.type, name: validation.name };
           runValidation(row);
         }} />
+      )}
+      {notice && (
+        <Modal
+          title={t('common.notice')}
+          size="sm"
+          onClose={() => setNotice('')}
+          footer={<button type="button" className="button-primary" onClick={() => setNotice('')}>{t('common.close')}</button>}
+        >
+          <p className="confirm-text">{notice}</p>
+        </Modal>
       )}
     </>
   );

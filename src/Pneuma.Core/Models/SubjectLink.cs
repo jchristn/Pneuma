@@ -80,6 +80,13 @@ namespace Pneuma.Core.Models
         /// <summary>Whether the link is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 
+        /// <summary>
+        /// Lifecycle state of a tracked background cascade deletion. A live link is
+        /// <see cref="LinkDeletionStatusEnum.None"/>; deleting a link marks it Pending and the background
+        /// worker runs the cascade, so the request that starts the delete is never blocked by it.
+        /// </summary>
+        public LinkDeletionStatusEnum DeletionStatus { get; set; } = LinkDeletionStatusEnum.None;
+
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

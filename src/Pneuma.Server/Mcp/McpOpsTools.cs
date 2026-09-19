@@ -137,7 +137,7 @@ namespace Pneuma.Server.Mcp
         {
             List<ModelEndpointHealthDto> health = new List<ModelEndpointHealthDto>();
             List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(null, token).ConfigureAwait(false);
-            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl));
+            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl, runner.HealthCheckEnabled));
 
             EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
             int total = health.Count;
@@ -164,7 +164,7 @@ namespace Pneuma.Server.Mcp
 
             ModelRunner? runner = await _Db.ModelRunners.ReadAsync(endpointId, token).ConfigureAwait(false);
             if (runner == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Model endpoint not found.").ConfigureAwait(false); return null; }
-            return _Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl);
+            return _Health.BuildStatus(runner.Id, runner.Name, HealthType(runner), runner.BaseUrl, runner.HealthCheckEnabled);
         }
 
         private static string HealthType(ModelRunner runner)

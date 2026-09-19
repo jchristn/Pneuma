@@ -328,6 +328,25 @@ const en = {
       emptyQueued: 'No steps recorded yet — ingestion is queued.',
       emptyNoRuns: 'No ingestion runs found for this link.'
     },
+    // Distinct, human-readable label per IngestionStageEnum value. No two stages share a label; the two
+    // phase umbrellas (Categorization, Hydration) are marked "(phase)" so they read apart from their sub-stages.
+    ingestionStages: {
+      pending: 'Queued',
+      contentRetrieval: 'Fetching content',
+      typeDetection: 'Detecting document type',
+      cellExtraction: 'Extracting cells',
+      classification: 'Classifying content',
+      categorization: 'Categorization (phase)',
+      hydration: 'Hydration (phase)',
+      ontologyCanonicalization: 'Canonicalizing ontology',
+      graphMerge: 'Merging into graph',
+      relationshipConsolidation: 'Consolidating relationships',
+      summarization: 'Summarizing',
+      chunking: 'Chunking',
+      embedding: 'Embedding',
+      indexing: 'Indexing',
+      done: 'Done'
+    },
     jobs: {
       title: 'Ingestion Queue',
       subtitle: 'Monitor and recover content ingestion jobs',
@@ -440,7 +459,14 @@ const en = {
       validateCheck: 'Check',
       validateResult: 'Result',
       validateDetail: 'Detail',
-      validateDuration: 'Duration'
+      validateDuration: 'Duration',
+      startHealthcheck: 'Start Healthcheck',
+      startHealthcheckTip: 'Run a single health probe against this endpoint right now. Available while health checks are enabled but no probe has run yet.',
+      healthcheckRunning: 'Running health check…',
+      healthcheckSuccess: 'Health check started for {{name}}.',
+      healthcheckDisabled: 'Health checks are disabled for this endpoint.',
+      healthcheckNotFound: 'This model endpoint was not found.',
+      healthcheckError: 'The health check could not be run.'
     },
     prompts: {
       title: 'Prompts',

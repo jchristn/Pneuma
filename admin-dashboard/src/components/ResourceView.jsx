@@ -345,7 +345,16 @@ function ResourceView({
     await load();
   };
 
+  // Resources that expose a server-side bulk-delete endpoint (POST /v1.0/{resource}/delete) are deleted in a
+  // single request so the browser never fans out one DELETE per row; the server cascades (in the background
+  // for links/subjects). Others fall back to per-row deletes.
+  const bulkDeleteCapable = new Set(['links', 'subjects', 'jobs']);
+
   const bulkDeleteRun = async (items) => {
+    if (!deleter && bulkDeleteCapable.has(resourceKey)) {
+      await apiClient.bulkRemove(resourceKey, items.map((item) => getId(item, idField)));
+      return;
+    }
     for (const item of items) {
       if (deleter) await deleter(apiClient, getId(item, idField));
       else await apiClient.remove(resourceKey, getId(item, idField));

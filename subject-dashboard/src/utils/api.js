@@ -168,6 +168,10 @@ class ApiClient {
   async deleteLink(id) {
     return this._request('DELETE', `/v1.0/links/${encodeURIComponent(id)}`);
   }
+  // Bulk delete: one request marks every listed link for background cascade deletion (no per-link fan-out).
+  async bulkDeleteLinks(ids) {
+    return this._request('POST', '/v1.0/links/delete', { body: { ids } });
+  }
   async getSubjectLinks(subjectId, options = {}) {
     return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, options);
   }
@@ -335,6 +339,10 @@ class ApiClient {
   }
   evalDeleteRun(id) {
     return this._request('DELETE', `/v1.0/eval/runs/${encodeURIComponent(id)}`);
+  }
+  // Bulk delete: one request deletes every listed evaluation run and its results server-side.
+  evalBulkDeleteRuns(ids) {
+    return this._request('POST', '/v1.0/eval/runs/delete', { body: { ids } });
   }
   /** Cancel a queued/running eval run. Idempotent; returns the (possibly Cancelled) run. */
   evalCancelRun(id) {

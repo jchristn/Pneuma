@@ -36,6 +36,14 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Links.</returns>
         Task<List<SubjectLink>> EnumerateBySubjectAsync(string tenantId, string subjectId, CancellationToken token = default);
 
+        /// <summary>
+        /// Enumerate, across all tenants, links whose deletion status is Pending or Deleting, so the background
+        /// deletion worker can claim them (and resume interrupted deletions).
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Links awaiting or undergoing background cascade deletion.</returns>
+        Task<List<SubjectLink>> EnumeratePendingDeletionAsync(CancellationToken token = default);
+
         /// <summary>Update a link.</summary>
         /// <param name="link">Link to update.</param>
         /// <param name="token">Cancellation token.</param>

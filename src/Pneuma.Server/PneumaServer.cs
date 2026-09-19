@@ -182,10 +182,11 @@ namespace Pneuma.Server
             new PermissionRoutes(_Database, _Authorization).Register(_Server);
             new AssignmentRoutes(_Database, _Authorization).Register(_Server);
             new AuditRoutes(_Database, _Authorization).Register(_Server);
-            CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs);
+            LiteGraphTenantAdmin cascadeLiteGraphAdmin = new LiteGraphTenantAdmin(_Settings.Integrations.LiteGraph.Endpoint, _Settings.Integrations.LiteGraph.BearerToken, _Logging);
+            CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs, _Collections, cascadeLiteGraphAdmin);
             new SubjectRoutes(_Database, _Authorization, cascade).Register(_Server);
             new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
-            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, cascade, _Collections).Register(_Server);
+            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization, cascade).Register(_Server);
             new IngestionEndpointRoutes(_Database, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);

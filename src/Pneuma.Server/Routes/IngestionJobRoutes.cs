@@ -67,6 +67,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Stop (cancel) an ingestion job", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/jobs/{id}/log", LogAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get an ingestion job's live per-stage log", "Ingestion"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/jobs/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple ingestion jobs and their artifacts", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/jobs/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an ingestion job and its artifacts", "Ingestion"));
         }
@@ -273,6 +275,33 @@ namespace Pneuma.Server.Routes
 
             ctx.Response.StatusCode = 204;
             await ctx.Response.Send().ConfigureAwait(false);
+        }
+
+        private async Task BulkDeleteAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+
+            IdListRequest? request = RouteHelper.ReadBody<IdListRequest>(ctx);
+            if (request == null || request.Ids == null || request.Ids.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A non-empty list of job ids is required.").ConfigureAwait(false);
+                return;
+            }
+
+            // Cascade each job server-side in this single request, so the browser never fans out one delete per job.
+            int deleted = 0;
+            foreach (string id in request.Ids)
+            {
+                if (String.IsNullOrWhiteSpace(id)) continue;
+                IngestionJob? job = await _Db.IngestionJobs.ReadAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
+                if (job == null) continue;
+                await _Cascade.DeleteJobCascadeAsync(tenantId, job, ctx.Token).ConfigureAwait(false);
+                deleted++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 200, new { count = deleted }).ConfigureAwait(false);
         }
 
         #endregion

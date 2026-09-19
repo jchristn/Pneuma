@@ -175,6 +175,7 @@ function LinksView() {
     try {
       await apiClient.deleteLink(deleteTarget.id);
       setDeleteTarget(null);
+      setNotice(t('links.deletingBackground', 'We are deleting this content link and everything associated with it in the background. You may close this window.'));
       await load(false);
     } catch (err) {
       setError(err.message);
@@ -228,11 +229,11 @@ function LinksView() {
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
-      for (const link of selectedItems) {
-        await apiClient.deleteLink(link.id);
-      }
+      // One server request marks every selected link for background cascade deletion — no per-link fan-out.
+      await apiClient.bulkDeleteLinks(selectedItems.map((link) => link.id));
       setBulkDeleteOpen(false);
       clear();
+      setNotice(t('links.deletingBackgroundBulk', 'We are deleting the selected content links in the background. You may close this window.'));
       await load(false);
     } catch (err) {
       setError(err.message);
@@ -306,7 +307,12 @@ function LinksView() {
     {
       key: 'status',
       label: t('common.status'),
-      render: (v) => <StatusPill status={v} />
+      render: (v, row) => {
+        const ds = row.deletionStatus;
+        if (ds === 'Pending' || ds === 'Deleting') return <span className="hd-muted">{t('links.deletingStatus', 'deleting…')}</span>;
+        if (ds === 'Failed') return <span className="hd-muted">{t('links.deletionFailed', 'deletion failed')}</span>;
+        return <StatusPill status={v} />;
+      }
     },
     {
       key: 'lastIngestedUtc',

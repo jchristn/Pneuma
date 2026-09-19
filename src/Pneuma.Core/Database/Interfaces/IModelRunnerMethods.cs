@@ -46,5 +46,14 @@ namespace Pneuma.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if a record was deleted.</returns>
         Task<bool> DeleteAsync(string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Whether any model runner exists at all, across every tenant (global and tenant-scoped). Used to gate
+        /// first-boot default seeding so the defaults are not re-created on later restarts once an operator has
+        /// configured, renamed, or removed endpoints.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if at least one runner exists.</returns>
+        Task<bool> ExistsAnyAsync(CancellationToken token = default);
     }
 }

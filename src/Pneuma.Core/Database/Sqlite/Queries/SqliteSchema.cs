@@ -164,6 +164,33 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                         "content TEXT, mergemode TEXT NOT NULL DEFAULT 'Append', createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
                     "CREATE UNIQUE INDEX IF NOT EXISTS idx_subjectprompts_key ON subjectprompts (tenantid, subjectid, promptkey);"
                 }));
+                list.Add(new SchemaMigration(21, "Add link background-deletion status", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN deletionstatus TEXT NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(22, "Add model runner health-check and concurrency config", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN maxconcurrentrequests INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN maxqueuedepth INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN maximumtimeoutms INTEGER NOT NULL DEFAULT 60000;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckenabled INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckurl TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckmethod TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckintervalms INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthchecktimeoutms INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckexpectedstatuscode INTEGER NOT NULL DEFAULT 200;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthythreshold INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN unhealthythreshold INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckuseauth INTEGER NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(23, "Add tenant deletion status", new List<string>
+                {
+                    "ALTER TABLE tenants ADD COLUMN deletionstatus TEXT NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(24, "Enable health checks on existing model runners", new List<string>
+                {
+                    "UPDATE modelrunners SET healthcheckenabled = 1;"
+                }));
                 return list;
             }
         }

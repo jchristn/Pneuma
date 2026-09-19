@@ -38,5 +38,12 @@ namespace Pneuma.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if a record was deleted.</returns>
         Task<bool> DeleteAsync(string tenantId, string subjectId, string promptKey, CancellationToken token = default);
+
+        /// <summary>Delete every prompt override belonging to a subject (used by subject deletion cascade).</summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task that completes when the overrides are removed.</returns>
+        Task DeleteBySubjectAsync(string tenantId, string subjectId, CancellationToken token = default);
     }
 }

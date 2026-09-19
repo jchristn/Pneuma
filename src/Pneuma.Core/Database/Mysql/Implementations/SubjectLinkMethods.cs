@@ -71,14 +71,14 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         internal static string InsertSql(SubjectLink link)
         {
             return
-                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, contenthash, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, contenthash, active, isprotected, deletionstatus, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(link.Id) + ", " + Sanitizer.Str(link.TenantId) + ", " +
                 Sanitizer.Str(link.SubjectId) + ", " + Sanitizer.Str(link.Url) + ", " +
                 Sanitizer.Str(link.Title) + ", " + Sanitizer.Str(JsonColumn.FromStrings(link.Labels)) + ", " +
                 Sanitizer.Str(JsonColumn.FromDictionary(link.Tags)) + ", " + Sanitizer.Str(link.SubmittedByUserId) + ", " +
                 Sanitizer.Str(link.Status.ToString()) + ", " + Sanitizer.Ts(link.LastIngestedUtc) + ", " +
                 Sanitizer.Str(link.LastError) + ", " + Sanitizer.Str(link.ContentHash) + ", " + Sanitizer.Bit(link.Active) + ", " +
-                Sanitizer.Bit(link.IsProtected) + ", " + Sanitizer.Ts(link.CreatedUtc) + ", " +
+                Sanitizer.Bit(link.IsProtected) + ", " + Sanitizer.Str(link.DeletionStatus.ToString()) + ", " + Sanitizer.Ts(link.CreatedUtc) + ", " +
                 Sanitizer.Ts(link.LastUpdateUtc) + ");";
         }
 
@@ -143,6 +143,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", contenthash = " + Sanitizer.Str(link.ContentHash) +
                 ", active = " + Sanitizer.Bit(link.Active) +
                 ", isprotected = " + Sanitizer.Bit(link.IsProtected) +
+                ", deletionstatus = " + Sanitizer.Str(link.DeletionStatus.ToString()) +
                 ", lastupdateutc = " + Sanitizer.Ts(link.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(link.TenantId) + " AND id = " + Sanitizer.Str(link.Id) + ";";
             await Query(sql, token).ConfigureAwait(false);
@@ -173,9 +174,21 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ContentHash = RowReader.GetNullableString(row, "contenthash"),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
+                DeletionStatus = RowReader.GetEnum<LinkDeletionStatusEnum>(row, "deletionstatus", LinkDeletionStatusEnum.None),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")
             };
+        }
+
+        /// <inheritdoc />
+        public async Task<List<SubjectLink>> EnumeratePendingDeletionAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM subjectlinks WHERE deletionstatus IN ('Pending', 'Deleting') ORDER BY createdutc ASC;",
+                token).ConfigureAwait(false);
+            List<SubjectLink> result = new List<SubjectLink>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
         }
     }
 }

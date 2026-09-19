@@ -23,7 +23,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
             runner.LastUpdateUtc = runner.CreatedUtc;
 
             string sql =
-                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, deployment, apiversion, region, project, accesskeyid, sessiontokenencrypted, contextsize, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, deployment, apiversion, region, project, accesskeyid, sessiontokenencrypted, contextsize, maxconcurrentrequests, maxqueuedepth, maximumtimeoutms, healthcheckenabled, healthcheckurl, healthcheckmethod, healthcheckintervalms, healthchecktimeoutms, healthcheckexpectedstatuscode, healthythreshold, unhealthythreshold, healthcheckuseauth, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(runner.Id) + ", " + Sanitizer.Str(runner.TenantId) + ", " +
                 Sanitizer.Str(runner.Name) + ", " + Sanitizer.Str(runner.Provider.ToString()) + ", " +
                 Sanitizer.Str(runner.BaseUrl) + ", " + Sanitizer.Str(runner.ApiType) + ", " +
@@ -33,7 +33,12 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 Sanitizer.Str(runner.Deployment) + ", " + Sanitizer.Str(runner.ApiVersion) + ", " +
                 Sanitizer.Str(runner.Region) + ", " + Sanitizer.Str(runner.Project) + ", " +
                 Sanitizer.Str(runner.AccessKeyId) + ", " + Sanitizer.Str(runner.SessionTokenEncrypted) + ", " +
-                Sanitizer.Num(runner.ContextSize) + ", " + Sanitizer.Bit(runner.Active) + ", " +
+                Sanitizer.Num(runner.ContextSize) + ", " +
+                Sanitizer.Num(runner.MaxConcurrentRequests) + ", " + Sanitizer.Num(runner.MaxQueueDepth) + ", " + Sanitizer.Num(runner.MaximumTimeoutMs) + ", " +
+                Sanitizer.Bit(runner.HealthCheckEnabled) + ", " + Sanitizer.Str(runner.HealthCheckUrl) + ", " + Sanitizer.Str(runner.HealthCheckMethod) + ", " +
+                Sanitizer.Num(runner.HealthCheckIntervalMs) + ", " + Sanitizer.Num(runner.HealthCheckTimeoutMs) + ", " + Sanitizer.Num(runner.HealthCheckExpectedStatusCode) + ", " +
+                Sanitizer.Num(runner.HealthyThreshold) + ", " + Sanitizer.Num(runner.UnhealthyThreshold) + ", " + Sanitizer.Bit(runner.HealthCheckUseAuth) + ", " +
+                Sanitizer.Bit(runner.Active) + ", " +
                 Sanitizer.Bit(runner.IsProtected) + ", " + Sanitizer.Ts(runner.CreatedUtc) + ", " +
                 Sanitizer.Ts(runner.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
@@ -109,6 +114,18 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", accesskeyid = " + Sanitizer.Str(runner.AccessKeyId) +
                 ", sessiontokenencrypted = " + Sanitizer.Str(runner.SessionTokenEncrypted) +
                 ", contextsize = " + Sanitizer.Num(runner.ContextSize) +
+                ", maxconcurrentrequests = " + Sanitizer.Num(runner.MaxConcurrentRequests) +
+                ", maxqueuedepth = " + Sanitizer.Num(runner.MaxQueueDepth) +
+                ", maximumtimeoutms = " + Sanitizer.Num(runner.MaximumTimeoutMs) +
+                ", healthcheckenabled = " + Sanitizer.Bit(runner.HealthCheckEnabled) +
+                ", healthcheckurl = " + Sanitizer.Str(runner.HealthCheckUrl) +
+                ", healthcheckmethod = " + Sanitizer.Str(runner.HealthCheckMethod) +
+                ", healthcheckintervalms = " + Sanitizer.Num(runner.HealthCheckIntervalMs) +
+                ", healthchecktimeoutms = " + Sanitizer.Num(runner.HealthCheckTimeoutMs) +
+                ", healthcheckexpectedstatuscode = " + Sanitizer.Num(runner.HealthCheckExpectedStatusCode) +
+                ", healthythreshold = " + Sanitizer.Num(runner.HealthyThreshold) +
+                ", unhealthythreshold = " + Sanitizer.Num(runner.UnhealthyThreshold) +
+                ", healthcheckuseauth = " + Sanitizer.Bit(runner.HealthCheckUseAuth) +
                 ", active = " + Sanitizer.Bit(runner.Active) +
                 ", isprotected = " + Sanitizer.Bit(runner.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(runner.LastUpdateUtc) +
@@ -124,6 +141,13 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 "SELECT id FROM modelrunners WHERE id = " + Sanitizer.Str(id) + ";",
                 "DELETE FROM modelrunners WHERE id = " + Sanitizer.Str(id) + ";",
                 token);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ExistsAnyAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query("SELECT id FROM modelrunners LIMIT 1;", token).ConfigureAwait(false);
+            return table.Rows.Count > 0;
         }
 
         internal static ModelRunner Map(DataRow row)
@@ -148,6 +172,18 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 AccessKeyId = RowReader.GetNullableString(row, "accesskeyid"),
                 SessionTokenEncrypted = RowReader.GetNullableString(row, "sessiontokenencrypted"),
                 ContextSize = RowReader.GetInt(row, "contextsize"),
+                MaxConcurrentRequests = RowReader.GetInt(row, "maxconcurrentrequests"),
+                MaxQueueDepth = RowReader.GetInt(row, "maxqueuedepth"),
+                MaximumTimeoutMs = RowReader.GetInt(row, "maximumtimeoutms"),
+                HealthCheckEnabled = RowReader.GetBool(row, "healthcheckenabled"),
+                HealthCheckUrl = RowReader.GetNullableString(row, "healthcheckurl"),
+                HealthCheckMethod = RowReader.GetNullableString(row, "healthcheckmethod"),
+                HealthCheckIntervalMs = RowReader.GetInt(row, "healthcheckintervalms"),
+                HealthCheckTimeoutMs = RowReader.GetInt(row, "healthchecktimeoutms"),
+                HealthCheckExpectedStatusCode = RowReader.GetInt(row, "healthcheckexpectedstatuscode"),
+                HealthyThreshold = RowReader.GetInt(row, "healthythreshold"),
+                UnhealthyThreshold = RowReader.GetInt(row, "unhealthythreshold"),
+                HealthCheckUseAuth = RowReader.GetBool(row, "healthcheckuseauth"),
                 Active = RowReader.GetBool(row, "active"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),

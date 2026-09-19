@@ -7,6 +7,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
+    using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Storage;
 
@@ -26,6 +27,8 @@ namespace Pneuma.Server.Services
         private readonly IVectorRepository _Vectors;
         private readonly IGraphRepositoryFactory _GraphFactory;
         private readonly IBlobStore _Blobs;
+        private readonly ICollectionStore _Collections;
+        private readonly ILiteGraphTenantAdmin _LiteGraphAdmin;
 
         #endregion
 
@@ -37,14 +40,18 @@ namespace Pneuma.Server.Services
         /// <param name="vectors">Vector repository (RecallDB) holding the job's chunk documents.</param>
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="blobs">Blob store.</param>
+        /// <param name="collections">Collection store (RecallDB) used to deprovision a tenant's collections.</param>
+        /// <param name="liteGraphAdmin">LiteGraph tenant admin used to deprovision a tenant's LiteGraph tenant/graph.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public CascadeDeletionService(DatabaseDriverBase db, IArtifactStore artifacts, IVectorRepository vectors, IGraphRepositoryFactory graphFactory, IBlobStore blobs)
+        public CascadeDeletionService(DatabaseDriverBase db, IArtifactStore artifacts, IVectorRepository vectors, IGraphRepositoryFactory graphFactory, IBlobStore blobs, ICollectionStore collections, ILiteGraphTenantAdmin liteGraphAdmin)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
             _Vectors = vectors ?? throw new ArgumentNullException(nameof(vectors));
             _GraphFactory = graphFactory ?? throw new ArgumentNullException(nameof(graphFactory));
             _Blobs = blobs ?? throw new ArgumentNullException(nameof(blobs));
+            _Collections = collections ?? throw new ArgumentNullException(nameof(collections));
+            _LiteGraphAdmin = liteGraphAdmin ?? throw new ArgumentNullException(nameof(liteGraphAdmin));
         }
 
         #endregion
@@ -140,8 +147,54 @@ namespace Pneuma.Server.Services
             }).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatTurns.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
 
+            // Remove the subject's per-subject prompt overrides.
+            await TryExternalAsync(() => _Db.SubjectPrompts.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+
             // The subject, its links, its jobs, and all job events are removed in one transaction.
             return await _Db.Subjects.DeleteWithSubordinatesAsync(tenantId, subjectId, linkIds, jobIds, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Delete a tenant and everything it owns: every subject (each with the full subject cascade), the
+        /// tenant's retrieval collections and its LiteGraph tenant/graph (best-effort external deprovision), and
+        /// all tenant-scoped database rows including the tenant row (one transaction). Global (tenant-null) rows
+        /// are preserved.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if the tenant row was deleted.</returns>
+        public async Task<bool> DeleteTenantCascadeAsync(string tenantId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(tenantId)) return false;
+
+            // Tear down each subject with the full subject cascade (links, jobs, graph, vectors, artifacts, chat,
+            // and evaluation data) so the external stores are cleaned per subject before the tenant-wide purge.
+            List<Subject> subjects = await _Db.Subjects.EnumerateAsync(tenantId, token).ConfigureAwait(false);
+            foreach (Subject subject in subjects)
+            {
+                await DeleteSubjectCascadeAsync(tenantId, subject.Id, token).ConfigureAwait(false);
+            }
+
+            Tenant? tenant = await _Db.Tenants.ReadAsync(tenantId, token).ConfigureAwait(false);
+
+            // Best-effort deprovision of the tenant's subordinate-service resources: RecallDB collections and the
+            // LiteGraph tenant/graph. Never block the authoritative database delete.
+            await TryExternalAsync(async () =>
+            {
+                List<RecallCollection> collections = await _Collections.ListCollectionsAsync(tenantId, token).ConfigureAwait(false);
+                foreach (RecallCollection collection in collections)
+                {
+                    if (!String.IsNullOrEmpty(collection.Id)) await _Collections.DeleteCollectionAsync(tenantId, collection.Id!, token).ConfigureAwait(false);
+                }
+            }).ConfigureAwait(false);
+
+            if (tenant != null && !String.IsNullOrWhiteSpace(tenant.LiteGraphTenantGuid))
+            {
+                await TryExternalAsync(() => _LiteGraphAdmin.DeprovisionAsync(tenant.LiteGraphTenantGuid!, token)).ConfigureAwait(false);
+            }
+
+            // Remove all tenant-scoped database rows and the tenant row in one transaction.
+            return await _Db.Tenants.DeleteWithTenantDataAsync(tenantId, token).ConfigureAwait(false);
         }
 
         #endregion

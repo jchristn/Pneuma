@@ -185,19 +185,29 @@ namespace Pneuma.Server.Routes
             }
             string id = RouteHelper.Param(ctx, "id");
             Tenant? existing = await _Db.Tenants.ReadAsync(id, ctx.Token).ConfigureAwait(false);
-            if (existing != null && existing.IsProtected)
-            {
-                await RouteHelper.SendErrorAsync(ctx, 400, "Protected", "Tenant is protected.").ConfigureAwait(false);
-                return;
-            }
-            bool deleted = await _Db.Tenants.DeleteAsync(id, ctx.Token).ConfigureAwait(false);
-            if (!deleted)
+            if (existing == null)
             {
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Tenant not found.").ConfigureAwait(false);
                 return;
             }
-            ctx.Response.StatusCode = 204;
-            await ctx.Response.Send().ConfigureAwait(false);
+            if (existing.IsProtected)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "Protected", "Tenant is protected.").ConfigureAwait(false);
+                return;
+            }
+
+            // Deletion is a heavy cascade (every subject, its links/jobs/graph/vectors/artifacts, all
+            // tenant-scoped rows, plus subordinate-service deprovision). Mark the tenant Pending and let the
+            // background TenantDeletionWorker perform it so the request returns immediately (202) and the
+            // browser never has to drive the cascade. A no-op when a deletion is already in progress.
+            if (existing.DeletionStatus == TenantDeletionStatusEnum.Pending || existing.DeletionStatus == TenantDeletionStatusEnum.Deleting)
+            {
+                await RouteHelper.SendJsonAsync(ctx, 202, new { status = existing.DeletionStatus.ToString(), message = "Tenant deletion is already in progress." }).ConfigureAwait(false);
+                return;
+            }
+            existing.DeletionStatus = TenantDeletionStatusEnum.Pending;
+            await _Db.Tenants.UpdateAsync(existing, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", message = "We are deleting this tenant and everything associated with it in the background. You may close this window." }).ConfigureAwait(false);
         }
 
         #endregion

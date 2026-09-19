@@ -185,6 +185,12 @@ class ApiClient {
     return this._request('DELETE', `/v1.0/${resource}/${encodeURIComponent(id)}`);
   }
 
+  // Bulk delete: one request performs (or enqueues) the cascade for every id server-side, so the browser
+  // never fans out one DELETE per row. Backed by POST /v1.0/{resource}/delete.
+  bulkRemove(resource, ids) {
+    return this._request('POST', `/v1.0/${resource}/delete`, { body: { ids } });
+  }
+
   // ------------------------------------------------------------- Jobs
   listJobs(status, query = null) {
     const q = { ...(status ? { status } : {}), ...(query || {}) };
@@ -206,6 +212,11 @@ class ApiClient {
   // Delete a job and cascade its processing log, graph nodes/edges, and indexed documents.
   deleteJob(id) {
     return this._request('DELETE', `/v1.0/jobs/${encodeURIComponent(id)}`);
+  }
+
+  // Bulk delete: one request cascades every listed job server-side (no per-job fan-out).
+  bulkDeleteJobs(ids) {
+    return this._request('POST', '/v1.0/jobs/delete', { body: { ids } });
   }
 
   // Live per-stage log for a single job ({ job, events }); poll for a follow-logs view.
@@ -299,6 +310,13 @@ class ApiClient {
   validateModelRunner(id, type) {
     const q = type ? `?type=${encodeURIComponent(type)}` : '';
     return this._request('POST', `/v1.0/model-runners/${encodeURIComponent(id)}/validate${q}`);
+  }
+
+  // Run a single health probe against a model endpoint immediately (no request body). Returns the endpoint
+  // health object (same shape as getModelRunnerHealthById). Throws ApiError with status 400 when health
+  // checks are disabled for the endpoint, or 404 when the endpoint is not found.
+  runModelEndpointHealthCheck(id) {
+    return this._request('POST', `/v1.0/model-runners/${encodeURIComponent(id)}/health/check`);
   }
 
   // Enqueue ingestion for many URLs at once for a single subject.
@@ -413,6 +431,10 @@ class ApiClient {
   }
   evalDeleteRun(id) {
     return this._request('DELETE', `/v1.0/eval/runs/${encodeURIComponent(id)}`);
+  }
+  // Bulk delete: one request deletes every listed evaluation run and its results server-side.
+  evalBulkDeleteRuns(ids) {
+    return this._request('POST', '/v1.0/eval/runs/delete', { body: { ids } });
   }
   /** Cancel a queued/running eval run. Idempotent; returns the (possibly Cancelled) run. */
   evalCancelRun(id) {

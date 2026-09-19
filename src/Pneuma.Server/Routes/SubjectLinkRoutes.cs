@@ -27,7 +27,6 @@ namespace Pneuma.Server.Routes
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
         private readonly IArtifactStore _Artifacts;
-        private readonly CascadeDeletionService _Cascade;
         private readonly ICollectionStore _Collections;
 
         #endregion
@@ -38,20 +37,17 @@ namespace Pneuma.Server.Routes
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
         /// <param name="artifacts">Per-stage S3 artifact store used by the artifact-view endpoints.</param>
-        /// <param name="cascade">Cascade deletion service, used to remove a link's subordinate objects.</param>
         /// <param name="collections">Collection store, used to validate the target collection at submit time.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, CascadeDeletionService cascade, ICollectionStore collections)
+        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, ICollectionStore collections)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
-            if (cascade == null) throw new ArgumentNullException(nameof(cascade));
             if (collections == null) throw new ArgumentNullException(nameof(collections));
             _Db = db;
             _Authz = authz;
             _Artifacts = artifacts;
-            _Cascade = cascade;
             _Collections = collections;
         }
 
@@ -87,6 +83,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored embedding vectors", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/subgraph", SubgraphAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored candidate subgraph", "Subjects"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/links/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple content links (background cascade)", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/links/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a content link", "Subjects"));
         }
@@ -436,12 +434,48 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Cascade: remove every downstream object this link produced (jobs, processing logs, S3
-            // pipeline artifacts, raw blobs, graph nodes/edges, and index documents) before the link row.
-            await _Cascade.DeleteLinkCascadeAsync(tenantId, linkId, ctx.Token).ConfigureAwait(false);
+            // Deletion is a heavy cascade (jobs, processing logs, S3 artifacts, raw blobs, graph nodes/edges,
+            // and index documents), so it runs in the background: mark the link for deletion and return
+            // immediately. The LinkDeletionWorker claims it, runs the cascade, and removes it. If it is already
+            // being deleted, this is a no-op.
+            if (link.DeletionStatus == LinkDeletionStatusEnum.Pending || link.DeletionStatus == LinkDeletionStatusEnum.Deleting)
+            {
+                await RouteHelper.SendJsonAsync(ctx, 202, new { status = link.DeletionStatus.ToString(), message = "Link deletion is already in progress." }).ConfigureAwait(false);
+                return;
+            }
+            link.DeletionStatus = LinkDeletionStatusEnum.Pending;
+            await _Db.SubjectLinks.UpdateAsync(link, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", message = "We are deleting this content link and everything associated with it in the background. You may close this window." }).ConfigureAwait(false);
+        }
 
-            ctx.Response.StatusCode = 204;
-            await ctx.Response.Send().ConfigureAwait(false);
+        private async Task BulkDeleteAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+
+            IdListRequest? request = RouteHelper.ReadBody<IdListRequest>(ctx);
+            if (request == null || request.Ids == null || request.Ids.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A non-empty list of link ids is required.").ConfigureAwait(false);
+                return;
+            }
+
+            // Mark each link (that belongs to this tenant and is not already deleting) for background deletion in
+            // this single request, so the browser never has to fan out one delete per link. The worker cascades.
+            int marked = 0;
+            foreach (string id in request.Ids)
+            {
+                if (String.IsNullOrWhiteSpace(id)) continue;
+                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
+                if (link == null) continue;
+                if (link.DeletionStatus == LinkDeletionStatusEnum.Pending || link.DeletionStatus == LinkDeletionStatusEnum.Deleting) continue;
+                link.DeletionStatus = LinkDeletionStatusEnum.Pending;
+                await _Db.SubjectLinks.UpdateAsync(link, ctx.Token).ConfigureAwait(false);
+                marked++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", count = marked, message = "We are deleting the selected content links in the background. You may close this window." }).ConfigureAwait(false);
         }
 
         #endregion

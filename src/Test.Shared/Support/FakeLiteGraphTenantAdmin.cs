@@ -17,6 +17,9 @@ namespace Test.Shared.Support
         /// <summary>The LiteGraph tenant GUIDs this admin was asked to provision.</summary>
         public List<string> ProvisionedTenantGuids { get; } = new List<string>();
 
+        /// <summary>The LiteGraph tenant GUIDs this admin was asked to deprovision.</summary>
+        public List<string> DeprovisionedTenantGuids { get; } = new List<string>();
+
         /// <inheritdoc />
         public Task<string?> ProvisionAsync(string tenantGuid, string name, CancellationToken token = default)
         {
@@ -30,6 +33,17 @@ namespace Test.Shared.Support
                 }
                 return Task.FromResult<string?>(graphGuid);
             }
+        }
+
+        /// <inheritdoc />
+        public Task DeprovisionAsync(string tenantGuid, CancellationToken token = default)
+        {
+            lock (_Lock)
+            {
+                DeprovisionedTenantGuids.Add(tenantGuid);
+                _GraphByTenantGuid.Remove(tenantGuid);
+            }
+            return Task.CompletedTask;
         }
     }
 }

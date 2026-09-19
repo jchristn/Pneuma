@@ -7,7 +7,11 @@ import { formatDateTime } from '../i18n/formatters';
 function TenantsView() {
   const { t } = useTranslation();
   const columns = [
-    { key: 'name', label: 'Name', render: (r) => r.name || '—' },
+    { key: 'name', label: 'Name', render: (r) => (
+      (r.deletionStatus && r.deletionStatus !== 'None')
+        ? <span style={{ opacity: 0.5 }}>{r.name || '—'} · <em>{r.deletionStatus === 'Failed' ? t('tenants.deletionFailed', 'deletion failed') : t('tenants.deleting', 'deleting…')}</em></span>
+        : (r.name || '—')
+    ) },
     { key: 'id', label: 'ID', render: (r) => <CopyableId value={r.id ?? r.guid} truncateLen={14} /> },
     { key: 'active', label: 'Active', render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> },
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
@@ -25,6 +29,7 @@ function TenantsView() {
       columns={columns}
       formFields={formFields}
       idField="id"
+      postDeleteNotice={t('tenants.deletingBackground', 'We are deleting this tenant and everything associated with it in the background. You may close this window.')}
     />
   );
 }

@@ -120,6 +120,12 @@ namespace Test.Shared.Suites
                                 if (!log.Contains(step)) throw new Exception("ingestion log missing step '" + step + "'. Log: " + log);
                             }
 
+                            // Ontology canonicalization and relationship consolidation are recorded as their own
+                            // discrete, independently-measured stages (split out of GraphMerge).
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.OntologyCanonicalization)) throw new Exception("expected an OntologyCanonicalization stage event");
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.GraphMerge)) throw new Exception("expected a GraphMerge stage event");
+                            if (!events.Exists(e => e.Stage == IngestionStageEnum.RelationshipConsolidation)) throw new Exception("expected a RelationshipConsolidation stage event");
+
                             // Summarization, chunking, and embedding must be recorded as three discrete stages.
                             if (!events.Exists(e => e.Stage == IngestionStageEnum.Summarization)) throw new Exception("expected a Summarization stage event");
                             if (!events.Exists(e => e.Stage == IngestionStageEnum.Chunking)) throw new Exception("expected a Chunking stage event");
@@ -228,7 +234,7 @@ namespace Test.Shared.Suites
 
                             // Cascade delete the whole subject via the shared service used by the routes.
                             IBlobStore blobs = new DiskBlobStore(Path.Combine(Path.GetTempPath(), "pneuma-test-blobs", Guid.NewGuid().ToString("N")));
-                            CascadeDeletionService cascade = new CascadeDeletionService(db, new NullArtifactStore(), recall, new FakeGraphRepositoryFactory(graph), blobs);
+                            CascadeDeletionService cascade = new CascadeDeletionService(db, new NullArtifactStore(), recall, new FakeGraphRepositoryFactory(graph), blobs, recall, new FakeLiteGraphTenantAdmin());
                             bool deleted = await cascade.DeleteSubjectCascadeAsync(context.TenantId, context.SubjectId, ct);
                             if (!deleted) throw new Exception("subject delete returned false");
 

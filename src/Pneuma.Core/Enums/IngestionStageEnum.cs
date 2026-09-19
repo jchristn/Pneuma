@@ -25,8 +25,12 @@ namespace Pneuma.Core.Enums
         Categorization,
         /// <summary>Start of the hydration phase: the approved candidate plan is committed to the graph and index.</summary>
         Hydration,
+        /// <summary>Normalize candidate node/edge types to the canonical ontology.</summary>
+        OntologyCanonicalization,
         /// <summary>LiteGraph subgraph merge.</summary>
         GraphMerge,
+        /// <summary>Merge re-asserted relationships (noisy-OR weight) and create new edges.</summary>
+        RelationshipConsolidation,
         /// <summary>Summarization of the extracted cells.</summary>
         Summarization,
         /// <summary>Chunking of the cell (and summary) text.</summary>

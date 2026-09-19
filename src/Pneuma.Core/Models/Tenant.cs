@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Models
 {
     using System;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
 
     /// <summary>
@@ -50,6 +51,13 @@ namespace Pneuma.Core.Models
 
         /// <summary>Whether the tenant is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
+
+        /// <summary>
+        /// Lifecycle state of a background cascade deletion for this tenant. <see cref="TenantDeletionStatusEnum.None"/>
+        /// for a live tenant; set to <see cref="TenantDeletionStatusEnum.Pending"/> when deletion is requested so the
+        /// background worker tears the tenant (and everything it owns) down asynchronously.
+        /// </summary>
+        public TenantDeletionStatusEnum DeletionStatus { get; set; } = TenantDeletionStatusEnum.None;
 
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

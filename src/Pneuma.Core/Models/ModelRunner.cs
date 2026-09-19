@@ -80,6 +80,42 @@ namespace Pneuma.Core.Models
         /// </summary>
         public int ContextSize { get; set; } = 0;
 
+        /// <summary>Maximum number of concurrent requests sent to this endpoint. Minimum 1.</summary>
+        public int MaxConcurrentRequests { get; set; } = 2;
+
+        /// <summary>Maximum number of requests that may queue for a concurrency slot. Minimum 0.</summary>
+        public int MaxQueueDepth { get; set; } = 0;
+
+        /// <summary>Maximum upstream request timeout in milliseconds. Minimum 1.</summary>
+        public int MaximumTimeoutMs { get; set; } = 60000;
+
+        /// <summary>Whether background health checks run against this endpoint. Enabled by default so endpoints are monitored unless the operator opts out.</summary>
+        public bool HealthCheckEnabled { get; set; } = true;
+
+        /// <summary>Health check probe URL. Null/blank derives it from <see cref="BaseUrl"/>.</summary>
+        public string? HealthCheckUrl { get; set; } = null;
+
+        /// <summary>Health check HTTP method (e.g. "GET" or "HEAD").</summary>
+        public string? HealthCheckMethod { get; set; } = "GET";
+
+        /// <summary>Milliseconds between health checks. 0 uses the monitor default.</summary>
+        public int HealthCheckIntervalMs { get; set; } = 0;
+
+        /// <summary>Per-check HTTP timeout in milliseconds. 0 uses the monitor default.</summary>
+        public int HealthCheckTimeoutMs { get; set; } = 0;
+
+        /// <summary>HTTP status code that indicates a healthy response.</summary>
+        public int HealthCheckExpectedStatusCode { get; set; } = 200;
+
+        /// <summary>Consecutive successes required to mark the endpoint healthy. Minimum 1.</summary>
+        public int HealthyThreshold { get; set; } = 2;
+
+        /// <summary>Consecutive failures required to mark the endpoint unhealthy. Minimum 1.</summary>
+        public int UnhealthyThreshold { get; set; } = 2;
+
+        /// <summary>Whether to send the endpoint's API key as a bearer token on health check requests.</summary>
+        public bool HealthCheckUseAuth { get; set; } = false;
+
         /// <summary>Whether the runner is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 

@@ -78,6 +78,20 @@ namespace Pneuma.Server.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task DeprovisionAsync(string tenantGuid, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(tenantGuid)) return;
+
+            using (HttpClient client = BuildClient())
+            {
+                // Force-delete removes the tenant together with its graphs, nodes, edges, users, and credentials
+                // in one call. Best-effort: a missing tenant simply returns a non-success status we ignore.
+                await SendAsync(client, HttpMethod.Delete, _BaseUrl + "/v1.0/tenants/" + tenantGuid + "?force=true", null, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "deleted LiteGraph tenant " + tenantGuid);
+            }
+        }
+
         #endregion
 
         #region Private-Methods

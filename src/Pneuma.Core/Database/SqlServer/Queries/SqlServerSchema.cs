@@ -164,6 +164,33 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                         "content NVARCHAR(MAX), mergemode NVARCHAR(16) NOT NULL DEFAULT 'Append', createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectprompts_key' AND object_id = OBJECT_ID(N'dbo.subjectprompts')) CREATE UNIQUE INDEX idx_subjectprompts_key ON dbo.subjectprompts (tenantid, subjectid, promptkey);"
                 }));
+                list.Add(new SchemaMigration(21, "Add link background-deletion status", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'deletionstatus') IS NULL ALTER TABLE dbo.subjectlinks ADD deletionstatus NVARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(22, "Add model runner health-check and concurrency config", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.modelrunners', 'maxconcurrentrequests') IS NULL ALTER TABLE dbo.modelrunners ADD maxconcurrentrequests INT NOT NULL DEFAULT 2;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'maxqueuedepth') IS NULL ALTER TABLE dbo.modelrunners ADD maxqueuedepth INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'maximumtimeoutms') IS NULL ALTER TABLE dbo.modelrunners ADD maximumtimeoutms INT NOT NULL DEFAULT 60000;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckenabled') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckenabled BIT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckurl') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckurl NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckmethod') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckmethod NVARCHAR(16);",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckintervalms') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckintervalms INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthchecktimeoutms') IS NULL ALTER TABLE dbo.modelrunners ADD healthchecktimeoutms INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckexpectedstatuscode') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckexpectedstatuscode INT NOT NULL DEFAULT 200;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthythreshold') IS NULL ALTER TABLE dbo.modelrunners ADD healthythreshold INT NOT NULL DEFAULT 2;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'unhealthythreshold') IS NULL ALTER TABLE dbo.modelrunners ADD unhealthythreshold INT NOT NULL DEFAULT 2;",
+                    "IF COL_LENGTH('dbo.modelrunners', 'healthcheckuseauth') IS NULL ALTER TABLE dbo.modelrunners ADD healthcheckuseauth BIT NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(23, "Add tenant deletion status", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.tenants', 'deletionstatus') IS NULL ALTER TABLE dbo.tenants ADD deletionstatus NVARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(24, "Enable health checks on existing model runners", new List<string>
+                {
+                    "UPDATE dbo.modelrunners SET healthcheckenabled = 1;"
+                }));
                 return list;
             }
         }

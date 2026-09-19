@@ -135,9 +135,7 @@ function IngestionQueueView() {
   };
 
   const bulkDelete = async () => {
-    for (const job of selectedItems) {
-      await apiClient.deleteJob(getId(job));
-    }
+    await apiClient.bulkDeleteJobs(selectedItems.map((job) => getId(job)));
     setModal(null);
     clear();
     await load();

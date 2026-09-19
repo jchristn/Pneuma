@@ -8,6 +8,7 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Helpers;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
     using WatsonWebserver;
@@ -63,6 +64,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a subject", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/subjects/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Update a subject", "Subjects"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subjects/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple subjects (background cascade)", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/subjects/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a subject", "Subjects"));
         }
@@ -278,6 +281,40 @@ namespace Pneuma.Server.Routes
             subject.DeletionStatus = SubjectDeletionStatusEnum.Pending;
             await _Db.Subjects.UpdateAsync(subject, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", message = "We are deleting this subject and everything associated with it in the background. You may close this window." }).ConfigureAwait(false);
+        }
+
+        private async Task BulkDeleteAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return;
+            }
+
+            IdListRequest? request = RouteHelper.ReadBody<IdListRequest>(ctx);
+            if (request == null || request.Ids == null || request.Ids.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A non-empty list of subject ids is required.").ConfigureAwait(false);
+                return;
+            }
+
+            // Mark each subject (that belongs to this tenant and is not already deleting) for background deletion
+            // in this single request, so the browser never has to fan out one delete per subject.
+            int marked = 0;
+            foreach (string id in request.Ids)
+            {
+                if (String.IsNullOrWhiteSpace(id)) continue;
+                Subject? subject = await _Db.Subjects.ReadAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+                if (subject == null) continue;
+                if (subject.DeletionStatus == SubjectDeletionStatusEnum.Pending || subject.DeletionStatus == SubjectDeletionStatusEnum.Deleting) continue;
+                subject.DeletionStatus = SubjectDeletionStatusEnum.Pending;
+                await _Db.Subjects.UpdateAsync(subject, ctx.Token).ConfigureAwait(false);
+                marked++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 202, new { status = "Pending", count = marked, message = "We are deleting the selected subjects and everything associated with them in the background. You may close this window." }).ConfigureAwait(false);
         }
 
         #endregion

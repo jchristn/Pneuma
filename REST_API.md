@@ -182,6 +182,7 @@ A background monitor probes each model endpoint's **base URL**, deduplicated so 
 |--------|------|-------------|
 | GET | `/v1.0/model-runners/health` | Health of **every** model endpoint (deduplicated by base URL). Array of `ModelEndpointHealth`. |
 | GET | `/v1.0/model-runners/{id}/health` | Health of a single model endpoint. `404` if the endpoint is not found. |
+| POST | `/v1.0/model-runners/{id}/health/check` | Run a single health probe against the endpoint **immediately** (no request body). `200` returns the endpoint health object (same `ModelEndpointHealth` shape as `GET /v1.0/model-runners/{id}/health`). `400` if health checks are disabled for the endpoint; `404` if the endpoint is not found. |
 
 `ModelEndpointHealth`: `{ endpointId, endpointName, type, baseUrl, isHealthy, statusCode?, latencyMs?, firstCheckUtc?, lastCheckUtc?, lastHealthyUtc?, lastUnhealthyUtc?, lastStateChangeUtc?, totalUptimeMs, totalDowntimeMs, uptimePercentage, consecutiveSuccesses, consecutiveFailures, lastError?, history: [{ timestampUtc, success }] }`. Before a base URL's first probe, timestamps are null (a "pending" state).
 

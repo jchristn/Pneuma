@@ -98,7 +98,7 @@ namespace Test.Shared.Support
             TelemetryService telemetry = new TelemetryService(settings.Telemetry, logging);
 
             DiskBlobStore blobs = new DiskBlobStore(Path.Combine(dir, "blobs-" + Guid.NewGuid().ToString("N")));
-            ModelHealthMonitor modelHealth = new ModelHealthMonitor(Database, logging);
+            ModelHealthMonitor modelHealth = new ModelHealthMonitor(Database, new Pneuma.Core.Security.Aes256Cipher(settings.Auth.TokenSigningKey), logging);
             FakeRecallDbClient recall = new FakeRecallDbClient();
             Recall = recall;
             TenantProvisioningService provisioning = new TenantProvisioningService(

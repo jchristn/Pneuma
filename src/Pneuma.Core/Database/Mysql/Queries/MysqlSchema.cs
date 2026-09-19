@@ -162,6 +162,33 @@ namespace Pneuma.Core.Database.Mysql.Queries
                         "UNIQUE KEY idx_subjectprompts_key (tenantid, subjectid, promptkey)" +
                         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
                 }));
+                list.Add(new SchemaMigration(21, "Add link background-deletion status", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN deletionstatus VARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(22, "Add model runner health-check and concurrency config", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN maxconcurrentrequests INT NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN maxqueuedepth INT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN maximumtimeoutms INT NOT NULL DEFAULT 60000;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckenabled TINYINT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckurl TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckmethod VARCHAR(16);",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckintervalms INT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthchecktimeoutms INT NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckexpectedstatuscode INT NOT NULL DEFAULT 200;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthythreshold INT NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN unhealthythreshold INT NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN healthcheckuseauth TINYINT NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(23, "Add tenant deletion status", new List<string>
+                {
+                    "ALTER TABLE tenants ADD COLUMN deletionstatus VARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(24, "Enable health checks on existing model runners", new List<string>
+                {
+                    "UPDATE modelrunners SET healthcheckenabled = 1;"
+                }));
                 return list;
             }
         }

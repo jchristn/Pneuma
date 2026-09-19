@@ -112,6 +112,7 @@ namespace Pneuma.Server.Services
                 { IngestionStageEnum.CellExtraction, new SemaphoreSlim(c.CellExtraction, c.CellExtraction) },
                 { IngestionStageEnum.Classification, new SemaphoreSlim(c.Classification, c.Classification) },
                 { IngestionStageEnum.GraphMerge, new SemaphoreSlim(c.GraphMerge, c.GraphMerge) },
+                { IngestionStageEnum.RelationshipConsolidation, new SemaphoreSlim(c.GraphMerge, c.GraphMerge) },
                 { IngestionStageEnum.Summarization, new SemaphoreSlim(c.Summarization, c.Summarization) },
                 { IngestionStageEnum.Chunking, new SemaphoreSlim(c.Chunking, c.Chunking) },
                 { IngestionStageEnum.Embedding, new SemaphoreSlim(c.Embedding, c.Embedding) },
@@ -215,120 +216,178 @@ namespace Pneuma.Server.Services
 
         private async Task<CategorizationResult?> CategorizeAsync(IngestionJob job, RadiantSpan? jobSpan, CancellationToken token)
         {
-            byte[] data = await RunStageAsync(job, IngestionStageEnum.ContentRetrieval,
-                stageToken => DownloadAsync(job, stageToken),
-                result => "Content retrieval complete — fetched " + result.Length + " byte(s) from " + job.SourceUrl + ".",
-                token).ConfigureAwait(false);
-            await _Journal.TryStoreAsync("source", () => _Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
-
-            // Delta detection: hash the fetched bytes and, if they are identical to what the link last ingested
-            // successfully, skip the expensive type-detect / extract / classify / merge / embed / index work and
-            // complete immediately. Re-processing identical content is deterministic, so skipping is safe and
-            // saves the LLM + embedding cost. A previously-failed link has no stored hash and always re-processes.
-            string contentHash = ComputeContentHash(data);
-            SubjectLink? existingLink = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
-            if (existingLink != null
-                && existingLink.Status == SubjectLinkStatusEnum.Ingested
-                && !String.IsNullOrEmpty(existingLink.ContentHash)
-                && String.Equals(existingLink.ContentHash, contentHash, StringComparison.Ordinal))
+            using (RadiantSpan? phaseSpan = _Telemetry.StartSpan("phase:Categorization", SpanKindEnum.Internal))
             {
-                await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
-                    "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
-                    0, token).ConfigureAwait(false);
-                await _Journal.CompleteAsync(job, token, contentHash).ConfigureAwait(false);
-                jobSpan?.SetOk(null);
-                return null;
+                phaseSpan?.SetTag("pneuma.phase", "Categorization");
+                phaseSpan?.SetTag("pneuma.job.id", job.Id);
+
+                Stopwatch phaseSw = Stopwatch.StartNew();
+                string phaseOutcome = "ok";
+                try
+                {
+                    byte[] data = await RunStageAsync(job, IngestionStageEnum.ContentRetrieval,
+                        stageToken => DownloadAsync(job, stageToken),
+                        result => "Content retrieval complete — fetched " + result.Length + " byte(s) from " + job.SourceUrl + ".",
+                        token).ConfigureAwait(false);
+                    await _Journal.TryStoreAsync("source", () => _Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
+
+                    // Delta detection: hash the fetched bytes and, if they are identical to what the link last ingested
+                    // successfully, skip the expensive type-detect / extract / classify / merge / embed / index work and
+                    // complete immediately. Re-processing identical content is deterministic, so skipping is safe and
+                    // saves the LLM + embedding cost. A previously-failed link has no stored hash and always re-processes.
+                    string contentHash = ComputeContentHash(data);
+                    SubjectLink? existingLink = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
+                    if (existingLink != null
+                        && existingLink.Status == SubjectLinkStatusEnum.Ingested
+                        && !String.IsNullOrEmpty(existingLink.ContentHash)
+                        && String.Equals(existingLink.ContentHash, contentHash, StringComparison.Ordinal))
+                    {
+                        await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
+                            "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
+                            0, token).ConfigureAwait(false);
+                        await _Journal.CompleteAsync(job, token, contentHash).ConfigureAwait(false);
+                        jobSpan?.SetOk(null);
+                        return null;
+                    }
+
+                    TypeDetectResult detected = await RunStageAsync(job, IngestionStageEnum.TypeDetection,
+                        stageToken => _DocumentAtom.DetectTypeAsync(data, stageToken),
+                        result => "Type detection complete — detected document type: " + result.Type + " (" + result.MimeType + ").",
+                        token).ConfigureAwait(false);
+                    if (detected.IsUnknown)
+                    {
+                        phaseOutcome = "failed";
+                        phaseSpan?.SetError("Unknown or unsupported document type.");
+                        jobSpan?.SetError("Unknown or unsupported document type.");
+                        await _Journal.FailAsync(job, IngestionStageEnum.TypeDetection, "Unknown or unsupported document type.", token).ConfigureAwait(false);
+                        return null;
+                    }
+                    job.DocumentType = detected.Type;
+
+                    List<ExtractedCell> cells = await RunStageAsync(job, IngestionStageEnum.CellExtraction,
+                        stageToken => _DocumentAtom.ExtractCellsAsync(detected.Type, data, stageToken),
+                        result => "Semantic cell extraction complete — extracted " + result.Count + " cell(s).",
+                        token).ConfigureAwait(false);
+                    job.BlobKey = await _Blobs.WriteAsync(job.Id, data, token).ConfigureAwait(false);
+                    await _Journal.TryStoreAsync("atoms", () => _Artifacts.PutAtomsAsync(job.LinkId, Json.Serialize(cells), token), token).ConfigureAwait(false);
+                    if (cells.Count == 0)
+                    {
+                        phaseOutcome = "failed";
+                        phaseSpan?.SetError("No semantic cells extracted.");
+                        jobSpan?.SetError("No semantic cells extracted.");
+                        await _Journal.FailAsync(job, IngestionStageEnum.CellExtraction, "No semantic cells extracted.", token).ConfigureAwait(false);
+                        return null;
+                    }
+
+                    Subject? subject = await _Db.Subjects.ReadByIdAsync(job.SubjectId, token).ConfigureAwait(false);
+                    string subjectName = subject?.DisplayName ?? "Unknown subject";
+
+                    CandidateSubgraph subgraph = await RunStageAsync(job, IngestionStageEnum.Classification,
+                        stageToken => _Stages.ClassifyAsync(job, cells, subjectName, stageToken),
+                        result => "Ontology / knowledge-graph mapping complete — proposed " + result.Nodes.Count + " node(s) and " + result.Edges.Count + " relationship(s).",
+                        token).ConfigureAwait(false);
+                    await _Journal.TryStoreAsync("subgraph", () => _Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
+
+                    string provenance = await _Stages.BuildPromptProvenanceAsync(job, token).ConfigureAwait(false);
+
+                    // End of the categorization phase: the candidate plan (proposed subgraph) is persisted and, under
+                    // auto-approval, flows straight into hydration. Emitted as Completed (not Processing) so the phase
+                    // reads as finished; the prompt provenance is folded in rather than logged as a separate row.
+                    await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
+                        "Categorization complete — candidate plan proposes " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count +
+                        " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + provenance + ".",
+                        phaseSw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+
+                    return new CategorizationResult { Cells = cells, Subgraph = subgraph, ContentHash = contentHash };
+                }
+                catch (Exception)
+                {
+                    phaseOutcome = "failed";
+                    throw;
+                }
+                finally
+                {
+                    phaseSw.Stop();
+                    PneumaMetrics.RecordIngestionStage("Categorization", phaseOutcome, phaseSw.Elapsed.TotalSeconds);
+                    if (phaseOutcome == "ok") phaseSpan?.SetOk(null);
+                }
             }
-
-            TypeDetectResult detected = await RunStageAsync(job, IngestionStageEnum.TypeDetection,
-                stageToken => _DocumentAtom.DetectTypeAsync(data, stageToken),
-                result => "Type detection complete — detected document type: " + result.Type + " (" + result.MimeType + ").",
-                token).ConfigureAwait(false);
-            if (detected.IsUnknown)
-            {
-                jobSpan?.SetError("Unknown or unsupported document type.");
-                await _Journal.FailAsync(job, IngestionStageEnum.TypeDetection, "Unknown or unsupported document type.", token).ConfigureAwait(false);
-                return null;
-            }
-            job.DocumentType = detected.Type;
-
-            List<ExtractedCell> cells = await RunStageAsync(job, IngestionStageEnum.CellExtraction,
-                stageToken => _DocumentAtom.ExtractCellsAsync(detected.Type, data, stageToken),
-                result => "Semantic cell extraction complete — extracted " + result.Count + " cell(s).",
-                token).ConfigureAwait(false);
-            job.BlobKey = await _Blobs.WriteAsync(job.Id, data, token).ConfigureAwait(false);
-            await _Journal.TryStoreAsync("atoms", () => _Artifacts.PutAtomsAsync(job.LinkId, Json.Serialize(cells), token), token).ConfigureAwait(false);
-            if (cells.Count == 0)
-            {
-                jobSpan?.SetError("No semantic cells extracted.");
-                await _Journal.FailAsync(job, IngestionStageEnum.CellExtraction, "No semantic cells extracted.", token).ConfigureAwait(false);
-                return null;
-            }
-
-            Subject? subject = await _Db.Subjects.ReadByIdAsync(job.SubjectId, token).ConfigureAwait(false);
-            string subjectName = subject?.DisplayName ?? "Unknown subject";
-
-            CandidateSubgraph subgraph = await RunStageAsync(job, IngestionStageEnum.Classification,
-                stageToken => _Stages.ClassifyAsync(job, cells, subjectName, stageToken),
-                result => "Ontology / knowledge-graph mapping complete — proposed " + result.Nodes.Count + " node(s) and " + result.Edges.Count + " relationship(s).",
-                token).ConfigureAwait(false);
-            await _Journal.TryStoreAsync("subgraph", () => _Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
-
-            string provenance = await _Stages.BuildPromptProvenanceAsync(job, token).ConfigureAwait(false);
-
-            // End of the categorization phase: the candidate plan (proposed subgraph) is persisted and, under
-            // auto-approval, flows straight into hydration. Emitted as Completed (not Processing) so the phase
-            // reads as finished; the prompt provenance is folded in rather than logged as a separate row.
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
-                "Categorization complete — candidate plan proposes " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count +
-                " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + provenance + ".",
-                0, token).ConfigureAwait(false);
-
-            return new CategorizationResult { Cells = cells, Subgraph = subgraph, ContentHash = contentHash };
         }
 
         private async Task HydrateAsync(IngestionJob job, CategorizationResult categorization, CancellationToken token)
         {
-            // Start of the hydration phase: commit the approved plan to the graph, embeddings, and index.
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Processing,
-                "Hydration started — committing the candidate plan to the knowledge graph and search index.",
-                0, token).ConfigureAwait(false);
+            using (RadiantSpan? phaseSpan = _Telemetry.StartSpan("phase:Hydration", SpanKindEnum.Internal))
+            {
+                phaseSpan?.SetTag("pneuma.phase", "Hydration");
+                phaseSpan?.SetTag("pneuma.job.id", job.Id);
 
-            MergeResult merge = await RunStageAsync(job, IngestionStageEnum.GraphMerge,
-                stageToken => _Stages.MergeAsync(job, categorization.Subgraph, categorization.Cells, stageToken),
-                result => "Knowledge-graph insertion complete — inserted/linked " + result.NodeIds.Count + " node(s) and " + result.EdgeIds.Count + " edge(s), including a cell node per extracted cell.",
-                token).ConfigureAwait(false);
-            job.GraphNodeIds = merge.NodeIds;
+                Stopwatch phaseSw = Stopwatch.StartNew();
+                string phaseOutcome = "ok";
+                try
+                {
+                    // Start of the hydration phase: commit the approved plan to the graph, embeddings, and index.
+                    await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Processing,
+                        "Hydration started — committing the candidate plan to the knowledge graph and search index.",
+                        0, token).ConfigureAwait(false);
 
-            // Summarization, chunking, and embedding run as three discrete, independently-timed stages.
-            List<CellSummary> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
-                stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, merge.CellNodeIds, stageToken),
-                result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
-                token).ConfigureAwait(false);
+                    await RunStageAsync(job, IngestionStageEnum.OntologyCanonicalization,
+                        stageToken => _Stages.CanonicalizeAsync(job, categorization.Subgraph, stageToken),
+                        result => "Ontology canonicalization complete — normalized " + result + " node/edge type(s) to the canonical ontology.",
+                        token).ConfigureAwait(false);
 
-            List<SemanticChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
-                stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, merge.CellNodeIds, summaries, stageToken),
-                result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
-                token).ConfigureAwait(false);
+                    MergeResult merge = await RunStageAsync(job, IngestionStageEnum.GraphMerge,
+                        stageToken => _Stages.MergeAsync(job, categorization.Subgraph, categorization.Cells, stageToken),
+                        result => "Knowledge-graph insertion complete — inserted/linked " + result.NodeIds.Count + " node(s), including a cell node per extracted cell.",
+                        token).ConfigureAwait(false);
+                    job.GraphNodeIds = merge.NodeIds;
 
-            List<SemanticChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
-                stageToken => _Stages.EmbedChunksAsync(job, chunks, stageToken),
-                result => "Embedding complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
-                token).ConfigureAwait(false);
-            await _Stages.PersistChunkArtifactsAsync(job, embeddedChunks, token).ConfigureAwait(false);
+                    await RunStageAsync(job, IngestionStageEnum.RelationshipConsolidation,
+                        stageToken => _Stages.ConsolidateRelationshipsAsync(job, categorization.Subgraph, merge, stageToken),
+                        result => "Relationship consolidation complete — created " + result.CreatedCount + " new relationship(s), consolidated " + result.ConsolidatedCount + " re-asserted one(s).",
+                        token).ConfigureAwait(false);
 
-            await RunStageAsync(job, IngestionStageEnum.Indexing,
-                stageToken => _Stages.IndexAsync(job, merge, embeddedChunks, stageToken),
-                result => "Search indexing complete — stored " + result + " chunk document(s) in collection " + job.CollectionId + ", each linked back to its knowledge-graph node.",
-                token).ConfigureAwait(false);
+                    // Summarization, chunking, and embedding run as three discrete, independently-timed stages.
+                    List<CellSummary> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
+                        stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, merge.CellNodeIds, stageToken),
+                        result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
+                        token).ConfigureAwait(false);
 
-            // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish;
-            // its "Hydration started" marker now has a matching completion before the job itself completes.
-            await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Completed,
-                "Hydration complete — knowledge graph and search index updated.",
-                0, token).ConfigureAwait(false);
+                    List<SemanticChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
+                        stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, merge.CellNodeIds, summaries, stageToken),
+                        result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
+                        token).ConfigureAwait(false);
 
-            await _Journal.CompleteAsync(job, token, categorization.ContentHash).ConfigureAwait(false);
+                    List<SemanticChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
+                        stageToken => _Stages.EmbedChunksAsync(job, chunks, stageToken),
+                        result => "Embedding complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
+                        token).ConfigureAwait(false);
+                    await _Stages.PersistChunkArtifactsAsync(job, embeddedChunks, token).ConfigureAwait(false);
+
+                    await RunStageAsync(job, IngestionStageEnum.Indexing,
+                        stageToken => _Stages.IndexAsync(job, merge, embeddedChunks, stageToken),
+                        result => "Search indexing complete — stored " + result + " chunk document(s) in collection " + job.CollectionId + ", each linked back to its knowledge-graph node.",
+                        token).ConfigureAwait(false);
+
+                    // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish;
+                    // its "Hydration started" marker now has a matching completion before the job itself completes.
+                    await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Completed,
+                        "Hydration complete — knowledge graph and search index updated.",
+                        phaseSw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
+
+                    await _Journal.CompleteAsync(job, token, categorization.ContentHash).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    phaseOutcome = "failed";
+                    throw;
+                }
+                finally
+                {
+                    phaseSw.Stop();
+                    PneumaMetrics.RecordIngestionStage("Hydration", phaseOutcome, phaseSw.Elapsed.TotalSeconds);
+                    if (phaseOutcome == "ok") phaseSpan?.SetOk(null);
+                }
+            }
         }
 
         /// <summary>Compute the hex SHA-256 of the fetched source bytes, used for re-ingestion delta detection.</summary>

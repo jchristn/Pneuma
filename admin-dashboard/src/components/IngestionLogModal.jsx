@@ -6,30 +6,11 @@ import Modal from './Modal';
 import StatusPill, { toneForStatus } from './StatusPill';
 import CopyButton from './CopyButton';
 import { formatDateTime, formatDuration } from '../i18n/formatters';
+import { stageLabel } from '../utils/ingestionActivity';
 import './IngestionLog.css';
-
-// Friendly labels for the ordered ingestion stages emitted by the backend.
-const STAGE_LABELS = {
-  pending: 'Started',
-  contentretrieval: 'Content retrieval',
-  typedetection: 'Type detection',
-  cellextraction: 'Semantic cell extraction',
-  classification: 'Ontology / knowledge-graph mapping',
-  graphmerge: 'Knowledge-graph insertion',
-  summarization: 'Summarization',
-  chunking: 'Chunking',
-  embedding: 'Embedding',
-  indexing: 'Search indexing',
-  done: 'Complete'
-};
 
 function normalizeKey(value) {
   return String(value ?? '').toLowerCase().replace(/[\s_-]/g, '');
-}
-
-function stageLabel(stage) {
-  if (!stage) return '—';
-  return STAGE_LABELS[normalizeKey(stage)] || String(stage);
 }
 
 function stateFor(status) {

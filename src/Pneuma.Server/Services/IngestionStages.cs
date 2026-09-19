@@ -155,7 +155,13 @@ namespace Pneuma.Server.Services
             IngestionMetadata.ApplyUserGraphMetadata(source, job);
             GraphNode createdSource = await graph.CreateNodeAsync(source, token).ConfigureAwait(false);
 
-            MergeResult merge = await new SubgraphMerger(graph).MergeAsync(subgraph, job.TenantId, job.SubjectId, createdSource.Id, job.Id, token).ConfigureAwait(false);
+            NodeMergeResult nodeMerge = await new SubgraphMerger(graph).MergeNodesAsync(subgraph, job.TenantId, job.SubjectId, createdSource.Id, job.Id, token).ConfigureAwait(false);
+            MergeResult merge = new MergeResult
+            {
+                NodeIds = nodeMerge.NodeIds,
+                RefToId = nodeMerge.RefToId,
+                SourceNodeId = createdSource.Id
+            };
             if (!merge.NodeIds.Contains(createdSource.Id)) merge.NodeIds.Insert(0, createdSource.Id);
 
             // Materialize each cell as a Cell node linked to the source. The list is aligned one-to-one with the
@@ -179,6 +185,38 @@ namespace Pneuma.Server.Services
             }
             merge.CellNodeIds = cellNodeIds;
             return merge;
+        }
+
+        /// <summary>
+        /// Canonicalize the candidate subgraph's node and edge types in place (one discrete pipeline step),
+        /// coercing each to a built-in ontology type when recognized so casing/spelling variance does not
+        /// fragment the ontology. Pure (no graph I/O).
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <param name="subgraph">The candidate subgraph to normalize in place.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of node and edge types normalized.</returns>
+        public Task<int> CanonicalizeAsync(IngestionJob job, CandidateSubgraph subgraph, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            int normalized = SubgraphMerger.Canonicalize(subgraph);
+            return Task.FromResult(normalized);
+        }
+
+        /// <summary>
+        /// Consolidate the candidate subgraph's relationships into the live graph (one discrete pipeline step):
+        /// a re-asserted edge accumulates weight (noisy-OR) and corroboration count in place, otherwise a new
+        /// edge is created. Uses the ref→node-id map and Source node id carried from the graph-merge step.
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <param name="subgraph">The candidate subgraph whose edges are consolidated.</param>
+        /// <param name="merge">The graph-merge result (ref→id map and Source node id).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The created/updated edge identifiers plus created and consolidated counts.</returns>
+        public async Task<EdgeConsolidationResult> ConsolidateRelationshipsAsync(IngestionJob job, CandidateSubgraph subgraph, MergeResult merge, CancellationToken token)
+        {
+            IGraphRepository graph = await _GraphFactory.ForTenantAsync(job.TenantId, token).ConfigureAwait(false);
+            return await new SubgraphMerger(graph).ConsolidateEdgesAsync(subgraph, merge.RefToId, merge.SourceNodeId, job.Id, token).ConfigureAwait(false);
         }
 
         /// <summary>Summarize each cell (one discrete pipeline step). Returns the produced summaries.</summary>

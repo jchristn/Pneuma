@@ -52,6 +52,10 @@
     {
       "key": "promptKey",
       "value": "user.answer"
+    },
+    {
+      "key": "modelRunnerId",
+      "value": ""
     }
   ],
   "auth": {
@@ -240,6 +244,14 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/v1.0/model-runners/:id/health"
+          }
+        },
+        {
+          "name": "Run Health Check Now",
+          "description": "Run a single health probe against the endpoint immediately (no request body). 200 returns the endpoint health object (same shape as 'Model Endpoint Health (by id)'). 400 if health checks are disabled for the endpoint; 404 if the endpoint is not found.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/model-runners/{{modelRunnerId}}/health/check"
           }
         },
         {

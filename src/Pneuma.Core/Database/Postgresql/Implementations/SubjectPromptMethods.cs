@@ -70,6 +70,15 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 token);
         }
 
+        /// <inheritdoc />
+        public async Task DeleteBySubjectAsync(string tenantId, string subjectId, CancellationToken token = default)
+        {
+            await Query(
+                "DELETE FROM subjectprompts WHERE tenantid = " + Sanitizer.Str(tenantId) +
+                " AND subjectid = " + Sanitizer.Str(subjectId) + ";",
+                token).ConfigureAwait(false);
+        }
+
         internal static SubjectPrompt Map(DataRow row)
         {
             return new SubjectPrompt

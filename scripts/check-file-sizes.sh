@@ -34,6 +34,9 @@ BACKEND_ALLOWLIST=(
   # The ingestion pipeline's per-stage work in one region-organized class (metadata stamping already split out
   # into IngestionMetadata.cs); the stages share enough context that further splitting hurts readability.
   "src/Pneuma.Server/Services/IngestionStages.cs"
+  # The ingestion orchestrator: the retry loop, the per-stage span+meter runner, and the two phase methods in
+  # one cohesive region-organized class; splitting the shared job/attempt/telemetry state across files hurts it.
+  "src/Pneuma.Server/Services/IngestionProcessor.cs"
 )
 
 # Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the

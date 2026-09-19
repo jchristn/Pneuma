@@ -164,6 +164,33 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                         "content TEXT, mergemode TEXT NOT NULL DEFAULT 'Append', createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
                     "CREATE UNIQUE INDEX IF NOT EXISTS idx_subjectprompts_key ON subjectprompts (tenantid, subjectid, promptkey);"
                 }));
+                list.Add(new SchemaMigration(21, "Add link background-deletion status", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN IF NOT EXISTS deletionstatus TEXT NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(22, "Add model runner health-check and concurrency config", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS maxconcurrentrequests INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS maxqueuedepth INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS maximumtimeoutms INTEGER NOT NULL DEFAULT 60000;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckenabled INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckurl TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckmethod TEXT;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckintervalms INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthchecktimeoutms INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckexpectedstatuscode INTEGER NOT NULL DEFAULT 200;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthythreshold INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS unhealthythreshold INTEGER NOT NULL DEFAULT 2;",
+                    "ALTER TABLE modelrunners ADD COLUMN IF NOT EXISTS healthcheckuseauth INTEGER NOT NULL DEFAULT 0;"
+                }));
+                list.Add(new SchemaMigration(23, "Add tenant deletion status", new List<string>
+                {
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deletionstatus TEXT NOT NULL DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(24, "Enable health checks on existing model runners", new List<string>
+                {
+                    "UPDATE modelrunners SET healthcheckenabled = 1;"
+                }));
                 return list;
             }
         }

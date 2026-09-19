@@ -6,30 +6,14 @@ import { formatDateTime, formatDurationMs } from '../utils/format';
 import Modal from './Modal';
 import StatusPill from './StatusPill';
 import CopyableId from './CopyableId';
+import { stageLabel } from '../utils/ingestionActivity';
 import './IngestionLog.css';
 
-// Friendly labels for the ordered ingestion stages emitted by the backend.
-const STAGE_LABELS = {
-  pending: 'Started',
-  contentretrieval: 'Content retrieval',
-  typedetection: 'Type detection',
-  cellextraction: 'Semantic cell extraction',
-  classification: 'Ontology / knowledge-graph mapping',
-  graphmerge: 'Knowledge-graph insertion',
-  summarization: 'Summarization',
-  chunking: 'Chunking',
-  embedding: 'Embedding',
-  indexing: 'Search indexing',
-  done: 'Complete'
-};
+// Re-export the single canonical stage-label resolver so existing importers keep working.
+export { stageLabel };
 
 export function normalizeKey(value) {
   return String(value ?? '').toLowerCase().replace(/[\s_-]/g, '');
-}
-
-export function stageLabel(stage) {
-  if (!stage) return '—';
-  return STAGE_LABELS[normalizeKey(stage)] || String(stage);
 }
 
 function stateFor(status) {

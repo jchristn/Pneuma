@@ -304,7 +304,7 @@ function EvalView() {
 
   const bulkDelete = async () => {
     try {
-      for (const r of selectedItems) { await apiClient.evalDeleteRun(r.id); }
+      await apiClient.evalBulkDeleteRuns(selectedItems.map((r) => r.id));
       setBulkDeleteOpen(false); clear(); await load();
     } catch (err) { setError(err?.message || 'Failed'); }
   };

@@ -213,6 +213,25 @@ const en = {
       emptyQueued: 'No steps recorded yet — ingestion is queued.',
       emptyNoRuns: 'No ingestion runs found for this link.'
     },
+    // Distinct, human-readable label per IngestionStageEnum value. No two stages share a label; the two
+    // phase umbrellas (Categorization, Hydration) are marked "(phase)" so they read apart from their sub-stages.
+    ingestionStages: {
+      pending: 'Queued',
+      contentRetrieval: 'Fetching content',
+      typeDetection: 'Detecting document type',
+      cellExtraction: 'Extracting cells',
+      classification: 'Classifying content',
+      categorization: 'Categorization (phase)',
+      hydration: 'Hydration (phase)',
+      ontologyCanonicalization: 'Canonicalizing ontology',
+      graphMerge: 'Merging into graph',
+      relationshipConsolidation: 'Consolidating relationships',
+      summarization: 'Summarizing',
+      chunking: 'Chunking',
+      embedding: 'Embedding',
+      indexing: 'Indexing',
+      done: 'Done'
+    },
     ingestion: {
       title: 'Ingestion',
       subtitle: 'Track ingestion jobs and drill into per-stage progress and failures.',

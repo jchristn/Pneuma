@@ -38,5 +38,24 @@ namespace Pneuma.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if a record was deleted.</returns>
         Task<bool> DeleteAsync(string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate tenants whose background deletion is pending or in progress (deletion status Pending or
+        /// Deleting), so the deletion worker can claim and resume them.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Tenants queued for or mid-deletion.</returns>
+        Task<List<Tenant>> EnumeratePendingDeletionAsync(CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a tenant and every tenant-scoped database row it owns (users, credentials, sessions, roles,
+        /// permissions, subjects, links, jobs, model runners, prompts, chat, evaluation, request history, audit,
+        /// and the tenant row) in a single transaction. Global (tenant-null) rows are preserved. External-store
+        /// cleanup (graph, vectors, artifacts, subordinate-service tenants) is performed by the caller before this.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if the tenant row was deleted.</returns>
+        Task<bool> DeleteWithTenantDataAsync(string tenantId, CancellationToken token = default);
     }
 }

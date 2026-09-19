@@ -58,7 +58,7 @@ namespace Pneuma.Server
 
             IntegrationClients clients = BuildIntegrationClients(settings);
             IArtifactStore artifactStore = BuildArtifactStore(settings, logging);
-            ModelHealthMonitor modelHealth = new ModelHealthMonitor(database, logging);
+            ModelHealthMonitor modelHealth = new ModelHealthMonitor(database, authentication.Cipher, logging);
 
             if (settings.Diagnostics.RunStartupProbes)
             {
@@ -159,9 +159,19 @@ namespace Pneuma.Server
 
                 // Background subject cascade-deletion: subjects marked for deletion are removed asynchronously
                 // (and interrupted deletions resumed) so a large cascade never blocks the request that started it.
-                CascadeDeletionService cascade = new CascadeDeletionService(database, artifactStore, clients.Vectors, graphFactory, clients.Blobs);
+                CascadeDeletionService cascade = new CascadeDeletionService(database, artifactStore, clients.Vectors, graphFactory, clients.Blobs, clients.Collections, liteGraphAdmin);
                 SubjectDeletionWorker deletionWorker = new SubjectDeletionWorker(database, cascade, logging);
                 deletionWorker.Start(shutdown.Token);
+                // Background link cascade-deletion mirrors the subject worker: links marked for deletion are
+                // removed asynchronously (and interrupted deletions resumed) so a link's heavy cascade never
+                // blocks the request that started it, and bulk deletes never fan out one request per link.
+                LinkDeletionWorker linkDeletionWorker = new LinkDeletionWorker(database, cascade, logging);
+                linkDeletionWorker.Start(shutdown.Token);
+                // Background tenant cascade-deletion: a tenant marked for deletion is torn down asynchronously
+                // (every subject and all tenant-scoped rows, plus its RecallDB collections and LiteGraph tenant),
+                // so a tenant's very large cascade never blocks the request that started it.
+                TenantDeletionWorker tenantDeletionWorker = new TenantDeletionWorker(database, cascade, logging);
+                tenantDeletionWorker.Start(shutdown.Token);
                 // Default model runners are seeded synchronously into the native store by FirstBootSeeder
                 // (create-only, so operator edits persist across restarts).
                 Task maintenance = MaintenanceLoopAsync(database, settings, logging, shutdown.Token);

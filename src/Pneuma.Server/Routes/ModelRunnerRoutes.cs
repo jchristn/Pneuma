@@ -75,6 +75,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Health of all model endpoints (deduplicated by base URL)", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}/health", HealthByIdAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Health of a single model endpoint", "ModelRunners"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/model-runners/{id}/health/check", HealthCheckNowAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Run a health check for a single endpoint immediately", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/model-runners/{id}/validate", ValidateAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Actively validate a model endpoint end to end (completion + tool calling, or embedding)", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}", ReadAsync, RouteHelper.ExceptionAsync,
@@ -142,7 +144,7 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
-            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(runner)).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, ToDto(runner, includeSecrets: true)).ConfigureAwait(false);
         }
 
         private async Task HealthListAsync(HttpContextBase ctx)
@@ -152,7 +154,7 @@ namespace Pneuma.Server.Routes
 
             List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(rc.TenantId, ctx.Token).ConfigureAwait(false);
             List<ModelEndpointHealthDto> health = new List<ModelEndpointHealthDto>();
-            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl));
+            foreach (ModelRunner runner in runners) health.Add(_Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl, runner.HealthCheckEnabled));
             await RouteHelper.SendJsonAsync(ctx, 200, health).ConfigureAwait(false);
         }
 
@@ -167,7 +169,28 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
                 return;
             }
-            ModelEndpointHealthDto status = _Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl);
+            ModelEndpointHealthDto status = _Health.BuildStatus(runner.Id, runner.Name, TypeOf(runner), runner.BaseUrl, runner.HealthCheckEnabled);
+            await RouteHelper.SendJsonAsync(ctx, 200, status).ConfigureAwait(false);
+        }
+
+        private async Task HealthCheckNowAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+
+            ModelRunner? runner = await _Db.ModelRunners.ReadAsync(RouteHelper.Param(ctx, "id"), ctx.Token).ConfigureAwait(false);
+            if (runner == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Model endpoint not found.").ConfigureAwait(false);
+                return;
+            }
+            if (!runner.HealthCheckEnabled)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Health checks are not enabled for this endpoint.").ConfigureAwait(false);
+                return;
+            }
+
+            ModelEndpointHealthDto status = await _Health.ProbeNowAsync(runner, TypeOf(runner), ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, status).ConfigureAwait(false);
         }
 
@@ -254,6 +277,18 @@ namespace Pneuma.Server.Routes
             runner.Project = request.Project;
             runner.AccessKeyId = request.AccessKeyId;
             runner.ContextSize = Math.Max(0, request.ContextSize);
+            runner.MaxConcurrentRequests = Math.Max(1, request.MaxConcurrentRequests);
+            runner.MaxQueueDepth = Math.Max(0, request.MaxQueueDepth);
+            runner.MaximumTimeoutMs = Math.Max(1, request.MaximumTimeoutMs);
+            runner.HealthCheckEnabled = request.HealthCheckEnabled;
+            runner.HealthCheckUrl = request.HealthCheckUrl;
+            runner.HealthCheckMethod = String.IsNullOrWhiteSpace(request.HealthCheckMethod) ? "GET" : request.HealthCheckMethod!.Trim();
+            runner.HealthCheckIntervalMs = Math.Max(0, request.HealthCheckIntervalMs);
+            runner.HealthCheckTimeoutMs = Math.Max(0, request.HealthCheckTimeoutMs);
+            runner.HealthCheckExpectedStatusCode = request.HealthCheckExpectedStatusCode;
+            runner.HealthyThreshold = Math.Max(1, request.HealthyThreshold);
+            runner.UnhealthyThreshold = Math.Max(1, request.UnhealthyThreshold);
+            runner.HealthCheckUseAuth = request.HealthCheckUseAuth;
             runner.Active = request.Active;
             if (!String.IsNullOrEmpty(request.ApiKey)) runner.AuthMaterialEncrypted = _Cipher.Encrypt(request.ApiKey);
             if (!String.IsNullOrEmpty(request.SessionToken)) runner.SessionTokenEncrypted = _Cipher.Encrypt(request.SessionToken);
@@ -298,7 +333,11 @@ namespace Pneuma.Server.Routes
             }
         }
 
-        private static ModelEndpointDto ToDto(ModelRunner runner)
+        // Map a runner to the wire DTO. When includeSecrets is true (the SINGLE-endpoint read only) the stored
+        // API key is decrypted and returned so an operator can view/edit it in the dashboard — this is a
+        // deliberate product decision that overrides the usual never-return-secrets stance. List responses pass
+        // includeSecrets: false so secrets are never emitted in bulk.
+        private ModelEndpointDto ToDto(ModelRunner runner, bool includeSecrets = false)
         {
             return new ModelEndpointDto
             {
@@ -309,7 +348,7 @@ namespace Pneuma.Server.Routes
                 Model = runner.DefaultModel ?? runner.DefaultEmbeddingModel,
                 Endpoint = runner.BaseUrl,
                 ApiFormat = runner.ApiType,
-                ApiKey = null,
+                ApiKey = includeSecrets ? DecryptOrNull(runner.AuthMaterialEncrypted) : null,
                 Deployment = runner.Deployment,
                 ApiVersion = runner.ApiVersion,
                 Region = runner.Region,
@@ -317,8 +356,27 @@ namespace Pneuma.Server.Routes
                 AccessKeyId = runner.AccessKeyId,
                 Active = runner.Active,
                 ContextSize = runner.ContextSize,
+                MaxConcurrentRequests = runner.MaxConcurrentRequests,
+                MaxQueueDepth = runner.MaxQueueDepth,
+                MaximumTimeoutMs = runner.MaximumTimeoutMs,
+                HealthCheckEnabled = runner.HealthCheckEnabled,
+                HealthCheckUrl = runner.HealthCheckUrl,
+                HealthCheckMethod = runner.HealthCheckMethod,
+                HealthCheckIntervalMs = runner.HealthCheckIntervalMs,
+                HealthCheckTimeoutMs = runner.HealthCheckTimeoutMs,
+                HealthCheckExpectedStatusCode = runner.HealthCheckExpectedStatusCode,
+                HealthyThreshold = runner.HealthyThreshold,
+                UnhealthyThreshold = runner.UnhealthyThreshold,
+                HealthCheckUseAuth = runner.HealthCheckUseAuth,
                 CreatedUtc = runner.CreatedUtc
             };
+        }
+
+        private string? DecryptOrNull(string? payload)
+        {
+            if (String.IsNullOrEmpty(payload)) return null;
+            try { return _Cipher.Decrypt(payload); }
+            catch (Exception) { return null; }
         }
 
         #endregion

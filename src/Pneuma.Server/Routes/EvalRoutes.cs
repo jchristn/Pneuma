@@ -6,6 +6,7 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
     using Pneuma.Server.Streaming;
@@ -71,6 +72,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Stream an evaluation run's live progress (SSE)", "Eval"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/eval/runs/{id}/cancel", CancelRunAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Cancel a queued or running evaluation run", "Eval"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/runs/delete", BulkDeleteRunsAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple evaluation runs", "Eval"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/eval/runs/{id}", DeleteRunAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an evaluation run", "Eval"));
         }
@@ -250,6 +253,33 @@ namespace Pneuma.Server.Routes
             await _Db.EvalRuns.DeleteAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
             ctx.Response.StatusCode = 204;
             await ctx.Response.Send(ctx.Token).ConfigureAwait(false);
+        }
+
+        private async Task BulkDeleteRunsAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId)) { await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false); return; }
+
+            IdListRequest? request = RouteHelper.ReadBody<IdListRequest>(ctx);
+            if (request == null || request.Ids == null || request.Ids.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A non-empty list of run ids is required.").ConfigureAwait(false);
+                return;
+            }
+
+            // Delete each run and its results server-side in this single request, so the browser never fans out
+            // one delete per run.
+            int deleted = 0;
+            foreach (string id in request.Ids)
+            {
+                if (String.IsNullOrWhiteSpace(id)) continue;
+                await _Db.EvalResults.DeleteByRunAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+                await _Db.EvalRuns.DeleteAsync(rc.TenantId, id, ctx.Token).ConfigureAwait(false);
+                deleted++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 200, new { count = deleted }).ConfigureAwait(false);
         }
 
         #endregion

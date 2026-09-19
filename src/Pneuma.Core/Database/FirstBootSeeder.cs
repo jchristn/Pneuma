@@ -50,6 +50,11 @@ namespace Pneuma.Core.Database
 
         private static async Task SeedModelRunnersAsync(DatabaseDriverBase db, SeedOptions options, CancellationToken token)
         {
+            // Seed the starter endpoints ONLY on a genuinely empty system. Once any endpoint exists (in any
+            // tenant), the operator owns the set — do not re-inject the defaults on later restarts, even if they
+            // renamed or removed the originals.
+            if (await db.ModelRunners.ExistsAnyAsync(token).ConfigureAwait(false)) return;
+
             string baseUrl = String.IsNullOrWhiteSpace(options.OllamaBaseUrl) ? "http://127.0.0.1:11434" : options.OllamaBaseUrl.TrimEnd('/');
             await SeedModelRunnerAsync(db, "nomic-embed-text", ModelCapabilityEnum.Embedding, baseUrl, token).ConfigureAwait(false);
             await SeedModelRunnerAsync(db, "gemma3:4b", ModelCapabilityEnum.Completion, baseUrl, token).ConfigureAwait(false);
@@ -73,6 +78,7 @@ namespace Pneuma.Core.Database
                 DefaultModel = embedding ? null : model,
                 DefaultEmbeddingModel = embedding ? model : null,
                 Active = true,
+                HealthCheckEnabled = true,
                 IsProtected = false
             };
             await db.ModelRunners.CreateAsync(runner, token).ConfigureAwait(false);
