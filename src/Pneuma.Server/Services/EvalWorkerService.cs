@@ -5,6 +5,7 @@ namespace Pneuma.Server.Services
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using SyslogLogging;
 
     /// <summary>

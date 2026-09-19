@@ -2,6 +2,7 @@ namespace Pneuma.Core.Database
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Provider-neutral database configuration.

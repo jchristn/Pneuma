@@ -3,8 +3,13 @@ namespace Pneuma.Server.Mcp
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Maps a Pneuma tool name to the resource/operation it requires and authorizes it against the shared

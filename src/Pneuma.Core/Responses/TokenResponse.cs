@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Session token issuance/validation response.

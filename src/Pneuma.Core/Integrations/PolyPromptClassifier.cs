@@ -7,8 +7,10 @@ namespace Pneuma.Core.Integrations
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Serialization;
     using PolyPrompt.Clients;

@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Mysql
     using Pneuma.Core.Database.Mysql.Implementations;
     using Pneuma.Core.Database.Mysql.Queries;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using MySqlConnector;
 
     /// <summary>

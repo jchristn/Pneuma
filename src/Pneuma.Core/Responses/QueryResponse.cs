@@ -3,6 +3,7 @@ namespace Pneuma.Core.Responses
     using System;
     using System.Collections.Generic;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// A grounded answer with its supporting sources.

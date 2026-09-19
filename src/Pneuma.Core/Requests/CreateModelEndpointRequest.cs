@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Requests
 {
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Request to create or update a model endpoint (model runner).

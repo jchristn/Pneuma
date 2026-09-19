@@ -7,11 +7,17 @@ namespace Pneuma.Server.Mcp
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Executes Pneuma's read tools in-process without any HTTP/JSON-RPC transport, returning a

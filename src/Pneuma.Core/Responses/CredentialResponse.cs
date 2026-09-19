@@ -2,7 +2,9 @@ namespace Pneuma.Core.Responses
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Credential response. The raw secret key is present only in the create response, shown once.

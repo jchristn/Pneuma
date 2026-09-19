@@ -2,6 +2,7 @@ namespace Pneuma.Core.Database
 {
     using System.Data;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Maps a database row to an <see cref="IngestionTuning"/>. Shared across providers (uses the

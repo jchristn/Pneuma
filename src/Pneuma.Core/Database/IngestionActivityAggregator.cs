@@ -5,6 +5,7 @@ namespace Pneuma.Core.Database
     using System.Data;
     using System.Linq;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Responses;
 
     /// <summary>

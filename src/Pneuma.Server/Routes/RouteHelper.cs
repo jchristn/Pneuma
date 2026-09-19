@@ -3,6 +3,7 @@ namespace Pneuma.Server.Routes
     using System;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;

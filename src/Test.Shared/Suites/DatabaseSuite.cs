@@ -6,7 +6,9 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Security;
     using Test.Shared.Support;
     using Touchstone.Core;

@@ -2,6 +2,7 @@ namespace Pneuma.Core.Security
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// The internal, platform-controlled contents of an opaque session token.

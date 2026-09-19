@@ -2,6 +2,7 @@ namespace Pneuma.Core.Requests
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Query parameters for a paginated enumeration, following the platform enumeration pattern.

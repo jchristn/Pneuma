@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Responses
 {
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// A feedback record enriched with the chat turn it rates, so the Feedback surface can show the full

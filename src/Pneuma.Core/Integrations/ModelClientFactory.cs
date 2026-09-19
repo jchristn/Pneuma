@@ -3,7 +3,9 @@ namespace Pneuma.Core.Integrations
     using System;
     using System.Net.Http;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using SyslogLogging;

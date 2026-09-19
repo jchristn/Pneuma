@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQL Server persisted chat-turn methods.</summary>
     internal class ChatTurnMethods : SqlServerMethodsBase, IChatTurnMethods

@@ -12,6 +12,9 @@ namespace Pneuma.Server
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Routes;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Server.Settings;
     using SyslogLogging;
     using WatsonWebserver;

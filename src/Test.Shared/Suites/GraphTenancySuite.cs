@@ -2,9 +2,15 @@ namespace Test.Shared.Suites
 {
     using System;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using Test.Shared.Support;
     using Touchstone.Core;
 

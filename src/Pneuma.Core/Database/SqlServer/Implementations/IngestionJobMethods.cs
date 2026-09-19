@@ -9,7 +9,9 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQL Server ingestion job methods.</summary>
     internal class IngestionJobMethods : SqlServerMethodsBase, IIngestionJobMethods

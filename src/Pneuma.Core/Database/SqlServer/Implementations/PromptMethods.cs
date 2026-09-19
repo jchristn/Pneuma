@@ -9,6 +9,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQL Server prompt methods.</summary>
     internal class PromptMethods : SqlServerMethodsBase, IPromptMethods

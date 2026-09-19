@@ -4,6 +4,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Test.Shared.Support;
     using Touchstone.Core;
 

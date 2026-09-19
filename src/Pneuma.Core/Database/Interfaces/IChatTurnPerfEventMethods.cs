@@ -5,6 +5,7 @@ namespace Pneuma.Core.Database.Interfaces
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Persisted chat-turn performance-event data access methods. One row per stage of a chat turn's answer

@@ -1,5 +1,6 @@
 namespace Pneuma.Server.Services
 {
+    using Pneuma.Core.Integrations.Abstractions;
     using System;
     using System.Collections.Generic;
     using System.Net;

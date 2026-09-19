@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// A prompt as seen for a single subject: its global default, the effective content after any per-subject

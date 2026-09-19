@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System.Collections.Generic;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// The result of a bulk link submission: the number of links created and the created links.

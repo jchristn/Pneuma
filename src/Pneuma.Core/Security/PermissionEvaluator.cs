@@ -2,7 +2,9 @@ namespace Pneuma.Core.Security
 {
     using System.Collections.Generic;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Evaluates a resolved set of permissions against a requested (resource, operation) pair.

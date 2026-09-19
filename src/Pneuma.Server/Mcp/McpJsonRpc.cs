@@ -4,6 +4,7 @@ namespace Pneuma.Server.Mcp
     using System.Text.Json;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Routes;

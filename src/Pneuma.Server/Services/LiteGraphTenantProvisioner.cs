@@ -1,10 +1,12 @@
 namespace Pneuma.Server.Services
 {
+    using Pneuma.Core.Integrations.Abstractions;
     using System;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Provisions an isolated LiteGraph tenant for a Pneuma tenant so each tenant's knowledge graph lives in

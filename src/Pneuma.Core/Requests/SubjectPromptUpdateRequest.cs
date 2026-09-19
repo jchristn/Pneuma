@@ -2,6 +2,7 @@ namespace Pneuma.Core.Requests
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Request body to set or update a per-subject prompt override.

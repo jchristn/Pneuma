@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Database
 {
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// The outcome of provisioning a tenant's first administrator: the admin user plus any records that

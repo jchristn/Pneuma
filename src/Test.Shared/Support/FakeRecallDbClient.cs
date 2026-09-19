@@ -6,6 +6,7 @@ namespace Test.Shared.Support
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Requests;

@@ -7,14 +7,21 @@ namespace Test.Shared.Suites
     using Pneuma.Core.Caching;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using SyslogLogging;
     using Test.Shared.Support;
     using Touchstone.Core;
@@ -312,11 +319,11 @@ namespace Test.Shared.Suites
             logging.Settings.EnableConsole = false;
             IBlobStore blobs = new DiskBlobStore(Path.Combine(Path.GetTempPath(), "pneuma-test-blobs", Guid.NewGuid().ToString("N")));
             Aes256Cipher cipher = new Aes256Cipher("test-signing-key");
-            Pneuma.Server.Settings.IngestionSettings settings = new Pneuma.Server.Settings.IngestionSettings();
-            Pneuma.Server.Settings.TelemetrySettings telemetrySettings = new Pneuma.Server.Settings.TelemetrySettings { Enabled = false };
-            Pneuma.Server.Services.TelemetryService telemetry = new Pneuma.Server.Services.TelemetryService(telemetrySettings, logging);
-            Pneuma.Server.Services.ConcurrencyManager concurrency = new Pneuma.Server.Services.ConcurrencyManager(new Pneuma.Core.Models.IngestionTuning());
-            return new IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), concurrency, logging, telemetry);
+            Pneuma.Core.Ingestion.Configuration.IngestionSettings settings = new Pneuma.Core.Ingestion.Configuration.IngestionSettings();
+            Pneuma.Core.Observability.TelemetrySettings telemetrySettings = new Pneuma.Core.Observability.TelemetrySettings { Enabled = false };
+            Pneuma.Core.Observability.TelemetryService telemetry = new Pneuma.Core.Observability.TelemetryService(telemetrySettings, logging);
+            Pneuma.Core.Ingestion.Pipeline.ConcurrencyManager concurrency = new Pneuma.Core.Ingestion.Pipeline.ConcurrencyManager(new Pneuma.Core.Ingestion.Models.IngestionTuning());
+            return new Pneuma.Core.Ingestion.Pipeline.IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, concurrency, logging, telemetry);
         }
 
         // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the

@@ -3,6 +3,7 @@ namespace Pneuma.Core.Models
     using System;
     using System.Collections.Generic;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Helpers;
 
     /// <summary>

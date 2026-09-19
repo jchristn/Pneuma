@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Integrations.Models
 {
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// A single vector-search result: the matched graph node identifier, its similarity score, and the

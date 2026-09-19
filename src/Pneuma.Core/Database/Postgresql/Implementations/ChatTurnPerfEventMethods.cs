@@ -9,6 +9,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>PostgreSQL persisted chat-turn performance-event methods.</summary>
     internal class ChatTurnPerfEventMethods : PostgresqlMethodsBase, IChatTurnPerfEventMethods

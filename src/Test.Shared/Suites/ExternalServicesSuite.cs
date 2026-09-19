@@ -6,12 +6,18 @@ namespace Test.Shared.Suites
     using System.Net.Http;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using SyslogLogging;
     using Test.Shared.Support;
     using Touchstone.Core;

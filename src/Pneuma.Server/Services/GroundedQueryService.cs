@@ -7,13 +7,17 @@ namespace Pneuma.Server.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;

@@ -7,6 +7,7 @@ namespace Pneuma.Core.Database
     using System.Threading.Tasks;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Abstract base class for provider-specific database drivers. Exposes domain-specific

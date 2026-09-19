@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.SqlServer
     using Pneuma.Core.Database.SqlServer.Implementations;
     using Pneuma.Core.Database.SqlServer.Queries;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Microsoft.Data.SqlClient;
 
     /// <summary>

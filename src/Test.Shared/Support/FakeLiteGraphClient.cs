@@ -5,6 +5,7 @@ namespace Test.Shared.Support
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Interfaces;
 
     /// <summary>In-memory LiteGraph fake for graph merge, adjacency, and search tests.</summary>

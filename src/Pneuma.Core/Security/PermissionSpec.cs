@@ -2,6 +2,7 @@ namespace Pneuma.Core.Security
 {
     using System.Collections.Generic;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// A declarative permission specification used to seed built-in roles.

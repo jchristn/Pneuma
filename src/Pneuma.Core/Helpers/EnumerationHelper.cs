@@ -4,6 +4,7 @@ namespace Pneuma.Core.Helpers
     using System.Collections.Generic;
     using System.Linq;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
 

@@ -2,6 +2,7 @@ namespace Pneuma.Server.Services
 {
     using System.Collections.Generic;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// The result of a grounded question: the answer text, the supporting graph nodes it was drawn

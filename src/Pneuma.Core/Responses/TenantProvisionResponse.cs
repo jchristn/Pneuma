@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using Pneuma.Core.Database;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Response for tenant creation: the created tenant plus the first administrator that was provisioned

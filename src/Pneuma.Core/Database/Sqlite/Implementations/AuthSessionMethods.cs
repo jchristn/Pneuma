@@ -8,7 +8,9 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQLite authentication session methods.</summary>
     internal class AuthSessionMethods : SqliteMethodsBase, IAuthSessionMethods

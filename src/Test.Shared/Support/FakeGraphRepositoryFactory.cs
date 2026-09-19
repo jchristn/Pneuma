@@ -4,6 +4,10 @@ namespace Test.Shared.Support
     using System.Threading.Tasks;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Test graph-repository factory that returns a single in-memory graph for every tenant. Sufficient for

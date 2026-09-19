@@ -13,6 +13,7 @@ namespace Pneuma.Core.Integrations.Implementations
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Security;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;

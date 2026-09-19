@@ -4,6 +4,7 @@ namespace Pneuma.Core.Database.Interfaces
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Prompt data access methods.

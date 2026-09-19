@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQLite user methods.</summary>
     internal class UserMethods : SqliteMethodsBase, IUserMethods

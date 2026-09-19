@@ -3,6 +3,7 @@ namespace Pneuma.Core.Requests
     using System;
     using System.Collections.Generic;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Request to create or update a model runner. The API key is provided in plaintext and encrypted

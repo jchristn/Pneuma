@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// A model endpoint (model runner) surfaced to the dashboards. Backed by a Pneuma-native

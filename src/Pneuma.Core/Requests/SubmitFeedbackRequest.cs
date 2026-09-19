@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Requests
 {
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Request to record a user's feedback on a single chat answer.

@@ -3,6 +3,7 @@ namespace Pneuma.Core.Requests
     using System;
     using System.Collections.Generic;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// A metadata filter applied to retrieval, expressed as chunk <b>labels</b> and <b>tag</b> predicates. A

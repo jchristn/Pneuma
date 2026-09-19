@@ -3,6 +3,8 @@ namespace Pneuma.Server.Settings
     using System;
     using System.Text.Json.Serialization;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Configuration;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Root application settings.

@@ -2,6 +2,7 @@ namespace Pneuma.Core.Requests
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// One tag predicate applied to retrieval: a chunk tag key, a comparison, and (for value comparisons) the

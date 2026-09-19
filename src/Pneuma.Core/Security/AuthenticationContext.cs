@@ -1,7 +1,9 @@
 namespace Pneuma.Core.Security
 {
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// The authentication portion of a request context, populated after credential validation.

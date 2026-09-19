@@ -7,9 +7,12 @@ namespace Pneuma.Server.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Server.Settings;
     using SyslogLogging;
 

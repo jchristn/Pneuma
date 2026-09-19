@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Security
 {
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// The authorization portion of a request context, populated after permission evaluation.

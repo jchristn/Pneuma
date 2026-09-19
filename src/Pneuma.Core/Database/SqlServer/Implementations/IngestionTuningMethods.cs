@@ -7,6 +7,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQL Server ingestion-tuning (singleton) methods.</summary>
     internal class IngestionTuningMethods : SqlServerMethodsBase, IIngestionTuningMethods

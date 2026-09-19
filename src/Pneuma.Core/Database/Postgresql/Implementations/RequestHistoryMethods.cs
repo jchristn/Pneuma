@@ -10,6 +10,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
 

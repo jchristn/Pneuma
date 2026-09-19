@@ -5,7 +5,9 @@ namespace Pneuma.Core.Database
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Security;
 
     /// <summary>

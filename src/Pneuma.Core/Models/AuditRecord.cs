@@ -2,6 +2,7 @@ namespace Pneuma.Core.Models
 {
     using System;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Helpers;
 
     /// <summary>

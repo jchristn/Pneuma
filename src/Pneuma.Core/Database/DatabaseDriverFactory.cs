@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database
     using Pneuma.Core.Database.Sqlite;
     using Pneuma.Core.Database.SqlServer;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Composition root for the data layer. Produces the driver for the configured provider.

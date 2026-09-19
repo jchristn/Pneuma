@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Postgresql
     using Pneuma.Core.Database.Postgresql.Implementations;
     using Pneuma.Core.Database.Postgresql.Queries;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Npgsql;
 
     /// <summary>

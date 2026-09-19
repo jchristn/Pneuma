@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Responses
 {
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// A single scored retrieval hit returned by the search API: the resolved graph node the chunk points at,

@@ -4,6 +4,8 @@ namespace Pneuma.Core.Models
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Helpers;
 
     /// <summary>

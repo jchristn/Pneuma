@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>SQL Server legacy user-role map methods.</summary>
     internal class UserRoleMapMethods : SqlServerMethodsBase, IUserRoleMapMethods

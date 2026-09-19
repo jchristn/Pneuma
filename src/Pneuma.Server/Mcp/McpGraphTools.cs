@@ -6,13 +6,19 @@ namespace Pneuma.Server.Mcp
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using Pneuma.Server.Streaming;
     using WatsonWebserver.Core;
 

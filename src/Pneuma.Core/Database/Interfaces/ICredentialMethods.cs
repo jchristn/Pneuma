@@ -4,6 +4,7 @@ namespace Pneuma.Core.Database.Interfaces
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// Credential data access methods. Credentials are tenant-scoped and owned by a user.

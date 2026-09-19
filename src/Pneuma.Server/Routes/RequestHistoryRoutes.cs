@@ -5,6 +5,7 @@ namespace Pneuma.Server.Routes
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;

@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Responses
 {
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// A count of ingestion activity events for a single pipeline stage.

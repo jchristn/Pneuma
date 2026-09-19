@@ -8,12 +8,17 @@ namespace Pneuma.Server
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Serialization;
     using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using Pneuma.Server.Settings;
     using SyslogLogging;
 
@@ -100,7 +105,7 @@ namespace Pneuma.Server
             // persisted (an ingestiontuning singleton) so later edits via the dashboard survive restarts; per-subject
             // overrides layer on top. The manager backs every stage gate + the job pool with a Padlock so changes
             // apply live. Seed the singleton from the configured settings if it does not yet exist.
-            Pneuma.Core.Models.IngestionTuning ingestionTuningDefaults = new Pneuma.Core.Models.IngestionTuning
+            Pneuma.Core.Ingestion.Models.IngestionTuning ingestionTuningDefaults = new Pneuma.Core.Ingestion.Models.IngestionTuning
             {
                 ContentRetrieval = settings.Ingestion.StageConcurrency.ContentRetrieval,
                 TypeDetection = settings.Ingestion.StageConcurrency.TypeDetection,
@@ -175,7 +180,7 @@ namespace Pneuma.Server
             NativeSemanticProcessor semanticProcessor = new NativeSemanticProcessor(database, authentication.Cipher, logging);
             IngestionProcessor processor = new IngestionProcessor(
                 database, clients.DocumentAtom, semanticProcessor, graphFactory, clients.Vectors, clients.Blobs,
-                artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, concurrency, logging, telemetry);
+                artifactStore, fetcher, authentication.Cipher, settings.Ingestion, concurrency, logging, telemetry);
             IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, concurrency, logging);
 
             using (CancellationTokenSource shutdown = new CancellationTokenSource())

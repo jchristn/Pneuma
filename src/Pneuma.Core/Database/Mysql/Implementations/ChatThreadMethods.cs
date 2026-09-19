@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>MySQL persisted conversation-thread methods.</summary>
     internal class ChatThreadMethods : MysqlMethodsBase, IChatThreadMethods

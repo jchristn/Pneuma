@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System.Collections.Generic;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// A persisted chat turn together with any feedback it has received. Backs the History detail view.

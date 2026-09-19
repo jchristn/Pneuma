@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Sqlite
     using Pneuma.Core.Database.Sqlite.Implementations;
     using Pneuma.Core.Database.Sqlite.Queries;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Microsoft.Data.Sqlite;
 
     /// <summary>

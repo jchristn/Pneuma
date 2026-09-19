@@ -4,6 +4,7 @@ namespace Pneuma.Core.Integrations.Abstractions
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// Provider-neutral knowledge-graph store: node/edge creation, node reads and neighbor traversal,

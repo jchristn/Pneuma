@@ -8,6 +8,7 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
     using Pneuma.Core.Database;
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>PostgreSQL legacy user-role map methods.</summary>
     internal class UserRoleMapMethods : PostgresqlMethodsBase, IUserRoleMapMethods

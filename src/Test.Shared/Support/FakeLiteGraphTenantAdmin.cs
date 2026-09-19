@@ -1,9 +1,14 @@
 namespace Test.Shared.Support
 {
+    using Pneuma.Core.Integrations.Abstractions;
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// In-memory <see cref="ILiteGraphTenantAdmin"/> for tests: records the LiteGraph tenant GUIDs it was

@@ -33,10 +33,10 @@ BACKEND_ALLOWLIST=(
   "src/Pneuma.Server/Mcp/McpToolCatalog.cs"
   # The ingestion pipeline's per-stage work in one region-organized class (metadata stamping already split out
   # into IngestionMetadata.cs); the stages share enough context that further splitting hurts readability.
-  "src/Pneuma.Server/Services/IngestionStages.cs"
+  "src/Pneuma.Core/Ingestion/Stages/IngestionStages.cs"
   # The ingestion orchestrator: the retry loop, the per-stage span+meter runner, and the two phase methods in
   # one cohesive region-organized class; splitting the shared job/attempt/telemetry state across files hurts it.
-  "src/Pneuma.Server/Services/IngestionProcessor.cs"
+  "src/Pneuma.Core/Ingestion/Pipeline/IngestionProcessor.cs"
   # The content-link route registrar: one class of related link endpoints (submit/bulk, list/read, log,
   # source/atoms/chunks/vectors/subgraph artifacts, delete/bulk-delete, reingest/bulk-reingest) sharing helpers.
   "src/Pneuma.Server/Routes/SubjectLinkRoutes.cs"

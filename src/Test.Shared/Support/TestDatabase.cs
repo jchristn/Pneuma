@@ -6,6 +6,7 @@ namespace Test.Shared.Support
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
 
     /// <summary>
     /// Creates fresh, isolated databases for contract tests. Defaults to SQLite on a temp file;

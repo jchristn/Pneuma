@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System.Collections.Generic;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// A page of request history entries. List responses omit bodies to keep payloads small.

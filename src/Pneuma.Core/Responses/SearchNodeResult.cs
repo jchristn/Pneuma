@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Responses
 {
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
 
     /// <summary>
     /// A single search result: a representative graph node with its relevance score.

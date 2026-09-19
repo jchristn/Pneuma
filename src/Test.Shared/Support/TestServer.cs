@@ -9,9 +9,14 @@ namespace Test.Shared.Support
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Storage;
     using Pneuma.Server;
     using Pneuma.Server.Services;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using Pneuma.Server.Settings;
     using SyslogLogging;
 
@@ -107,7 +112,7 @@ namespace Test.Shared.Support
                     new RecallDbTenantProvisioner(recall, "default", 8),
                     new LiteGraphTenantProvisioner(Database, new FakeLiteGraphTenantAdmin())
                 }, logging);
-            ConcurrencyManager concurrency = new ConcurrencyManager(new Pneuma.Core.Models.IngestionTuning());
+            ConcurrencyManager concurrency = new ConcurrencyManager(new Pneuma.Core.Ingestion.Models.IngestionTuning());
             concurrency.InitializeAsync(Database, CancellationToken.None).GetAwaiter().GetResult();
             _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, provisioning, modelHealth, new NullArtifactStore(), blobs, concurrency, logging, telemetry);
             _Server.Start();

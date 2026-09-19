@@ -2,6 +2,7 @@ namespace Pneuma.Core.Responses
 {
     using System.Collections.Generic;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
 
     /// <summary>
     /// An ingestion job with its per-stage event history.

@@ -11,6 +11,7 @@ namespace Pneuma.Core.Integrations.Implementations
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
+    using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Observability;

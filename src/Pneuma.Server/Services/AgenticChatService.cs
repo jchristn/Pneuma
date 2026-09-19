@@ -8,8 +8,10 @@ namespace Pneuma.Server.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Integrations;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Security;
     using Pneuma.Core.Observability;
