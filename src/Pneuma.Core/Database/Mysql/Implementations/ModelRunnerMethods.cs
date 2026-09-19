@@ -144,6 +144,15 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<ModelRunner>> EnumerateAllAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query("SELECT * FROM modelrunners ORDER BY createdutc ASC;", token).ConfigureAwait(false);
+            List<ModelRunner> result = new List<ModelRunner>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAnyAsync(CancellationToken token = default)
         {
             DataTable table = await Query("SELECT id FROM modelrunners LIMIT 1;", token).ConfigureAwait(false);

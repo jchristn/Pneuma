@@ -35,6 +35,14 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Runners.</returns>
         Task<List<ModelRunner>> EnumerateAsync(string? tenantId, CancellationToken token = default);
 
+        /// <summary>
+        /// Enumerate every runner across all tenants (global and tenant-scoped). Used by the background health
+        /// monitor, which must probe all endpoints regardless of owning tenant, not just global ones.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>All runners.</returns>
+        Task<List<ModelRunner>> EnumerateAllAsync(CancellationToken token = default);
+
         /// <summary>Update a runner.</summary>
         /// <param name="runner">Runner to update.</param>
         /// <param name="token">Cancellation token.</param>

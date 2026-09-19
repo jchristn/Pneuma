@@ -194,7 +194,9 @@ namespace Pneuma.Server.Services
 
         private async Task RefreshAndProbeAsync(CancellationToken token)
         {
-            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAsync(null, token).ConfigureAwait(false);
+            // Probe every endpoint across all tenants, not just global (tenant-null) ones — dashboard-created
+            // endpoints are tenant-scoped and must be health-monitored too.
+            List<ModelRunner> runners = await _Db.ModelRunners.EnumerateAllAsync(token).ConfigureAwait(false);
 
             HashSet<string> active = new HashSet<string>(StringComparer.Ordinal);
             List<ProbePlan> plans = new List<ProbePlan>();
