@@ -46,7 +46,7 @@
     "PruneIntervalMinutes": 60
   },
   "Ingestion": {
-    "MaxConcurrentTasks": 4,
+    "MaxConcurrentTasks": 8,
     "PollIntervalMs": 2000,
     "MaxAttempts": 3,
     "StageTimeoutSeconds": 1800,

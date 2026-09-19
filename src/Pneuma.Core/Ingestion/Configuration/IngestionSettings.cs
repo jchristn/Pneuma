@@ -161,7 +161,7 @@ namespace Pneuma.Core.Ingestion.Configuration
 
         #region Private-Members
 
-        private int _MaxConcurrentTasks = 4;
+        private int _MaxConcurrentTasks = 8;
         private int _PollIntervalMs = 2000;
         private int _MaxAttempts = 3;
         private int _RetryBackoffBaseMs = 2000;
