@@ -26,6 +26,7 @@ namespace Pneuma.Server.Mcp
         #region Private-Members
 
         private readonly DatabaseDriverBase _Db;
+        private readonly ConcurrencyManager _Concurrency;
 
         #endregion
 
@@ -33,10 +34,12 @@ namespace Pneuma.Server.Mcp
 
         /// <summary>Instantiate the entity tools.</summary>
         /// <param name="db">Database driver.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="db"/> is null.</exception>
-        public McpEntityTools(DatabaseDriverBase db)
+        /// <param name="concurrency">Runtime concurrency manager (applies per-subject concurrency overrides live).</param>
+        /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
+        public McpEntityTools(DatabaseDriverBase db, ConcurrencyManager concurrency)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
+            _Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
         }
 
         #endregion
@@ -264,12 +267,16 @@ namespace Pneuma.Server.Mcp
             int? retention = GetOptionalInt(arguments, "historyRetentionDays");
             if (retention.HasValue) subject.HistoryRetentionDays = retention.Value;
             subject.GraphRootNodeId = SlugHelper.Slugify(displayName);
+            SubjectConcurrencyOverrides? overrides = ParseConcurrencyOverrides(arguments);
+            if (overrides != null) subject.ConcurrencyOverrides = overrides;
 
             string? resolved = await ResolveSlugAsync(ctx, id, tenantId, GetOptionalString(arguments, "urlSlug"), displayName, null, token).ConfigureAwait(false);
             if (resolved == null) return null;
             subject.UrlSlug = resolved;
 
-            return await _Db.Subjects.CreateAsync(subject, token).ConfigureAwait(false);
+            Subject created = await _Db.Subjects.CreateAsync(subject, token).ConfigureAwait(false);
+            ApplyConcurrencyOverrides(created);
+            return created;
         }
 
         /// <summary>Update an existing subject for the caller's tenant. Only fields present in the arguments are
@@ -318,6 +325,7 @@ namespace Pneuma.Server.Mcp
             if (retention.HasValue) existing.HistoryRetentionDays = retention.Value;
             bool? active = GetOptionalBool(arguments, "active");
             if (active.HasValue) existing.Active = active.Value;
+            if (HasProperty(arguments, "concurrencyOverrides")) existing.ConcurrencyOverrides = ParseConcurrencyOverrides(arguments);
 
             string? explicitSlug = GetOptionalString(arguments, "urlSlug");
             if (!String.IsNullOrWhiteSpace(explicitSlug))
@@ -335,7 +343,28 @@ namespace Pneuma.Server.Mcp
                 }
             }
 
-            return await _Db.Subjects.UpdateAsync(existing, token).ConfigureAwait(false);
+            Subject saved = await _Db.Subjects.UpdateAsync(existing, token).ConfigureAwait(false);
+            ApplyConcurrencyOverrides(saved);
+            return saved;
+        }
+
+        // Apply a subject's per-subject concurrency overrides to the runtime limiters (mirrors SubjectRoutes):
+        // an empty/absent set clears any live override so the subject reverts to the system defaults.
+        private void ApplyConcurrencyOverrides(Subject subject)
+        {
+            SubjectConcurrencyOverrides? overrides = subject.GetConcurrencyOverrides();
+            if (overrides == null || overrides.IsEmpty()) _Concurrency.ClearSubjectOverride(subject.Id);
+            else _Concurrency.ApplySubjectOverride(subject.Id, overrides);
+        }
+
+        // Parse the optional concurrencyOverrides object argument into a typed DTO; null when absent, not an
+        // object, or malformed (a JSON null clears the overrides).
+        private static SubjectConcurrencyOverrides? ParseConcurrencyOverrides(JsonElement arguments)
+        {
+            if (!arguments.TryGetProperty("concurrencyOverrides", out JsonElement element)) return null;
+            if (element.ValueKind != JsonValueKind.Object) return null;
+            try { return element.Deserialize<SubjectConcurrencyOverrides>(); }
+            catch (JsonException) { return null; }
         }
 
         // Resolve a create-time slug: a generated slug is de-duplicated with a numeric suffix; an explicit,

@@ -6,8 +6,6 @@ between releases, and the project will adopt semantic versioning at its stable 1
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-09-18
-
 ### Removed
 - **Removed Partio; embedding, chunking, summarization, and model-endpoint management are now native.** The
   external Partio service (`:8400`, chunking/embedding/summarization) has been dropped from the stack

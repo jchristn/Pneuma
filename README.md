@@ -4,7 +4,7 @@
 <h1 align="center">Pneuma — breathing life into your information</h1>
 
 <p align="center">
-  <strong>v0.3.0 · ALPHA</strong><br>
+  <strong>v0.1.0 · ALPHA</strong><br>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/C%23-.NET-512bd4.svg" alt="C# / .NET">
   <img src="https://img.shields.io/badge/Docker-Compose-2496ed.svg" alt="Docker Compose">
@@ -129,11 +129,11 @@ Configuration is a mounted `docker/pneuma.json`: web server, CORS, logging, data
 
 To wipe the stack back to factory defaults (fresh databases, seeded admin, and starter configuration), use `docker/reset.bat` (Windows). To pull the latest published images and restart, use `docker/update.bat`.
 
-### Upgrading to v0.3.0
+### Upgrading from a Partio-based build
 
-v0.3.0 removes Partio and manages model endpoints natively. Because Partio no longer supplies embedding/completion endpoints, on upgrade:
+Pneuma now removes Partio and manages model endpoints natively. Because Partio no longer supplies embedding/completion endpoints, on upgrade:
 
-1. Pull the new images and restart (`docker/update.bat`, or `docker compose pull && docker compose up -d`). Schema **migrations 19 (model-runner provider fields) and 20 (`subjectprompts`) apply automatically** on first boot.
+1. Pull the new images and restart (`docker/update.bat`, or `docker compose pull && docker compose up -d`). Schema **migrations apply automatically** on first boot.
 2. **Re-create your model endpoints** from the admin **Model Endpoints** page — pick a `provider`, fill in its provider-specific fields, and supply the write-only secrets. Default endpoints are seeded (Ollama), so an offline stack works out of the box.
 3. **Re-select each subject's embedding and inference models** (and any optional reranking / prompt-rewrite models) so ingestion and answering point at the new endpoints.
 
@@ -274,9 +274,9 @@ REST_API.md · MCP_API.md · TELEMETRY.md · CHANGELOG.md
 Pneuma's five images (`jchristn77/pneuma-server`, `-postgres`, `-admin-ui`, `-subject-ui`, `-user-ui`) are built and pushed with the repo-root `build-*.bat` scripts, each taking a version tag:
 
 ```bat
-build-all.bat v0.3.0          :: build + push all five
-build-server.bat v0.3.0       :: just the server
-build-admin-ui.bat v0.3.0     :: just the admin dashboard
+build-all.bat v0.1.0          :: build + push all five
+build-server.bat v0.1.0       :: just the server
+build-admin-ui.bat v0.1.0     :: just the admin dashboard
 ```
 
 Each script uses `docker buildx` to publish multi-architecture (`linux/amd64` + `linux/arm64`) images tagged `:latest` and `:<tag>`. The Compose stack references the pinned images, so a deployment `docker compose pull`s rather than building from source.

@@ -37,6 +37,9 @@ BACKEND_ALLOWLIST=(
   # The ingestion orchestrator: the retry loop, the per-stage span+meter runner, and the two phase methods in
   # one cohesive region-organized class; splitting the shared job/attempt/telemetry state across files hurts it.
   "src/Pneuma.Server/Services/IngestionProcessor.cs"
+  # The content-link route registrar: one class of related link endpoints (submit/bulk, list/read, log,
+  # source/atoms/chunks/vectors/subgraph artifacts, delete/bulk-delete, reingest/bulk-reingest) sharing helpers.
+  "src/Pneuma.Server/Routes/SubjectLinkRoutes.cs"
 )
 
 # Frontend files grandfathered above the limit (single self-contained component/view). Same intent as the

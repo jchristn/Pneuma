@@ -558,6 +558,32 @@
           }
         },
         {
+          "name": "Reingest Link",
+          "description": "Queues a fresh ingestion job that forces a full re-run of this link. The link's content hash is cleared first so the delta-skip can't short-circuit the pipeline. Returns 202 Accepted with the created job.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/links/{{linkId}}/reingest"
+          }
+        },
+        {
+          "name": "Reingest Links (bulk)",
+          "description": "Queues a fresh ingestion job per link (each forces a full re-run). Returns 202 Accepted with { queued, skipped }.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{linkId}}\"\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/links/reingest"
+          }
+        },
+        {
           "name": "List Jobs",
           "request": {
             "method": "GET",

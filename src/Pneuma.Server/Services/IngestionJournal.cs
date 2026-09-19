@@ -129,10 +129,28 @@ namespace Pneuma.Server.Services
             job.CompletedUtc = DateTime.UtcNow;
             job.Error = null;
             await UpdateJobAsync(job, token).ConfigureAwait(false);
+            // Phase-boundary markers (e.g. "Ingestion started", "Hydration started") are recorded as Processing
+            // while the job runs; on completion resolve any that are still non-terminal so a completed job's log
+            // reads as a clean sequence of finished steps rather than showing lingering "Processing" rows.
+            await ResolveDanglingEventsAsync(job, token).ConfigureAwait(false);
             await RecordEventAsync(job, IngestionStageEnum.Done, IngestionStatusEnum.Completed, "Ingestion complete.", 0, token).ConfigureAwait(false);
             await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token, contentHash).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionCompleted();
             PneumaMetrics.RecordIngestionJob("completed");
+        }
+
+        // Resolve any of a job's still-non-terminal events (phase-start "Processing" markers such as "Ingestion
+        // started"/"Hydration started", or a leftover "Queued" waiting entry) to Completed, so a finished job's
+        // log shows a clean sequence of finished steps rather than lingering in-progress rows.
+        private async Task ResolveDanglingEventsAsync(IngestionJob job, CancellationToken token)
+        {
+            List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(job.TenantId, job.Id, token).ConfigureAwait(false);
+            foreach (IngestionJobEvent jobEvent in events)
+            {
+                if (jobEvent.Status != IngestionStatusEnum.Processing && jobEvent.Status != IngestionStatusEnum.Queued) continue;
+                jobEvent.Status = IngestionStatusEnum.Completed;
+                await _Db.IngestionJobEvents.UpdateAsync(jobEvent, token).ConfigureAwait(false);
+            }
         }
 
         /// <summary>Mark a job failed at a stage: update status, record the failure event, fail the link, and count metrics.</summary>

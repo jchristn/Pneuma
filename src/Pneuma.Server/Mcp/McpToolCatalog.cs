@@ -101,7 +101,8 @@ namespace Pneuma.Server.Mcp
                             systemPrompt = new { type = "string", description = "Subject system prompt, appended after the global one." },
                             ontologyClassifyPrompt = new { type = "string", description = "Subject ontology classification prompt, appended after the global one." },
                             ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition, appended after the global one." },
-                            historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1). Default 90." }
+                            historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1). Default 90." },
+                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, maxConcurrentTasks, summarizationConcurrency, summarizationMinCellLength, stageTimeoutSeconds." }
                         },
                         required = new[] { "displayName" }
                     }
@@ -133,7 +134,8 @@ namespace Pneuma.Server.Mcp
                             ontologyClassifyPrompt = new { type = "string", description = "Subject ontology classification prompt." },
                             ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition." },
                             historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1)." },
-                            active = new { type = "boolean", description = "Whether the subject is active." }
+                            active = new { type = "boolean", description = "Whether the subject is active." },
+                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). A JSON null clears the subject's overrides. Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, maxConcurrentTasks, summarizationConcurrency, summarizationMinCellLength, stageTimeoutSeconds." }
                         },
                         required = new[] { "id" }
                     }

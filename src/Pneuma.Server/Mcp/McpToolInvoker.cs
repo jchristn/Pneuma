@@ -49,7 +49,7 @@ namespace Pneuma.Server.Mcp
         /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
         /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health)
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -62,7 +62,7 @@ namespace Pneuma.Server.Mcp
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (health == null) throw new ArgumentNullException(nameof(health));
             _Authz = authz;
-            _Entities = new McpEntityTools(db);
+            _Entities = new McpEntityTools(db, concurrency);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
             _Management = new McpManagementTools(db, query, logging);
             _Ops = new McpOpsTools(db, settings, health);

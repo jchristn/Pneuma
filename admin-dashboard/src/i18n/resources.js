@@ -420,6 +420,7 @@ const en = {
       created: 'Created',
       updated: 'Updated',
       followLogs: 'Follow Logs',
+      viewLogs: 'View Logs',
       stop: 'Stop',
       stopConfirm: 'Stop this ingestion job? It will be cancelled and cannot be resumed (you can restart it later).',
       delete: 'Delete',

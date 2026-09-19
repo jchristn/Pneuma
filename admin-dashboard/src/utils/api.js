@@ -324,6 +324,17 @@ class ApiClient {
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
   }
 
+  // Reingest a single link: queues a FRESH ingestion job (a full re-run), even if the link has no prior job.
+  // Returns 202 Accepted with the created job.
+  reingestLink(id) {
+    return this._request('POST', `/v1.0/links/${encodeURIComponent(id)}/reingest`);
+  }
+
+  // Bulk reingest: queues a fresh ingestion job per link. Returns 202 Accepted with { queued, skipped }.
+  bulkReingestLinks(ids) {
+    return this._request('POST', '/v1.0/links/reingest', { body: { ids } });
+  }
+
   // ------------------------------------------------------------- Prompts
   // Per-subject prompt catalog: every prompt key with its effective content, the global
   // default, any subject override, the resolved source, and the override merge mode.

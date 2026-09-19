@@ -211,6 +211,15 @@ class ApiClient {
     if (tags && Object.keys(tags).length) body.tags = tags;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body });
   }
+  // Reingest a single link: queues a FRESH ingestion job (a full re-run), even if the link has no prior job.
+  // Returns 202 Accepted with the created job.
+  async reingestLink(id) {
+    return this._request('POST', `/v1.0/links/${encodeURIComponent(id)}/reingest`, {});
+  }
+  // Bulk reingest: queues a fresh ingestion job per link. Returns 202 Accepted with { queued, skipped }.
+  async bulkReingestLinks(ids) {
+    return this._request('POST', '/v1.0/links/reingest', { body: { ids } });
+  }
 
   // ------------------------------------------------------------------
   // Prompts (global + per-subject)

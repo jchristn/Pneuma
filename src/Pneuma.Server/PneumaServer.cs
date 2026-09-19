@@ -212,8 +212,8 @@ namespace Pneuma.Server
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth).Register(_Server);
-            PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency).Register(_Server);
+            PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _Concurrency);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);
         }

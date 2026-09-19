@@ -45,7 +45,7 @@ Pneuma's other components publish alongside this one: `jchristn77/pneuma-postgre
 ## Tags
 
 - `latest` — most recent build.
-- Version tags (e.g. `v0.3.0`) track releases documented in `CHANGELOG.md`. Pin an exact version for production; Pneuma is in its `0.x` alpha series and anything may change between releases.
+- Version tags (e.g. `v0.1.0`) track releases documented in `CHANGELOG.md`. Pin an exact version for production; Pneuma is in its `0.x` alpha series and anything may change between releases.
 
 ## License
 

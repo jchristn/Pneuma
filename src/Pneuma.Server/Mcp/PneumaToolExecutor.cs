@@ -44,7 +44,7 @@ namespace Pneuma.Server.Mcp
         /// <param name="graphFactory">Per-tenant graph repository factory.</param>
         /// <param name="query">Shared grounded query service.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public PneumaToolExecutor(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query)
+        public PneumaToolExecutor(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ConcurrencyManager concurrency)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -56,7 +56,7 @@ namespace Pneuma.Server.Mcp
             _Authz = authz;
             _GraphFactory = graphFactory;
             _Query = query;
-            _Entities = new McpEntityTools(db);
+            _Entities = new McpEntityTools(db, concurrency);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
         }
 

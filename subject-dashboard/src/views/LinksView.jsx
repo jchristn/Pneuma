@@ -184,32 +184,15 @@ function LinksView() {
     }
   };
 
-  // Reingesting a link re-runs its ingestion pipeline by requeuing its most recent ingestion job
-  // (the same job the ingestion log shows, newest run first). Returns the job id, or null when the
-  // link has never produced a job to reingest.
-  const latestJobId = useCallback(async (linkId) => {
-    const runs = asArray(await apiClient.getLinkIngestionLog(linkId), 'runs', 'logs');
-    if (runs.length === 0) return null;
-    const newest = [...runs].sort(
-      (a, b) => new Date(b?.job?.createdUtc || 0).getTime() - new Date(a?.job?.createdUtc || 0).getTime()
-    )[0];
-    const job = newest?.job || {};
-    return job.id || job.Id || null;
-  }, [apiClient]);
-
+  // Reingesting a link queues a FRESH ingestion job server-side (a full re-run), so it works even when the
+  // link has never produced a job before.
   const handleReingest = async () => {
     if (!reingestTarget) return;
     setReingesting(true);
     setError('');
     setNotice('');
     try {
-      const jobId = await latestJobId(reingestTarget.id);
-      if (!jobId) {
-        setReingestTarget(null);
-        setError(t('links.reingestNoJob', 'This link has no ingestion job to reingest.'));
-        return;
-      }
-      await apiClient.restartJob(jobId);
+      await apiClient.reingestLink(reingestTarget.id);
       setReingestTarget(null);
       setNotice(t('links.reingestQueued', 'Reingestion queued.'));
       await load(false);
@@ -242,27 +225,21 @@ function LinksView() {
     }
   };
 
+  // One server request queues a fresh ingestion job for every selected link — no per-link fan-out.
   const handleBulkReingest = async () => {
     setBulkReingesting(true);
     setError('');
     setNotice('');
     try {
-      let queued = 0;
-      let skipped = 0;
-      for (const link of selectedItems) {
-        const jobId = await latestJobId(link.id);
-        if (jobId) {
-          await apiClient.restartJob(jobId);
-          queued += 1;
-        } else {
-          skipped += 1;
-        }
-      }
+      const ids = selectedItems.map((link) => link.id);
+      const result = await apiClient.bulkReingestLinks(ids);
+      const queued = typeof result?.queued === 'number' ? result.queued : ids.length;
+      const skipped = typeof result?.skipped === 'number' ? result.skipped : 0;
       setBulkReingestOpen(false);
       clear();
       const base = t('links.bulkReingestQueued', { count: queued, defaultValue: `Reingestion queued for ${queued} link(s).` });
       setNotice(skipped > 0
-        ? `${base} ${t('links.bulkReingestSkipped', { count: skipped, defaultValue: `${skipped} skipped (no ingestion job).` })}`
+        ? `${base} ${t('links.bulkReingestSkipped', { count: skipped, defaultValue: `${skipped} skipped.` })}`
         : base);
       await load(false);
     } catch (err) {

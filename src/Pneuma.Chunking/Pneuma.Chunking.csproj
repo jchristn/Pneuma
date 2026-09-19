@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>1701;1702;CS1591</NoWarn>
-    <Version>0.3.0</Version>
+    <Version>0.1.0</Version>
     <Authors>Joel Christner</Authors>
     <Description>Pneuma chunking and tokenization library, for exact chunk-boundary parity.</Description>
     <IncludeSymbols>true</IncludeSymbols>

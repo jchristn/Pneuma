@@ -1,6 +1,6 @@
 # Partio Removal — Native Processing in Pneuma
 
-**Target release:** `0.3.0` (MINOR bump from the current `0.2.0` in the csprojs).
+**Target release:** `0.1.0`.
 **Status:** Not started.
 **Owner:** _unassigned_
 
@@ -24,13 +24,13 @@ Out of scope (tracked elsewhere): the `#5`/`#12` ingestion **step-split** in `CK
 
 ## 1. Locked decisions
 
-The following were decided at planning time and are binding for `0.3.0`. The overriding goal: **Partio ceases to be a component of Pneuma — every function is fully absorbed, manageable end to end across all surfaces, well documented, and well tested.**
+The following were decided at planning time and are binding for `0.1.0`. The overriding goal: **Partio ceases to be a component of Pneuma — every function is fully absorbed, manageable end to end across all surfaces, well documented, and well tested.**
 
 - [x] **Scope — full removal.** Endpoint registry, embedding, summarization, and chunking all come in-house; the Partio server and dashboard are deleted from `docker/compose.yaml` and `docker/factory/compose.yaml`; `IPartioClient`/`PartioClient` and the Partio config block are removed. No intermediate stop.
 - [x] **Prompt override semantics — operator-selectable per prompt.** Each prompt supports a mode of **default / append / replace**, defaulting to append (preserves today's behavior). Global is always the fallback when a subject has no override. This shapes the schema (§4.5) and the dashboard editor (§6).
 - [x] **Tokenizer scope — full Partio parity.** Port SharpToken (`cl100k_base`) **and** `Microsoft.ML.Tokenizers` (BERT/WordPiece with embedded vocab), Partio's `TokenizationProfileResolver`, and the structure-aware table/list chunkers, so token counts are model-exact and chunking behavior matches Partio across every strategy and model family.
 - [x] **Chunk parity — exact.** The native chunker must reproduce Partio's chunk boundaries so vectors stay stable across cutover (no forced re-index). A byte-level parity harness against Partio output on a fixed corpus is a required gate (§4.4, §8).
-- [x] **Version — `0.3.0`** (MINOR bump). The csprojs are at `0.2.0`; the README badge and `pneuma-*` compose image tags still read `0.1.0`. Reconciling all markers (csprojs, README badge, `DOCKERHUB_README`, `CHANGELOG` heading, compose image tags, SDK versions) is a release task in §9.
+- [x] **Version — `0.1.0`.** All markers (csprojs, README badge, `DOCKERHUB_README`, `CHANGELOG`, compose image tags, SDK versions) read `0.1.0`.
 
 ---
 
@@ -126,7 +126,7 @@ Each row must be genuinely covered, not just the server.
 - [ ] **MCP_API.md** — update if any MCP tool surface changes (e.g., model-endpoint or prompt tools); keep in sync (REPOSITORY_REQUIREMENTS §14).
 - [ ] **README.md** — update the architecture (drop Partio from the service list and diagram; describe native processing); reconcile the version badge.
 - [ ] **DOCKERHUB_README.md** — mirror the README changes (REPOSITORY_REQUIREMENTS §4).
-- [ ] **CHANGELOG.md** — a `0.3.0` entry (Keep a Changelog format) describing the native processing move and the Partio removal as the headline.
+- [ ] **CHANGELOG.md** — a `0.1.0` entry (Keep a Changelog format) describing the native processing move and the Partio removal as the headline.
 - [ ] **docker/compose.yaml** — remove `partio-server` and `partio-dashboard`; fix `depends_on` chains that referenced them; confirm `pneuma-*` services use named+tagged images at the release version (REPOSITORY_REQUIREMENTS §9, §11, §12).
 - [ ] **docker/factory/compose.yaml** — same removals; update the factory seed so it provisions native endpoint-registry rows instead of Partio `cep_`/`eep_` defaults; verify `reset.bat`/seed still work.
 - [ ] **docker/update.bat** — still valid after the image changes (pull/down/up/ps) (REPOSITORY_REQUIREMENTS §10).
@@ -162,11 +162,11 @@ Each phase gates on green `dotnet run --project src/Test.Automated`, all three d
 
 ---
 
-## 9. Version bump (`0.3.0`)
+## 9. Version bump (`0.1.0`)
 - [ ] Bump `<Version>` in `src/Pneuma.Core/Pneuma.Core.csproj` and `src/Pneuma.Server/Pneuma.Server.csproj` (and any other packable csprojs).
 - [ ] Reconcile the README badge (currently `0.1.0`) and `DOCKERHUB_README`.
 - [ ] Set the `pneuma-*` image tags in `docker/compose.yaml` and `docker/factory/compose.yaml` to the release version (currently `v0.1.0`).
-- [ ] Move the `CHANGELOG.md` `[Unreleased]` content under a dated `## [0.3.0]` heading with the Partio removal as the lead item.
+- [ ] Move the `CHANGELOG.md` `[Unreleased]` content under a dated `## [0.1.0]` heading with the Partio removal as the lead item.
 - [ ] Bump SDK package versions where they track the server version.
 
 ---
@@ -179,4 +179,4 @@ Each phase gates on green `dotnet run --project src/Test.Automated`, all three d
 - **Ownership** — Pneuma now maintains a chunker, a tokenizer dependency, and an endpoint registry; the ported chunker is a fork that can diverge from upstream Partio.
 
 ## Definition of done
-Partio is no longer a component of Pneuma: the server and dashboard are gone from both compose files, `IPartioClient`/`PartioClient` and the Partio config block are deleted, and no reference to Partio remains anywhere in the tree. Ingestion and retrieval run entirely on native processing with byte-identical chunk parity proven by the §4.4 harness. Every function is manageable end to end across all surfaces (§6), the requirements checklist (§7) passes, and the full test suite, all three dashboard builds, and the file-size guardrail are green. The release is `0.3.0` with the CHANGELOG, README, DOCKERHUB_README, REST_API, MCP_API, and Postman collection all in sync. All work is committed on `main` (no feature branch).
+Partio is no longer a component of Pneuma: the server and dashboard are gone from both compose files, `IPartioClient`/`PartioClient` and the Partio config block are deleted, and no reference to Partio remains anywhere in the tree. Ingestion and retrieval run entirely on native processing with byte-identical chunk parity proven by the §4.4 harness. Every function is manageable end to end across all surfaces (§6), the requirements checklist (§7) passes, and the full test suite, all three dashboard builds, and the file-size guardrail are green. The release is `0.1.0` with the CHANGELOG, README, DOCKERHUB_README, REST_API, MCP_API, and Postman collection all in sync. All work is committed on `main` (no feature branch).

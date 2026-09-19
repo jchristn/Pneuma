@@ -87,6 +87,10 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple content links (background cascade)", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/links/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a content link", "Subjects"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/links/reingest", BulkReingestAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Reingest multiple content links (queues a fresh ingestion job per link)", "Subjects"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/links/{id}/reingest", ReingestAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Reingest a content link (queues a fresh ingestion job, forcing a full re-run)", "Subjects"));
         }
 
         #endregion
@@ -136,6 +140,101 @@ namespace Pneuma.Server.Routes
         /// Ensure the subject owns the configuration ingestion needs (embedding + inference models and an
         /// existing collection). Sends a 400 describing what to set and returns false when it is not configured.
         /// </summary>
+        private async Task ReingestAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Write).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+            string linkId = RouteHelper.Param(ctx, "id");
+
+            SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, linkId, ctx.Token).ConfigureAwait(false);
+            if (link == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Link not found.").ConfigureAwait(false);
+                return;
+            }
+            if (link.DeletionStatus == LinkDeletionStatusEnum.Pending || link.DeletionStatus == LinkDeletionStatusEnum.Deleting)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", "This link is being deleted and cannot be reingested.").ConfigureAwait(false);
+                return;
+            }
+
+            Subject? subject = await _Db.Subjects.ReadAsync(tenantId, link.SubjectId, ctx.Token).ConfigureAwait(false);
+            if (subject == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "The link's subject no longer exists.").ConfigureAwait(false);
+                return;
+            }
+            if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
+
+            IngestionJob created = await ReingestOneAsync(tenantId, link, subject, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 202, created).ConfigureAwait(false);
+        }
+
+        private async Task BulkReingestAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Write).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+
+            IdListRequest? request = RouteHelper.ReadBody<IdListRequest>(ctx);
+            if (request == null || request.Ids == null || request.Ids.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A non-empty list of link ids is required.").ConfigureAwait(false);
+                return;
+            }
+
+            int queued = 0;
+            int skipped = 0;
+            foreach (string id in request.Ids)
+            {
+                if (String.IsNullOrWhiteSpace(id)) { skipped++; continue; }
+                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
+                if (link == null) { skipped++; continue; }
+                if (link.DeletionStatus == LinkDeletionStatusEnum.Pending || link.DeletionStatus == LinkDeletionStatusEnum.Deleting) { skipped++; continue; }
+                Subject? subject = await _Db.Subjects.ReadAsync(tenantId, link.SubjectId, ctx.Token).ConfigureAwait(false);
+                if (subject == null || !await IsSubjectConfiguredAsync(tenantId, subject, ctx.Token).ConfigureAwait(false)) { skipped++; continue; }
+                await ReingestOneAsync(tenantId, link, subject, ctx.Token).ConfigureAwait(false);
+                queued++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 202, new { queued = queued, skipped = skipped }).ConfigureAwait(false);
+        }
+
+        // Queue a fresh ingestion job for an existing link and force a full re-run (clear the stored content hash
+        // so the ingestion delta-skip does not short-circuit an unchanged source). Creates a NEW job (rather than
+        // restarting a prior one) so reingestion works even after the link's earlier jobs have been deleted.
+        private async Task<IngestionJob> ReingestOneAsync(string tenantId, SubjectLink link, Subject subject, System.Threading.CancellationToken token)
+        {
+            link.ContentHash = null;
+            link.Status = SubjectLinkStatusEnum.Submitted;
+            await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
+
+            IngestionJob job = new IngestionJob
+            {
+                TenantId = tenantId,
+                SubjectId = link.SubjectId,
+                LinkId = link.Id,
+                SourceUrl = link.Url,
+                Labels = link.Labels,
+                Tags = link.Tags,
+                Status = IngestionStatusEnum.Queued,
+                Stage = IngestionStageEnum.Pending,
+                EmbeddingEndpointId = subject.EmbeddingModel,
+                CompletionEndpointId = subject.InferenceModel,
+                CollectionId = subject.Collection
+            };
+            return await _Db.IngestionJobs.CreateAsync(job, token).ConfigureAwait(false);
+        }
+
+        // Non-erroring subject-configuration check for the bulk path (RequireSubjectConfiguredAsync writes an
+        // error to the response, which is unsuitable when iterating many links).
+        private async Task<bool> IsSubjectConfiguredAsync(string tenantId, Subject subject, System.Threading.CancellationToken token)
+        {
+            if (String.IsNullOrWhiteSpace(subject.EmbeddingModel) || String.IsNullOrWhiteSpace(subject.InferenceModel) || String.IsNullOrWhiteSpace(subject.Collection)) return false;
+            return await _Collections.CollectionExistsAsync(tenantId, subject.Collection!, token).ConfigureAwait(false);
+        }
+
         private async Task<bool> RequireSubjectConfiguredAsync(HttpContextBase ctx, string tenantId, Subject subject)
         {
             if (String.IsNullOrWhiteSpace(subject.EmbeddingModel) || String.IsNullOrWhiteSpace(subject.InferenceModel))

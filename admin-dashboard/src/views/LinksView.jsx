@@ -165,32 +165,17 @@ function LinksView() {
     }
   }, [apiClient]);
 
-  // Reingesting re-runs a link's ingestion pipeline by requeuing its most recent job. Unlike Restart Job
-  // (failed links only), reingest is offered for any link. Surfaces a notice when there is no job to reingest.
+  // Reingesting queues a FRESH ingestion job server-side (a full re-run). Unlike Restart Job (failed links
+  // only, which requeues the existing job), reingest is offered for any link and works even with no prior job.
   const reingestLink = useCallback(async (link) => {
-    const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
-    const latest = runs.length > 0 ? runs[runs.length - 1] : null;
-    const job = latest?.job || latest?.Job || null;
-    const jobId = job?.id || job?.Id;
-    if (!jobId) {
-      setReingestTarget(null);
-      setArtifactNotice(t('links.reingestNoJob', 'This link has no ingestion job to reingest.'));
-      return;
-    }
-    await apiClient.restartJob(jobId);
+    await apiClient.reingestLink(link.id);
     setReingestTarget(null);
     setRefreshKey((k) => k + 1);
-  }, [apiClient, t]);
+  }, [apiClient]);
 
-  // Bulk-reingest every selected link (each requeues its most recent ingestion job).
+  // Bulk-reingest every selected link: one server request queues a fresh job per link (no per-link fan-out).
   const bulkReingest = useCallback(async (items) => {
-    for (const link of items) {
-      const runs = normalizeList(await apiClient.getLinkIngestionLog(link.id)).items;
-      const latest = runs.length > 0 ? runs[runs.length - 1] : null;
-      const job = latest?.job || latest?.Job || null;
-      const jobId = job?.id || job?.Id;
-      if (jobId) await apiClient.restartJob(jobId);
-    }
+    await apiClient.bulkReingestLinks(items.map((link) => link.id));
   }, [apiClient]);
 
   const linkBulkActions = useCallback((selectedItems) => {

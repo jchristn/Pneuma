@@ -7,7 +7,7 @@ services:
     container_name: 'pneuma-postgres'
     # Standard postgres:17 with pgvector installed (see postgres/Dockerfile), so RecallDB's database can
     # enable the vector extension. Shared by every service that needs Postgres.
-    image: 'jchristn77/pneuma-postgres:v0.3.0'
+    image: 'jchristn77/pneuma-postgres:v0.1.0'
     ports:
       - '15432:5432'
     environment:
@@ -225,7 +225,7 @@ services:
   # ------------------------------------------------------------------
   pneuma-server:
     container_name: 'pneuma-server'
-    image: 'jchristn77/pneuma-server:v0.3.0'
+    image: 'jchristn77/pneuma-server:v0.1.0'
     ports:
       - '8080:8080'
     depends_on:
@@ -257,7 +257,7 @@ services:
   # ------------------------------------------------------------------
   admin-dashboard:
     container_name: 'pneuma-admin-dashboard'
-    image: 'jchristn77/pneuma-admin-ui:v0.3.0'
+    image: 'jchristn77/pneuma-admin-ui:v0.1.0'
     ports:
       - '3010:80'
     depends_on:
@@ -272,7 +272,7 @@ services:
 
   subject-dashboard:
     container_name: 'pneuma-subject-dashboard'
-    image: 'jchristn77/pneuma-subject-ui:v0.3.0'
+    image: 'jchristn77/pneuma-subject-ui:v0.1.0'
     ports:
       - '3011:80'
     depends_on:
@@ -287,7 +287,7 @@ services:
 
   user-dashboard:
     container_name: 'pneuma-user-dashboard'
-    image: 'jchristn77/pneuma-user-ui:v0.3.0'
+    image: 'jchristn77/pneuma-user-ui:v0.1.0'
     ports:
       - '3012:80'
     depends_on:

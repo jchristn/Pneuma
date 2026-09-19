@@ -24,6 +24,13 @@ function isRestartable(job) {
   return String(job?.status || '').toLowerCase() !== 'completed';
 }
 
+// A terminal job has finished for good (completed, failed, or cancelled); its log is a static record to
+// "view" rather than a live stream to "follow".
+function isTerminal(job) {
+  const s = String(job?.status || '').toLowerCase();
+  return s === 'completed' || s === 'failed' || s === 'error' || s === 'cancelled' || s === 'canceled';
+}
+
 function isStoppable(job) {
   const s = String(job?.status || '').toLowerCase();
   return s === 'queued' || s === 'processing';
@@ -163,7 +170,7 @@ function IngestionJobsView() {
       const deleting = job.deletionStatus === 'Pending' || job.deletionStatus === 'Deleting';
       return (
       <ActionMenu items={[
-        { key: 'follow', label: t('jobs.followLogs'), tip: 'Watch this job’s stage log live, auto-refreshing until it finishes.', onClick: () => setModal({ type: 'follow', item: job }) },
+        { key: 'follow', label: isTerminal(job) ? t('jobs.viewLogs') : t('jobs.followLogs'), tip: isTerminal(job) ? 'View this finished job’s stage log.' : 'Watch this job’s stage log live, auto-refreshing until it finishes.', onClick: () => setModal({ type: 'follow', item: job }) },
         { key: 'performance', label: t('jobs.viewPerformance', 'View Performance'), tip: 'Visualize where this job spent time — a bar per stage sized by its duration, with discrete timings.', onClick: () => setModal({ type: 'performance', item: job }) },
         { key: 'restart', label: t('jobs.restart', 'Restart Job'), tip: 'Re-queue this job to run again from the beginning. Available for any job that has not completed.', hidden: !isRestartable(job) || deleting, onClick: () => setModal({ type: 'restart', item: job }) },
         { key: 'stop', label: t('jobs.stop'), tip: 'Cancel this in-progress job. Already-completed stages are kept.', hidden: !isStoppable(job) || deleting, danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
