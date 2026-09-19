@@ -76,6 +76,8 @@ function IngestionQueueView() {
   const [modal, setModal] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Brief, dismissible notice shown after a background deletion is dispatched (202 Accepted).
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,9 +121,12 @@ function IngestionQueueView() {
     await load();
   };
 
+  // Deletion is a background cascade server-side (202 Accepted): close the confirm immediately, surface a
+  // background notice, dispatch the delete, then refresh (the row may briefly linger until the cascade lands).
   const remove = async (job) => {
-    await apiClient.deleteJob(getId(job));
     setModal(null);
+    setNotice(t('jobs.deleteBackground'));
+    await apiClient.deleteJob(getId(job));
     await load();
   };
 
@@ -135,9 +140,11 @@ function IngestionQueueView() {
   };
 
   const bulkDelete = async () => {
-    await apiClient.bulkDeleteJobs(selectedItems.map((job) => getId(job)));
+    const ids = selectedItems.map((job) => getId(job));
     setModal(null);
     clear();
+    setNotice(t('jobs.deleteBackground'));
+    await apiClient.bulkDeleteJobs(ids);
     await load();
   };
 
@@ -230,6 +237,16 @@ function IngestionQueueView() {
         <ConfirmModal title={t('jobs.delete')} danger
           message={t('jobs.bulkDeleteConfirm', { count: selectedItems.length, defaultValue: `Delete ${selectedItems.length} job(s)? This cascade-removes their graph nodes, indexed chunks, and logs, and cannot be undone.` })}
           confirmLabel={t('common.delete')} onConfirm={bulkDelete} onClose={() => setModal(null)} />
+      )}
+      {notice && (
+        <Modal
+          title={t('common.notice')}
+          size="sm"
+          onClose={() => setNotice('')}
+          footer={<button type="button" className="button-primary" onClick={() => setNotice('')}>{t('common.close')}</button>}
+        >
+          <p className="confirm-text">{notice}</p>
+        </Modal>
       )}
     </div>
   );

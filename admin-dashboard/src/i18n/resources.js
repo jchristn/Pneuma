@@ -368,6 +368,7 @@ const en = {
       stopConfirm: 'Stop this ingestion job? It will be cancelled and cannot be resumed (you can restart it later).',
       delete: 'Delete',
       deleteConfirm: 'Delete this ingestion job? Its processing log, graph nodes, and indexed documents will be removed. This cannot be undone.',
+      deleteBackground: 'Deletion is running in the background. Downstream data (graph, vectors, blobs) is being cleaned up; the list will refresh shortly.',
       inProgress: 'In progress',
       runningFor: 'Running for',
       totalRuntime: 'Total runtime',

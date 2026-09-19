@@ -187,7 +187,7 @@ namespace Pneuma.Server
             new SubjectRoutes(_Database, _Authorization, cascade).Register(_Server);
             new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
             new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections).Register(_Server);
-            new IngestionJobRoutes(_Database, _Authorization, cascade).Register(_Server);
+            new IngestionJobRoutes(_Database, _Authorization, cascade, _Logging).Register(_Server);
             new IngestionEndpointRoutes(_Database, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);
             HttpCrossEncoderReranker crossEncoderReranker = new HttpCrossEncoderReranker(
