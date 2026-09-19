@@ -65,5 +65,13 @@ namespace Pneuma.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if the job row existed and was deleted.</returns>
         Task<bool> DeleteWithEventsAsync(string tenantId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate jobs across all tenants whose deletion status is Pending or Deleting, so the background
+        /// job-deletion worker can claim them (and resume an interrupted deletion after a restart).
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Jobs awaiting or mid cascade deletion, oldest first.</returns>
+        Task<List<IngestionJob>> EnumeratePendingDeletionAsync(CancellationToken token = default);
     }
 }

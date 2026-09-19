@@ -172,6 +172,11 @@ namespace Pneuma.Server
                 // so a tenant's very large cascade never blocks the request that started it.
                 TenantDeletionWorker tenantDeletionWorker = new TenantDeletionWorker(database, cascade, logging);
                 tenantDeletionWorker.Start(shutdown.Token);
+                // Background ingestion-job cascade-deletion mirrors the link worker: a job marked for deletion
+                // (and Cancelled so any in-flight processing stops) is torn down asynchronously — the single and
+                // bulk job-delete requests only mark status and return immediately, never blocking the caller.
+                JobDeletionWorker jobDeletionWorker = new JobDeletionWorker(database, cascade, logging);
+                jobDeletionWorker.Start(shutdown.Token);
                 // Default model runners are seeded synchronously into the native store by FirstBootSeeder
                 // (create-only, so operator edits persist across restarts).
                 Task maintenance = MaintenanceLoopAsync(database, settings, logging, shutdown.Token);

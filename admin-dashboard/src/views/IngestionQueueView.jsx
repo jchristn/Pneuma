@@ -165,19 +165,27 @@ function IngestionQueueView() {
 
   const columns = [
     { key: 'id', label: 'Job ID', render: (r) => <CopyableId value={getId(r)} truncateLen={14} /> },
-    { key: 'status', label: t('jobs.status'), render: (r) => <StatusPill label={r.status} tone={toneForStatus(r.status)} /> },
+    { key: 'status', label: t('jobs.status'), render: (r) => {
+      const ds = r.deletionStatus;
+      if (ds === 'Pending' || ds === 'Deleting') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletingStatus', 'deleting…')}</span>;
+      if (ds === 'Failed') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletionFailed', 'deletion failed')}</span>;
+      return <StatusPill label={r.status} tone={toneForStatus(r.status)} />;
+    } },
     { key: 'stage', label: 'Stage', render: (r) => stageLabel(r.stage || r.currentStage) },
     { key: 'linkId', label: 'Link', render: (r) => <CopyableId value={r.linkId} truncateLen={12} /> },
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc) },
     { key: 'updatedUtc', label: 'Updated', render: (r) => formatDateTime(r.updatedUtc || r.completedUtc) },
-    { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => (
+    { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => {
+      const deleting = job.deletionStatus === 'Pending' || job.deletionStatus === 'Deleting';
+      return (
       <ActionMenu items={[
         { key: 'view', label: t('common.view'), tip: 'Open this job’s details and its stage-by-stage progress.', onClick: () => openDetail(job) },
         { key: 'json', label: t('common.viewJson'), tip: 'Inspect the raw job record returned by the API.', onClick: () => setModal({ type: 'json', item: job }) },
-        { key: 'restart', label: t('jobs.restart'), tip: 'Re-run this failed job from the beginning with the same settings.', hidden: !isFailed(job), onClick: () => setModal({ type: 'restart', item: job }) },
-        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
+        { key: 'restart', label: t('jobs.restart'), tip: 'Re-run this failed job from the beginning with the same settings.', hidden: !isFailed(job) || deleting, onClick: () => setModal({ type: 'restart', item: job }) },
+        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', hidden: deleting, danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
       ]} />
-    ) }
+      );
+    } }
   ];
 
   return (

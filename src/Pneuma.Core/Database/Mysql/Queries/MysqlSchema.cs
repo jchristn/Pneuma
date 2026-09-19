@@ -189,6 +189,10 @@ namespace Pneuma.Core.Database.Mysql.Queries
                 {
                     "UPDATE modelrunners SET healthcheckenabled = 1;"
                 }));
+                list.Add(new SchemaMigration(25, "Add ingestion job background-deletion status", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN deletionstatus VARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
                 return list;
             }
         }

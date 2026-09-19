@@ -44,7 +44,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
         internal static string InsertSql(IngestionJob job)
         {
             return
-                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, labelsjson, tagsjson, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, labelsjson, tagsjson, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, deletionstatus, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(job.Id) + ", " + Sanitizer.Str(job.TenantId) + ", " +
                 Sanitizer.Str(job.SubjectId) + ", " + Sanitizer.Str(job.LinkId) + ", " +
                 Sanitizer.Str(job.SourceUrl) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.Labels)) + ", " +
@@ -54,7 +54,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Str(job.BlobKey) + ", " + Sanitizer.Str(job.EmbeddingEndpointId) + ", " +
                 Sanitizer.Str(job.CompletionEndpointId) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.GraphNodeIds)) + ", " +
                 Sanitizer.Str(job.CollectionId) + ", " + Sanitizer.Ts(job.StartedUtc) + ", " +
-                Sanitizer.Ts(job.CompletedUtc) + ", " + Sanitizer.Ts(job.CreatedUtc) + ", " +
+                Sanitizer.Ts(job.CompletedUtc) + ", " + Sanitizer.Str(job.DeletionStatus.ToString()) + ", " + Sanitizer.Ts(job.CreatedUtc) + ", " +
                 Sanitizer.Ts(job.LastUpdateUtc) + ");";
         }
 
@@ -152,6 +152,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ", collectionid = " + Sanitizer.Str(job.CollectionId) +
                 ", startedutc = " + Sanitizer.Ts(job.StartedUtc) +
                 ", completedutc = " + Sanitizer.Ts(job.CompletedUtc) +
+                ", deletionstatus = " + Sanitizer.Str(job.DeletionStatus.ToString()) +
                 ", lastupdateutc = " + Sanitizer.Ts(job.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(job.TenantId) + " AND id = " + Sanitizer.Str(job.Id) + ";";
             await Query(sql, token).ConfigureAwait(false);
@@ -187,9 +188,21 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 CollectionId = RowReader.GetNullableString(row, "collectionid"),
                 StartedUtc = RowReader.GetNullableDateTime(row, "startedutc"),
                 CompletedUtc = RowReader.GetNullableDateTime(row, "completedutc"),
+                DeletionStatus = RowReader.GetEnum<JobDeletionStatusEnum>(row, "deletionstatus", JobDeletionStatusEnum.None),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")
             };
+        }
+
+        /// <inheritdoc />
+        public async Task<List<IngestionJob>> EnumeratePendingDeletionAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM ingestionjobs WHERE deletionstatus IN ('Pending', 'Deleting') ORDER BY createdutc ASC;",
+                token).ConfigureAwait(false);
+            List<IngestionJob> result = new List<IngestionJob>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
         }
     }
 }

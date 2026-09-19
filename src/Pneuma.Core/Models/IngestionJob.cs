@@ -104,6 +104,13 @@ namespace Pneuma.Core.Models
         /// <summary>UTC time processing completed or failed, if finished.</summary>
         public DateTime? CompletedUtc { get; set; } = null;
 
+        /// <summary>
+        /// Background cascade-deletion state. <see cref="JobDeletionStatusEnum.None"/> for a live job; set to
+        /// <see cref="JobDeletionStatusEnum.Pending"/> when the operator requests deletion, then advanced by the
+        /// background job-deletion worker.
+        /// </summary>
+        public JobDeletionStatusEnum DeletionStatus { get; set; } = JobDeletionStatusEnum.None;
+
         /// <summary>UTC creation timestamp.</summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 

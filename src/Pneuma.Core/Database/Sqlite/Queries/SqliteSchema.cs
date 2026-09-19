@@ -191,6 +191,10 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                 {
                     "UPDATE modelrunners SET healthcheckenabled = 1;"
                 }));
+                list.Add(new SchemaMigration(25, "Add ingestion job background-deletion status", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN deletionstatus TEXT NOT NULL DEFAULT 'None';"
+                }));
                 return list;
             }
         }

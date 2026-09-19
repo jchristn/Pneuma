@@ -150,19 +150,27 @@ function IngestionJobsView() {
         {r.sourceUrl || <CopyableId value={r.linkId} truncateLen={12} />}
       </span>
     ) },
-    { key: 'status', label: t('jobs.status'), render: (r) => <StatusPill label={r.status} tone={toneForStatus(r.status)} /> },
+    { key: 'status', label: t('jobs.status'), render: (r) => {
+      const ds = r.deletionStatus;
+      if (ds === 'Pending' || ds === 'Deleting') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletingStatus', 'deleting…')}</span>;
+      if (ds === 'Failed') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletionFailed', 'deletion failed')}</span>;
+      return <StatusPill label={r.status} tone={toneForStatus(r.status)} />;
+    } },
     { key: 'stage', label: t('jobs.stage'), render: (r) => stageLabel(r.stage || r.currentStage) },
     { key: 'createdUtc', label: t('jobs.created'), render: (r) => formatDateTime(r.createdUtc) },
     { key: 'updatedUtc', label: t('jobs.updated'), render: (r) => formatDateTime(r.lastUpdateUtc || r.updatedUtc || r.completedUtc) },
-    { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => (
+    { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (job) => {
+      const deleting = job.deletionStatus === 'Pending' || job.deletionStatus === 'Deleting';
+      return (
       <ActionMenu items={[
         { key: 'follow', label: t('jobs.followLogs'), tip: 'Watch this job’s stage log live, auto-refreshing until it finishes.', onClick: () => setModal({ type: 'follow', item: job }) },
         { key: 'performance', label: t('jobs.viewPerformance', 'View Performance'), tip: 'Visualize where this job spent time — a bar per stage sized by its duration, with discrete timings.', onClick: () => setModal({ type: 'performance', item: job }) },
-        { key: 'restart', label: t('jobs.restart', 'Restart Job'), tip: 'Re-queue this job to run again from the beginning. Available for any job that has not completed.', hidden: !isRestartable(job), onClick: () => setModal({ type: 'restart', item: job }) },
-        { key: 'stop', label: t('jobs.stop'), tip: 'Cancel this in-progress job. Already-completed stages are kept.', hidden: !isStoppable(job), danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
-        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
+        { key: 'restart', label: t('jobs.restart', 'Restart Job'), tip: 'Re-queue this job to run again from the beginning. Available for any job that has not completed.', hidden: !isRestartable(job) || deleting, onClick: () => setModal({ type: 'restart', item: job }) },
+        { key: 'stop', label: t('jobs.stop'), tip: 'Cancel this in-progress job. Already-completed stages are kept.', hidden: !isStoppable(job) || deleting, danger: true, onClick: () => setModal({ type: 'stop', item: job }) },
+        { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', hidden: deleting, danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
       ]} />
-    ) }
+      );
+    } }
   ];
 
   return (

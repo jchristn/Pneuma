@@ -369,6 +369,8 @@ const en = {
       delete: 'Delete',
       deleteConfirm: 'Delete this ingestion job? Its processing log, graph nodes, and indexed documents will be removed. This cannot be undone.',
       deleteBackground: 'Deletion is running in the background. Downstream data (graph, vectors, blobs) is being cleaned up; the list will refresh shortly.',
+      deletingStatus: 'deleting…',
+      deletionFailed: 'deletion failed',
       inProgress: 'In progress',
       runningFor: 'Running for',
       totalRuntime: 'Total runtime',

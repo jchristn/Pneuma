@@ -191,6 +191,10 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                 {
                     "UPDATE dbo.modelrunners SET healthcheckenabled = 1;"
                 }));
+                list.Add(new SchemaMigration(25, "Add ingestion job background-deletion status", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'deletionstatus') IS NULL ALTER TABLE dbo.ingestionjobs ADD deletionstatus NVARCHAR(32) NOT NULL DEFAULT 'None';"
+                }));
                 return list;
             }
         }

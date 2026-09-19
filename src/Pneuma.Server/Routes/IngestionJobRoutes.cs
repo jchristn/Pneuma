@@ -13,7 +13,6 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
-    using SyslogLogging;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -27,28 +26,21 @@ namespace Pneuma.Server.Routes
 
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
-        private readonly CascadeDeletionService _Cascade;
-        private readonly LoggingModule _Logging;
 
         #endregion
 
         #region Constructors-and-Factories
 
-        /// <summary>Instantiate ingestion job routes.</summary>
+        /// <summary>Instantiate ingestion job routes. Deletion is durable and background: the routes mark a job
+        /// for deletion (persisted status) and the JobDeletionWorker performs the cascade.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
-        /// <param name="cascade">Cascade deletion service, used to remove a job's subordinate objects.</param>
-        /// <param name="logging">Logging module (background-deletion error reporting).</param>
-        public IngestionJobRoutes(DatabaseDriverBase db, AuthorizationService authz, CascadeDeletionService cascade, LoggingModule logging)
+        public IngestionJobRoutes(DatabaseDriverBase db, AuthorizationService authz)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
-            if (cascade == null) throw new ArgumentNullException(nameof(cascade));
-            if (logging == null) throw new ArgumentNullException(nameof(logging));
             _Db = db;
             _Authz = authz;
-            _Cascade = cascade;
-            _Logging = logging;
         }
 
         #endregion
@@ -274,11 +266,10 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Cascade the job's downstream contributions (graph nodes/edges, indexed documents, raw blob,
-            // processing log) then the job row — in the BACKGROUND so the caller is not held while the external
-            // stores are cleaned up. The per-link S3 artifacts belong to the link (shared across its jobs) and
-            // are left intact — they are cascaded when the link itself is deleted. 202 Accepted is returned now.
-            RunJobCascadeInBackground(tenantId, job);
+            // Mark the job for durable background deletion (a persisted status the JobDeletionWorker acts on) and
+            // cancel it so any in-flight processing stops at its next stage boundary. The heavy cascade (graph,
+            // index documents, blob, events, job row) then runs asynchronously — the caller is not held. 202.
+            await MarkForDeletionAsync(job, ctx.Token).ConfigureAwait(false);
 
             ctx.Response.StatusCode = 202;
             await ctx.Response.Send().ConfigureAwait(false);
@@ -297,55 +288,30 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            // Delete each job's cascade server-side in the BACKGROUND (one request, no browser fan-out and no
-            // blocking on the external-store cleanup). 202 Accepted is returned immediately.
-            List<string> ids = new List<string>();
+            // Mark each job for durable background deletion in this single request (no browser fan-out); the
+            // JobDeletionWorker performs the cascades. 202 Accepted is returned immediately.
+            int accepted = 0;
             foreach (string id in request.Ids)
             {
-                if (!String.IsNullOrWhiteSpace(id)) ids.Add(id);
+                if (String.IsNullOrWhiteSpace(id)) continue;
+                IngestionJob? job = await _Db.IngestionJobs.ReadAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
+                if (job == null) continue;
+                await MarkForDeletionAsync(job, ctx.Token).ConfigureAwait(false);
+                accepted++;
             }
-            RunJobsCascadeInBackground(tenantId, ids);
 
-            await RouteHelper.SendJsonAsync(ctx, 202, new { accepted = ids.Count }).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 202, new { accepted = accepted }).ConfigureAwait(false);
         }
 
-        // Cascade one job's subordinate objects in a detached background task. A non-request cancellation token
-        // is used so completing the HTTP response does not cancel the cleanup; failures are logged, not surfaced.
-        private void RunJobCascadeInBackground(string tenantId, IngestionJob job)
+        // Mark a job for background cascade deletion: set DeletionStatus=Pending and cancel it so in-flight
+        // processing stops at the next stage boundary. No-op when already Pending/Deleting so a re-request does
+        // not reset progress.
+        private async Task MarkForDeletionAsync(IngestionJob job, CancellationToken token)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _Cascade.DeleteJobCascadeAsync(tenantId, job, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception e)
-                {
-                    _Logging.Warn("[IngestionJobRoutes] background job delete failed for " + job.Id + ": " + e.Message);
-                }
-            });
-        }
-
-        // Cascade a batch of jobs in a detached background task, one at a time; a single job's failure is logged
-        // and does not stop the rest.
-        private void RunJobsCascadeInBackground(string tenantId, List<string> ids)
-        {
-            _ = Task.Run(async () =>
-            {
-                foreach (string id in ids)
-                {
-                    try
-                    {
-                        IngestionJob? job = await _Db.IngestionJobs.ReadAsync(tenantId, id, CancellationToken.None).ConfigureAwait(false);
-                        if (job == null) continue;
-                        await _Cascade.DeleteJobCascadeAsync(tenantId, job, CancellationToken.None).ConfigureAwait(false);
-                    }
-                    catch (Exception e)
-                    {
-                        _Logging.Warn("[IngestionJobRoutes] background bulk job delete failed for " + id + ": " + e.Message);
-                    }
-                }
-            });
+            if (job.DeletionStatus == JobDeletionStatusEnum.Pending || job.DeletionStatus == JobDeletionStatusEnum.Deleting) return;
+            job.DeletionStatus = JobDeletionStatusEnum.Pending;
+            job.Status = IngestionStatusEnum.Cancelled;
+            await _Db.IngestionJobs.UpdateAsync(job, token).ConfigureAwait(false);
         }
 
         #endregion
