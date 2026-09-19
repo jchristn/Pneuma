@@ -97,6 +97,10 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
                 IngestionJob claimed = job;
                 IDisposable held = slot;
+                // Do NOT pass the cancellation token to Task.Run: a token that is already cancelled makes Task.Run
+                // skip the delegate entirely, so the finally that releases the job-pool slot would never run and the
+                // slot would leak. The delegate always runs and always disposes the slot; cancellation is still
+                // honored inside ProcessAsync (which receives the token).
                 _ = Task.Run(async () =>
                 {
                     try
@@ -111,7 +115,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
                     {
                         held.Dispose();
                     }
-                }, token);
+                });
             }
 
             _Logging.Info("[IngestionWorker] stopped");

@@ -5,7 +5,6 @@ namespace Pneuma.Core.Ingestion.Pipeline
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Padlocks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
@@ -14,10 +13,11 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
     /// <summary>
     /// Runtime-adjustable concurrency limiter for the ingestion pipeline. Each gated stage and the job pool are
-    /// backed by a <see cref="Padlock{TKey}"/>. Padlock has no live resize, so a tuning change is applied by
-    /// swapping in a fresh limiter at the new cap: new acquisitions immediately observe the new limit while any
-    /// in-flight holders drain on the old instance (a cap decrease can therefore be briefly exceeded by work
-    /// already running — acceptable for a tuning knob). The system defaults (an <see cref="IngestionTuning"/>
+    /// backed by an <see cref="AsyncSemaphoreGate"/> (a SemaphoreSlim whose cancelled wait provably consumes no
+    /// permit, plus an idempotent releaser). A tuning change is applied by swapping in a fresh gate at the new
+    /// cap: new acquisitions immediately observe the new limit while any in-flight holders drain on the old
+    /// instance (a cap decrease can therefore be briefly exceeded by work already running — acceptable for a
+    /// tuning knob), and releasing a swapped-out gate is a harmless no-op. The system defaults (an <see cref="IngestionTuning"/>
     /// singleton) provide a global cap shared by non-overridden subjects; a subject with a per-stage override
     /// gets its own dedicated limiter for that stage. Non-gate values (stage timeout, summarization concurrency /
     /// min length) are read per job from the effective settings (subject override falling back to system default).
@@ -26,7 +26,6 @@ namespace Pneuma.Core.Ingestion.Pipeline
     {
         #region Private-Members
 
-        private const string _Key = "g";
 
         private static readonly IngestionStageEnum[] _GatedStages = new IngestionStageEnum[]
         {
@@ -43,10 +42,10 @@ namespace Pneuma.Core.Ingestion.Pipeline
         };
 
         private volatile IngestionTuning _Defaults;
-        private readonly ConcurrentDictionary<IngestionStageEnum, Padlock<string>> _DefaultGates = new ConcurrentDictionary<IngestionStageEnum, Padlock<string>>();
-        private volatile Padlock<string> _JobPool;
+        private readonly ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate> _DefaultGates = new ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>();
+        private volatile AsyncSemaphoreGate _JobPool;
         private readonly ConcurrentDictionary<string, SubjectConcurrencyOverrides> _Overrides = new ConcurrentDictionary<string, SubjectConcurrencyOverrides>(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, ConcurrentDictionary<IngestionStageEnum, Padlock<string>>> _SubjectGates = new ConcurrentDictionary<string, ConcurrentDictionary<IngestionStageEnum, Padlock<string>>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>> _SubjectGates = new ConcurrentDictionary<string, ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>>(StringComparer.Ordinal);
 
         #endregion
 
@@ -60,9 +59,9 @@ namespace Pneuma.Core.Ingestion.Pipeline
             _Defaults = defaults ?? throw new ArgumentNullException(nameof(defaults));
             foreach (IngestionStageEnum stage in _GatedStages)
             {
-                _DefaultGates[stage] = new Padlock<string>(DefaultCapFor(stage, _Defaults));
+                _DefaultGates[stage] = new AsyncSemaphoreGate(DefaultCapFor(stage, _Defaults));
             }
-            _JobPool = new Padlock<string>(_Defaults.MaxConcurrentTasks);
+            _JobPool = new AsyncSemaphoreGate(_Defaults.MaxConcurrentTasks);
         }
 
         #endregion
@@ -94,19 +93,19 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="subjectId">The owning subject id.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A handle to dispose when the stage completes.</returns>
-        public ValueTask<IDisposable> AcquireStageAsync(IngestionStageEnum stage, string subjectId, CancellationToken token)
+        public Task<IDisposable> AcquireStageAsync(IngestionStageEnum stage, string subjectId, CancellationToken token)
         {
-            Padlock<string>? gate = ResolveStageGate(stage, subjectId);
-            if (gate == null) return new ValueTask<IDisposable>(NoopScope.Instance);
-            return gate.LockAsync(_Key, token);
+            AsyncSemaphoreGate? gate = ResolveStageGate(stage, subjectId);
+            if (gate == null) return Task.FromResult<IDisposable>(NoopScope.Instance);
+            return gate.AcquireAsync(token);
         }
 
         /// <summary>Acquire a job-pool slot (bounds how many jobs process at once).</summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A handle to dispose when the job completes.</returns>
-        public ValueTask<IDisposable> AcquireJobSlotAsync(CancellationToken token)
+        public Task<IDisposable> AcquireJobSlotAsync(CancellationToken token)
         {
-            return _JobPool.LockAsync(_Key, token);
+            return _JobPool.AcquireAsync(token);
         }
 
         /// <summary>The effective per-stage timeout (seconds) for a subject.</summary>
@@ -179,9 +178,9 @@ namespace Pneuma.Core.Ingestion.Pipeline
             _Defaults = tuning;
             foreach (IngestionStageEnum stage in _GatedStages)
             {
-                _DefaultGates[stage] = new Padlock<string>(DefaultCapFor(stage, tuning));
+                _DefaultGates[stage] = new AsyncSemaphoreGate(DefaultCapFor(stage, tuning));
             }
-            _JobPool = new Padlock<string>(tuning.MaxConcurrentTasks);
+            _JobPool = new AsyncSemaphoreGate(tuning.MaxConcurrentTasks);
         }
 
         /// <summary>Apply (create/update) a subject's overrides, swapping in a fresh dedicated limiter at each overridden cap. An empty set clears the overrides.</summary>
@@ -194,12 +193,12 @@ namespace Pneuma.Core.Ingestion.Pipeline
             if (overrides == null || overrides.IsEmpty()) { ClearSubjectOverride(subjectId); return; }
 
             _Overrides[subjectId] = overrides;
-            ConcurrentDictionary<IngestionStageEnum, Padlock<string>> map = _SubjectGates.GetOrAdd(subjectId, key => new ConcurrentDictionary<IngestionStageEnum, Padlock<string>>());
+            ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate> map = _SubjectGates.GetOrAdd(subjectId, key => new ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>());
             foreach (IngestionStageEnum stage in _GatedStages)
             {
                 int? cap = OverrideCapFor(stage, overrides);
-                if (cap.HasValue) map[stage] = new Padlock<string>(cap.Value);
-                else map.TryRemove(stage, out Padlock<string>? _);
+                if (cap.HasValue) map[stage] = new AsyncSemaphoreGate(cap.Value);
+                else map.TryRemove(stage, out AsyncSemaphoreGate? _);
             }
         }
 
@@ -209,7 +208,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
         {
             if (String.IsNullOrEmpty(subjectId)) return;
             _Overrides.TryRemove(subjectId, out SubjectConcurrencyOverrides? _);
-            _SubjectGates.TryRemove(subjectId, out ConcurrentDictionary<IngestionStageEnum, Padlock<string>>? _);
+            _SubjectGates.TryRemove(subjectId, out ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>? _);
         }
 
         #endregion
@@ -222,18 +221,18 @@ namespace Pneuma.Core.Ingestion.Pipeline
             return _Overrides.TryGetValue(subjectId, out SubjectConcurrencyOverrides? o) ? o : null;
         }
 
-        private Padlock<string>? ResolveStageGate(IngestionStageEnum stage, string subjectId)
+        private AsyncSemaphoreGate? ResolveStageGate(IngestionStageEnum stage, string subjectId)
         {
             if (Array.IndexOf(_GatedStages, stage) < 0) return null;
             if (!String.IsNullOrEmpty(subjectId)
-                && _SubjectGates.TryGetValue(subjectId, out ConcurrentDictionary<IngestionStageEnum, Padlock<string>>? map)
+                && _SubjectGates.TryGetValue(subjectId, out ConcurrentDictionary<IngestionStageEnum, AsyncSemaphoreGate>? map)
                 && map != null
-                && map.TryGetValue(stage, out Padlock<string>? subjectGate)
+                && map.TryGetValue(stage, out AsyncSemaphoreGate? subjectGate)
                 && subjectGate != null)
             {
                 return subjectGate;
             }
-            return _DefaultGates.TryGetValue(stage, out Padlock<string>? defaultGate) ? defaultGate : null;
+            return _DefaultGates.TryGetValue(stage, out AsyncSemaphoreGate? defaultGate) ? defaultGate : null;
         }
 
         private static int DefaultCapFor(IngestionStageEnum stage, IngestionTuning t)

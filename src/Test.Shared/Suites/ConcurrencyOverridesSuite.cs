@@ -131,6 +131,44 @@ namespace Test.Shared.Suites
                             {
                                 if (jobSlot == null) throw new Exception("job-slot acquisition returned null");
                             }
+                        }),
+
+                    new TestCaseDescriptor("ConcurrencyOverrides", "ConcurrencyManager_Gate_DoesNotLeak", "A stage gate never leaks a permit: a cancelled contended acquire holds nothing, disposing is idempotent, and a cap-1 gate stays acquirable under churn",
+                        executeAsync: async ct =>
+                        {
+                            ConcurrencyManager manager = new ConcurrencyManager(new IngestionTuning { Classification = 1 });
+                            string subjectId = "sub_leak";
+
+                            // Hold the single Classification permit (cap 1).
+                            IDisposable first = await manager.AcquireStageAsync(IngestionStageEnum.Classification, subjectId, ct);
+
+                            // A second acquire must block; cancelling it must not consume or leak the permit.
+                            using (CancellationTokenSource cts = new CancellationTokenSource())
+                            {
+                                cts.CancelAfter(TimeSpan.FromMilliseconds(200));
+                                bool cancelled = false;
+                                try { await manager.AcquireStageAsync(IngestionStageEnum.Classification, subjectId, cts.Token); }
+                                catch (OperationCanceledException) { cancelled = true; }
+                                if (!cancelled) throw new Exception("contended acquire on a full cap-1 gate should have cancelled");
+                            }
+
+                            // Releasing returns the permit; disposing again is a harmless no-op (not an over-release).
+                            first.Dispose();
+                            first.Dispose();
+
+                            // A fresh acquire must now succeed promptly — proving the cancelled acquire leaked nothing.
+                            IDisposable second = await manager.AcquireStageAsync(IngestionStageEnum.Classification, subjectId, ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
+                            if (second == null) throw new Exception("re-acquire returned null");
+                            second.Dispose();
+
+                            // Churn the cap-1 gate: a single leaked permit would wedge it and time out here.
+                            for (int i = 0; i < 100; i++)
+                            {
+                                using (IDisposable slot = await manager.AcquireStageAsync(IngestionStageEnum.Classification, subjectId, ct).WaitAsync(TimeSpan.FromSeconds(5), ct))
+                                {
+                                    if (slot == null) throw new Exception("gate acquisition returned null on iteration " + i);
+                                }
+                            }
                         })
                 });
         }

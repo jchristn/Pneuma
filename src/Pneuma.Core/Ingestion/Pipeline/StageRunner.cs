@@ -74,19 +74,35 @@ namespace Pneuma.Core.Ingestion.Pipeline
             // is immediately free, surface a "waiting" event so the log makes the contention visible.
             IngestionJobEvent? queuedEvent = null;
             double queueMs = 0;
-            ValueTask<IDisposable> acquire = _Concurrency.AcquireStageAsync(stage.Stage, job.SubjectId, token);
+            Task<IDisposable> acquire = _Concurrency.AcquireStageAsync(stage.Stage, job.SubjectId, token);
             Stopwatch queueSw = Stopwatch.StartNew();
             if (!acquire.IsCompleted)
             {
-                queuedEvent = await _Journal.RecordEventAsync(job, stage.Stage, IngestionStatusEnum.Queued,
-                    "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
-                    0, token).ConfigureAwait(false);
+                // Surface a "waiting for a slot" event so contention is visible in the log. This is best-effort
+                // telemetry: a failure here must NOT abandon the pending acquire below — otherwise the permit it
+                // is about to be granted would be held forever with nothing to dispose it (a leak that, at a
+                // per-stage cap of 1, permanently wedges the stage). So we swallow and still await the acquire.
+                try
+                {
+                    queuedEvent = await _Journal.RecordEventAsync(job, stage.Stage, IngestionStatusEnum.Queued,
+                        "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
+                        0, token).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Non-fatal: the queued event is cosmetic. Cancellation still surfaces from the acquire await.
+                }
             }
+
+            // Always take ownership of the acquired permit, then immediately enter the try so the finally below is
+            // guaranteed to release it. Nothing between here and the try may throw. If the acquire is cancelled it
+            // throws before returning a permit (SemaphoreSlim consumes none on a cancelled wait), so there is
+            // nothing to release.
             IDisposable slot = await acquire.ConfigureAwait(false);
-            queueSw.Stop();
-            if (queuedEvent != null) queueMs = queueSw.Elapsed.TotalMilliseconds;
             try
             {
+                queueSw.Stop();
+                if (queuedEvent != null) queueMs = queueSw.Elapsed.TotalMilliseconds;
                 using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage.Stage, SpanKindEnum.Internal))
                 {
                     span?.SetTag("pneuma.stage", stage.Stage.ToString());
