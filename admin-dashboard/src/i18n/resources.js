@@ -427,7 +427,7 @@ const en = {
       queuedHint: 'Documents waiting in the pool to be picked up.',
       document: 'Document',
       step: 'Step',
-      inState: 'Time in this state',
+      inState: 'Time in state',
       job: 'Job'
     },
     jobs: {
