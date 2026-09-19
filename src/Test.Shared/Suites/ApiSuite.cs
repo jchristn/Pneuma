@@ -307,6 +307,51 @@ namespace Test.Shared.Suites
                             if (stopAgain.StatusCode != HttpStatusCode.Conflict) throw new Exception("re-stop should be 409, got " + (int)stopAgain.StatusCode);
                         }),
 
+                    new TestCaseDescriptor("Api", "Jobs_Live_Snapshot", "The live ingestion snapshot exposes running/waitingForSlot/queued lists and surfaces a freshly-submitted job's document",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string collectionId = await CreateCollectionAsync(server.BaseUrl, token, ct);
+                            HttpResponseMessage subjectResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects", token, "{\"displayName\":\"Live Test\",\"type\":\"Person\",\"embeddingModel\":\"default\",\"inferenceModel\":\"default\",\"collection\":\"" + collectionId + "\"}", ct);
+                            string subjectId = ExtractString(await subjectResp.Content.ReadAsStringAsync(ct), "id");
+                            HttpResponseMessage linkResp = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/subjects/" + subjectId + "/links", token, "{\"url\":\"https://example.com/live\"}", ct);
+                            if (linkResp.StatusCode != HttpStatusCode.Created) throw new Exception("link submit failed: " + (int)linkResp.StatusCode);
+
+                            HttpResponseMessage liveResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs/live", token, null, ct);
+                            if (liveResp.StatusCode != HttpStatusCode.OK) throw new Exception("live not 200: " + (int)liveResp.StatusCode);
+                            string body = await liveResp.Content.ReadAsStringAsync(ct);
+                            System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(body);
+                            System.Text.Json.JsonElement root = doc.RootElement;
+                            if (!root.TryGetProperty("running", out System.Text.Json.JsonElement running)
+                                || !root.TryGetProperty("waitingForSlot", out System.Text.Json.JsonElement waiting)
+                                || !root.TryGetProperty("queued", out System.Text.Json.JsonElement queued))
+                            {
+                                throw new Exception("live snapshot missing running/waitingForSlot/queued");
+                            }
+
+                            // The job may be queued (worker idle) or already running — either way its document must surface.
+                            bool found = false;
+                            foreach (System.Text.Json.JsonElement list in new[] { running, waiting, queued })
+                            {
+                                foreach (System.Text.Json.JsonElement item in list.EnumerateArray())
+                                {
+                                    if ((item.GetProperty("sourceUrl").GetString() ?? String.Empty) == "https://example.com/live")
+                                    {
+                                        found = true;
+                                        if (String.IsNullOrEmpty(item.GetProperty("jobId").GetString())) throw new Exception("live entry missing jobId");
+                                    }
+                                }
+                            }
+                            if (!found) throw new Exception("freshly-submitted job's document not present in the live snapshot");
+
+                            // A subject filter that matches nothing must exclude the job.
+                            HttpResponseMessage scopedResp = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/jobs/live?subjectId=sub_does_not_exist", token, null, ct);
+                            string scopedBody = await scopedResp.Content.ReadAsStringAsync(ct);
+                            if (scopedBody.Contains("https://example.com/live")) throw new Exception("subject filter should exclude the job");
+                        }),
+
                     new TestCaseDescriptor("Api", "Settings_Read_Write_Masks", "Settings read masks secrets and write preserves them",
                         executeAsync: async ct =>
                         {

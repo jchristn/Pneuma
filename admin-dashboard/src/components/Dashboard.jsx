@@ -15,6 +15,7 @@ import SettingsView from '../views/SettingsView';
 import ProcessingView from '../views/ProcessingView';
 import IngestionQueueView from '../views/IngestionQueueView';
 import IngestionJobsView from '../views/IngestionJobsView';
+import IngestionLiveView from '../views/IngestionLiveView';
 import NotFound from './NotFound';
 import ModelRunnersView from '../views/ModelRunnersView';
 import PromptsView from '../views/PromptsView';
@@ -42,6 +43,7 @@ const VIEWS = {
   explorer: ApiExplorerView,
   settings: SettingsView,
   processing: ProcessingView,
+  'ingestion-live': IngestionLiveView,
   jobs: IngestionQueueView,
   'ingestion-jobs': IngestionJobsView,
   'model-runners': ModelRunnersView,

@@ -63,6 +63,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("List ingestion jobs", "Ingestion"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/jobs/summary", SummaryAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Summarize ingestion activity by pipeline stage", "Ingestion"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/jobs/live", LiveAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Live ingestion snapshot: running, waiting-for-slot, and queued jobs", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/jobs/{id}", DetailAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get ingestion job detail with events", "Ingestion"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/jobs/{id}/restart", RestartAsync, RouteHelper.ExceptionAsync,
@@ -133,6 +135,83 @@ namespace Pneuma.Server.Routes
 
             EnumerationResult<IngestionJob> result = EnumerationHelper.Paginate(jobs, RouteHelper.ReadEnumerationQuery(ctx), j => j.CreatedUtc, j => j.SourceUrl);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
+        }
+
+        private async Task LiveAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+            string? subjectFilter = ctx.Request.Query.Elements?["subjectId"];
+
+            IngestionLiveSnapshot snapshot = new IngestionLiveSnapshot();
+
+            // Jobs actively being processed: classify each as running its current stage, or waiting for a
+            // concurrency slot at that stage (its latest event is still Queued). The active set is bounded by the
+            // job-pool size, so reading each active job's events for its latest state is inexpensive.
+            List<IngestionJob> processing = await _Db.IngestionJobs.EnumerateAsync(tenantId, IngestionStatusEnum.Processing, ctx.Token).ConfigureAwait(false);
+            foreach (IngestionJob job in processing)
+            {
+                if (!MatchesSubject(job, subjectFilter)) continue;
+
+                IngestionJobEvent? latest = await LatestEventAsync(tenantId, job.Id, ctx.Token).ConfigureAwait(false);
+                if (latest != null && latest.Status == IngestionStatusEnum.Queued)
+                {
+                    snapshot.WaitingForSlot.Add(ToLiveJob(job, latest.Stage, latest.CreatedUtc));
+                }
+                else if (latest != null && latest.Status == IngestionStatusEnum.Processing)
+                {
+                    snapshot.Running.Add(ToLiveJob(job, latest.Stage, latest.CreatedUtc));
+                }
+                else
+                {
+                    // No usable in-progress event yet (e.g. between stages) — fall back to the job's own stage/time.
+                    snapshot.Running.Add(ToLiveJob(job, job.Stage, job.LastUpdateUtc));
+                }
+            }
+
+            // Jobs still waiting in the pool to be claimed and started.
+            List<IngestionJob> queued = await _Db.IngestionJobs.EnumerateAsync(tenantId, IngestionStatusEnum.Queued, ctx.Token).ConfigureAwait(false);
+            foreach (IngestionJob job in queued)
+            {
+                if (!MatchesSubject(job, subjectFilter)) continue;
+                snapshot.Queued.Add(ToLiveJob(job, null, job.CreatedUtc));
+            }
+
+            // Longest-in-state first, so the most contended work surfaces at the top of each list.
+            snapshot.Running.Sort((a, b) => a.StateSinceUtc.CompareTo(b.StateSinceUtc));
+            snapshot.WaitingForSlot.Sort((a, b) => a.StateSinceUtc.CompareTo(b.StateSinceUtc));
+            snapshot.Queued.Sort((a, b) => a.StateSinceUtc.CompareTo(b.StateSinceUtc));
+
+            await RouteHelper.SendJsonAsync(ctx, 200, snapshot).ConfigureAwait(false);
+        }
+
+        private static bool MatchesSubject(IngestionJob job, string? subjectFilter)
+        {
+            return String.IsNullOrEmpty(subjectFilter) || String.Equals(job.SubjectId, subjectFilter, StringComparison.Ordinal);
+        }
+
+        private static IngestionLiveJob ToLiveJob(IngestionJob job, IngestionStageEnum? stage, DateTime stateSinceUtc)
+        {
+            return new IngestionLiveJob
+            {
+                JobId = job.Id,
+                SubjectId = job.SubjectId,
+                SourceUrl = job.SourceUrl,
+                Stage = stage,
+                StateSinceUtc = stateSinceUtc
+            };
+        }
+
+        private async Task<IngestionJobEvent?> LatestEventAsync(string tenantId, string jobId, CancellationToken token)
+        {
+            List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(tenantId, jobId, token).ConfigureAwait(false);
+            IngestionJobEvent? latest = null;
+            foreach (IngestionJobEvent jobEvent in events)
+            {
+                if (latest == null || jobEvent.CreatedUtc > latest.CreatedUtc) latest = jobEvent;
+            }
+            return latest;
         }
 
         private async Task SummaryAsync(HttpContextBase ctx)

@@ -70,6 +70,7 @@ const en = {
       links: 'Links',
       collections: 'Collections',
       search: 'Search',
+      ingestionLive: 'Ingestion Live',
       jobs: 'Ingestion Queue',
       ingestionJobs: 'Ingestion Jobs',
       history: 'History',
@@ -410,6 +411,24 @@ const en = {
       embedding: 'Embedding',
       indexing: 'Indexing',
       done: 'Done'
+    },
+    live: {
+      title: 'Ingestion Live',
+      subtitle: 'Real-time view of ingestion work: what is running, what is waiting for a slot, and what is queued',
+      subjectTip: 'Scope the live view to a single subject, or show all subjects.',
+      autoRefresh: 'Auto-refreshing every 2s',
+      idle: 'The pipeline is idle — no jobs are running, waiting for a slot, or queued right now.',
+      none: 'None.',
+      running: 'Running now',
+      runningHint: 'Documents actively executing a pipeline step.',
+      waiting: 'Waiting for a slot',
+      waitingHint: 'Steps that are ready to run but waiting for a free concurrency slot at that stage.',
+      queued: 'Queued to start',
+      queuedHint: 'Documents waiting in the pool to be picked up.',
+      document: 'Document',
+      step: 'Step',
+      inState: 'Time in this state',
+      job: 'Job'
     },
     jobs: {
       title: 'Ingestion Queue',

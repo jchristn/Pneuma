@@ -197,6 +197,11 @@ class ApiClient {
     return this._request('GET', '/v1.0/jobs', { query: Object.keys(q).length ? q : null });
   }
 
+  // Live ingestion snapshot: jobs running a stage, waiting for a per-stage slot, or queued to start.
+  getIngestionLive(subjectId = null) {
+    return this._request('GET', '/v1.0/jobs/live', { query: subjectId ? { subjectId } : null });
+  }
+
   getJob(id) {
     return this._request('GET', `/v1.0/jobs/${encodeURIComponent(id)}`);
   }

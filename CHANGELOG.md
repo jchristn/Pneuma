@@ -6,7 +6,21 @@ between releases, and the project will adopt semantic versioning at its stable 1
 
 ## [Unreleased]
 
+### Added
+- **Ingestion Live view.** A real-time pipeline view (admin dashboard) and endpoint
+  `GET /v1.0/jobs/live` → `IngestionLiveSnapshot` `{ running, waitingForSlot, queued }`. Each entry
+  carries the document (`sourceUrl`), the current step (`stage`), and `stateSinceUtc` so the view
+  ticks the time-in-state live: which documents are running which step now, which steps are waiting
+  for a per-stage concurrency slot, and what is queued to start.
+
 ### Fixed
+- **Ingestion no longer wedges on leaked concurrency permits.** Jobs could get stuck "waiting for a
+  slot" when a contended stage's acquire was abandoned (the "waiting" event was written before the
+  acquire was awaited, so a failure there orphaned the about-to-be-granted permit — fatal at a
+  per-stage cap of 1). The stage runner now always awaits and releases the permit; the third-party
+  Padlock limiter was replaced with a self-contained `SemaphoreSlim`-based gate (cancelled waits
+  provably hold no permit; releasing is idempotent); and the worker no longer passes the cancellation
+  token to `Task.Run`, which could skip the `finally` that returns a job-pool slot.
 - **Classification no longer times out on large documents.** Completion calls are no longer hard-capped at the
   model endpoint's `MaximumTimeoutMs` (default 60s), which was cancelling slow ontology-classification calls
   mid-flight and failing the job after its retries; ingestion model calls are bounded by the per-stage timeout
