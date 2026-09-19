@@ -134,6 +134,33 @@ namespace Pneuma.Server.Services
             return (o != null && o.SummarizationMinCellLength.HasValue) ? o.SummarizationMinCellLength.Value : _Defaults.SummarizationMinCellLength;
         }
 
+        /// <summary>The effective number of cells classified per model call for a subject.</summary>
+        /// <param name="subjectId">The subject id.</param>
+        /// <returns>The effective classification batch size.</returns>
+        public int EffectiveClassificationBatchSize(string subjectId)
+        {
+            SubjectConcurrencyOverrides? o = GetOverride(subjectId);
+            return (o != null && o.ClassificationBatchSize.HasValue) ? o.ClassificationBatchSize.Value : _Defaults.ClassificationBatchSize;
+        }
+
+        /// <summary>The effective classification batch context overlap (cells per side) for a subject.</summary>
+        /// <param name="subjectId">The subject id.</param>
+        /// <returns>The effective classification batch overlap.</returns>
+        public int EffectiveClassificationBatchOverlap(string subjectId)
+        {
+            SubjectConcurrencyOverrides? o = GetOverride(subjectId);
+            return (o != null && o.ClassificationBatchOverlap.HasValue) ? o.ClassificationBatchOverlap.Value : _Defaults.ClassificationBatchOverlap;
+        }
+
+        /// <summary>The effective number of classification batches processed concurrently within a job for a subject.</summary>
+        /// <param name="subjectId">The subject id.</param>
+        /// <returns>The effective classification batch concurrency.</returns>
+        public int EffectiveClassificationBatchConcurrency(string subjectId)
+        {
+            SubjectConcurrencyOverrides? o = GetOverride(subjectId);
+            return (o != null && o.ClassificationBatchConcurrency.HasValue) ? o.ClassificationBatchConcurrency.Value : _Defaults.ClassificationBatchConcurrency;
+        }
+
         /// <summary>The current system-default tuning.</summary>
         /// <returns>The system defaults.</returns>
         public IngestionTuning CurrentDefaults()

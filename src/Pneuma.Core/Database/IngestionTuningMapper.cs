@@ -29,6 +29,9 @@ namespace Pneuma.Core.Database
                 MaxConcurrentTasks = RowReader.GetInt(row, "maxconcurrenttasks"),
                 SummarizationConcurrency = RowReader.GetInt(row, "summarizationconcurrency"),
                 SummarizationMinCellLength = RowReader.GetInt(row, "summarizationmincelllength"),
+                ClassificationBatchSize = RowReader.GetInt(row, "classificationbatchsize"),
+                ClassificationBatchOverlap = RowReader.GetInt(row, "classificationbatchoverlap"),
+                ClassificationBatchConcurrency = RowReader.GetInt(row, "classificationbatchconcurrency"),
                 StageTimeoutSeconds = RowReader.GetInt(row, "stagetimeoutseconds"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")

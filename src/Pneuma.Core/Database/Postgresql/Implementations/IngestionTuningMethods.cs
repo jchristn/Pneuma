@@ -30,12 +30,13 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
 
             await Query("DELETE FROM ingestiontuning WHERE id = " + Sanitizer.Str(tuning.Id) + ";", token).ConfigureAwait(false);
             string sql =
-                "INSERT INTO ingestiontuning (id, contentretrieval, typedetection, cellextraction, classification, graphmerge, summarization, chunking, embedding, indexing, maxconcurrenttasks, summarizationconcurrency, summarizationmincelllength, stagetimeoutseconds, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO ingestiontuning (id, contentretrieval, typedetection, cellextraction, classification, graphmerge, summarization, chunking, embedding, indexing, maxconcurrenttasks, summarizationconcurrency, summarizationmincelllength, classificationbatchsize, classificationbatchoverlap, classificationbatchconcurrency, stagetimeoutseconds, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(tuning.Id) + ", " +
                 Sanitizer.Num(tuning.ContentRetrieval) + ", " + Sanitizer.Num(tuning.TypeDetection) + ", " + Sanitizer.Num(tuning.CellExtraction) + ", " +
                 Sanitizer.Num(tuning.Classification) + ", " + Sanitizer.Num(tuning.GraphMerge) + ", " + Sanitizer.Num(tuning.Summarization) + ", " +
                 Sanitizer.Num(tuning.Chunking) + ", " + Sanitizer.Num(tuning.Embedding) + ", " + Sanitizer.Num(tuning.Indexing) + ", " +
                 Sanitizer.Num(tuning.MaxConcurrentTasks) + ", " + Sanitizer.Num(tuning.SummarizationConcurrency) + ", " + Sanitizer.Num(tuning.SummarizationMinCellLength) + ", " +
+                Sanitizer.Num(tuning.ClassificationBatchSize) + ", " + Sanitizer.Num(tuning.ClassificationBatchOverlap) + ", " + Sanitizer.Num(tuning.ClassificationBatchConcurrency) + ", " +
                 Sanitizer.Num(tuning.StageTimeoutSeconds) + ", " + Sanitizer.Ts(tuning.CreatedUtc) + ", " + Sanitizer.Ts(tuning.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return tuning;

@@ -203,6 +203,12 @@ namespace Pneuma.Core.Database.Mysql.Queries
                         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
                     "ALTER TABLE subjects ADD COLUMN concurrencyoverridesjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(27, "Add classification batching tuning", new List<string>
+                {
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchsize INT NOT NULL DEFAULT 25;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchoverlap INT NOT NULL DEFAULT 3;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchconcurrency INT NOT NULL DEFAULT 4;"
+                }));
                 return list;
             }
         }

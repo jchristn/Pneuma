@@ -123,7 +123,18 @@ namespace Pneuma.Server.Services
             ResolvedPrompt ontologyResolved = await resolver.ResolveAsync(job.TenantId, job.SubjectId, "ontology.definition", subject?.OntologyDefinitionPrompt, token).ConfigureAwait(false);
             string ontologyDefinition = ontologyResolved.EffectiveContent;
 
-            return await _Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
+            // Effective per-subject batching tuning (subject override falling back to the system default). A large
+            // document is classified as bounded batches rather than one enormous prompt so a slow completion model
+            // can finish each call well within the stage timeout; a document that fits one batch keeps the single call.
+            int batchSize = _Concurrency.EffectiveClassificationBatchSize(job.SubjectId);
+            if (cells.Count <= batchSize)
+            {
+                return await _Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
+            }
+
+            int overlap = _Concurrency.EffectiveClassificationBatchOverlap(job.SubjectId);
+            int batchConcurrency = _Concurrency.EffectiveClassificationBatchConcurrency(job.SubjectId);
+            return await ClassifyInBatchesAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, batchSize, overlap, batchConcurrency, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -533,6 +544,107 @@ namespace Pneuma.Server.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Classify a large document as independent, bounded batches and merge the partial subgraphs. Each batch
+        /// classifies its own <paramref name="batchSize"/> cells but is given <paramref name="overlap"/> cells of
+        /// context on each side (read symmetrically before and after) so a relationship straddling a batch boundary
+        /// is still seen from at least one side; the overlap yields duplicate nodes/edges that the downstream
+        /// GraphMerge stage dedups by canonical type+name. Candidate Refs are only unique within a single model call,
+        /// so each batch's Refs are namespaced before concatenation to keep every edge pointing at its own nodes.
+        /// Batches run with bounded concurrency so one document cannot fire every batch at the model runner at once.
+        /// </summary>
+        /// <param name="cells">All extracted cells.</param>
+        /// <param name="systemPrompt">Classification system prompt.</param>
+        /// <param name="ontologyDefinition">Ontology definition prompt.</param>
+        /// <param name="runner">Resolved completion runner.</param>
+        /// <param name="apiKey">Decrypted API key, if any.</param>
+        /// <param name="subjectName">Subject display name for grounding.</param>
+        /// <param name="batchSize">Owned cells per batch.</param>
+        /// <param name="overlap">Context cells per side.</param>
+        /// <param name="batchConcurrency">Maximum batches classified concurrently.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The merged candidate subgraph.</returns>
+        private async Task<CandidateSubgraph> ClassifyInBatchesAsync(
+            List<ExtractedCell> cells,
+            string systemPrompt,
+            string ontologyDefinition,
+            ModelRunner runner,
+            string? apiKey,
+            string subjectName,
+            int batchSize,
+            int overlap,
+            int batchConcurrency,
+            CancellationToken token)
+        {
+            List<int> starts = new List<int>();
+            for (int start = 0; start < cells.Count; start += batchSize) starts.Add(start);
+
+            CandidateSubgraph?[] parts = new CandidateSubgraph?[starts.Count];
+            using (SemaphoreSlim gate = new SemaphoreSlim(batchConcurrency, batchConcurrency))
+            {
+                List<Task> tasks = new List<Task>(starts.Count);
+                for (int b = 0; b < starts.Count; b++)
+                {
+                    int batchIndex = b;
+                    int ownedStart = starts[b];
+                    int ownedEnd = Math.Min(ownedStart + batchSize, cells.Count);
+                    int windowStart = Math.Max(0, ownedStart - overlap);
+                    int windowEnd = Math.Min(cells.Count, ownedEnd + overlap);
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        await gate.WaitAsync(token).ConfigureAwait(false);
+                        try
+                        {
+                            List<ExtractedCell> window = cells.GetRange(windowStart, windowEnd - windowStart);
+                            parts[batchIndex] = await _Classifier.ClassifyAsync(window, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception e)
+                        {
+                            // One batch failing (e.g. a transient model error) loses that slice of the graph but must
+                            // not fail the whole document — the successful batches still merge. Cancellation (operator
+                            // stop / stage timeout) is rethrown so the stage fails as a unit.
+                            _Logging.Warn("[IngestionStages] classification of a cell batch failed (skipped): " + e.Message);
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }, token));
+                }
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+
+            CandidateSubgraph merged = new CandidateSubgraph();
+            for (int b = 0; b < parts.Length; b++)
+            {
+                CandidateSubgraph? part = parts[b];
+                if (part == null) continue;
+                string prefix = "b" + b.ToString(CultureInfo.InvariantCulture) + "_";
+                if (part.Nodes != null)
+                {
+                    foreach (CandidateNode node in part.Nodes)
+                    {
+                        node.Ref = prefix + node.Ref;
+                        merged.Nodes.Add(node);
+                    }
+                }
+                if (part.Edges != null)
+                {
+                    foreach (CandidateEdge edge in part.Edges)
+                    {
+                        edge.FromRef = prefix + edge.FromRef;
+                        edge.ToRef = prefix + edge.ToRef;
+                        merged.Edges.Add(edge);
+                    }
+                }
+            }
+            return merged;
+        }
 
         /// <summary>Resolve the chunking configuration for a job from its subject, falling back to defaults.</summary>
         /// <param name="job">The job.</param>

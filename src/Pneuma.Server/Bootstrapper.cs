@@ -114,6 +114,9 @@ namespace Pneuma.Server
                 MaxConcurrentTasks = settings.Ingestion.MaxConcurrentTasks,
                 SummarizationConcurrency = settings.Ingestion.SummarizationConcurrency,
                 SummarizationMinCellLength = settings.Ingestion.SummarizationMinCellLength,
+                ClassificationBatchSize = settings.Ingestion.ClassificationBatchSize,
+                ClassificationBatchOverlap = settings.Ingestion.ClassificationBatchOverlap,
+                ClassificationBatchConcurrency = settings.Ingestion.ClassificationBatchConcurrency,
                 StageTimeoutSeconds = settings.Ingestion.StageTimeoutSeconds
             };
             ConcurrencyManager concurrency = new ConcurrencyManager(ingestionTuningDefaults);

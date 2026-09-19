@@ -204,6 +204,12 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                         "summarizationmincelllength INTEGER NOT NULL, stagetimeoutseconds INTEGER NOT NULL, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
                     "ALTER TABLE subjects ADD COLUMN concurrencyoverridesjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(27, "Add classification batching tuning", new List<string>
+                {
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchsize INTEGER NOT NULL DEFAULT 25;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchoverlap INTEGER NOT NULL DEFAULT 3;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchconcurrency INTEGER NOT NULL DEFAULT 4;"
+                }));
                 return list;
             }
         }

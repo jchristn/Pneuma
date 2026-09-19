@@ -96,6 +96,38 @@ namespace Pneuma.Server.Settings
         }
 
         /// <summary>
+        /// Number of cells classified per model call. A document with more cells than this is split into batches
+        /// that are classified independently and merged, so no single classification call carries an unbounded
+        /// prompt that a slow model cannot finish in time. Default 25; clamped to [1, 100000].
+        /// </summary>
+        public int ClassificationBatchSize
+        {
+            get { return _ClassificationBatchSize; }
+            set { _ClassificationBatchSize = Math.Clamp(value, 1, 100000); }
+        }
+
+        /// <summary>
+        /// Number of context cells included on each side of a classification batch (read symmetrically before and
+        /// after the batch's own cells) so a relationship whose endpoints straddle a batch boundary is still seen
+        /// from at least one batch. Default 3; clamped to [0, 1000].
+        /// </summary>
+        public int ClassificationBatchOverlap
+        {
+            get { return _ClassificationBatchOverlap; }
+            set { _ClassificationBatchOverlap = Math.Clamp(value, 0, 1000); }
+        }
+
+        /// <summary>
+        /// Maximum classification batches a single job runs concurrently. Bounds the model calls one large document
+        /// issues at once so classification completes in bounded time. Default 4; clamped to [1, 64].
+        /// </summary>
+        public int ClassificationBatchConcurrency
+        {
+            get { return _ClassificationBatchConcurrency; }
+            set { _ClassificationBatchConcurrency = Math.Clamp(value, 1, 64); }
+        }
+
+        /// <summary>
         /// When true, source links are crawled with a headless Chromium browser (Playwright) so that
         /// JavaScript-rendered pages are captured; falls back to a plain HTTP fetch on failure.
         /// </summary>
@@ -138,6 +170,9 @@ namespace Pneuma.Server.Settings
         private int _StageTimeoutSeconds = 900;
         private int _SummarizationMinCellLength = 128;
         private int _SummarizationConcurrency = 4;
+        private int _ClassificationBatchSize = 25;
+        private int _ClassificationBatchOverlap = 3;
+        private int _ClassificationBatchConcurrency = 4;
         private int _BrowserNavigationTimeoutMs = 60000;
         private string _UserAgent = HttpContentFetcher.DefaultUserAgent;
 

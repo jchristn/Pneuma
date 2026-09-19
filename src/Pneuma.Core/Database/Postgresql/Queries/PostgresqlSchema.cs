@@ -204,6 +204,12 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                         "summarizationmincelllength INTEGER NOT NULL, stagetimeoutseconds INTEGER NOT NULL, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
                     "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS concurrencyoverridesjson TEXT;"
                 }));
+                list.Add(new SchemaMigration(27, "Add classification batching tuning", new List<string>
+                {
+                    "ALTER TABLE ingestiontuning ADD COLUMN IF NOT EXISTS classificationbatchsize INTEGER NOT NULL DEFAULT 25;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN IF NOT EXISTS classificationbatchoverlap INTEGER NOT NULL DEFAULT 3;",
+                    "ALTER TABLE ingestiontuning ADD COLUMN IF NOT EXISTS classificationbatchconcurrency INTEGER NOT NULL DEFAULT 4;"
+                }));
                 return list;
             }
         }

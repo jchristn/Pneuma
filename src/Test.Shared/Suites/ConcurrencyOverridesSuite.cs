@@ -32,17 +32,20 @@ namespace Test.Shared.Suites
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
 
-                            await db.IngestionTuning.UpsertAsync(new IngestionTuning { Summarization = 12, MaxConcurrentTasks = 7, SummarizationMinCellLength = 200, StageTimeoutSeconds = 111 }, ct);
+                            await db.IngestionTuning.UpsertAsync(new IngestionTuning { Summarization = 12, MaxConcurrentTasks = 7, SummarizationMinCellLength = 200, StageTimeoutSeconds = 111, ClassificationBatchSize = 40, ClassificationBatchOverlap = 5, ClassificationBatchConcurrency = 6 }, ct);
                             IngestionTuning? read = await db.IngestionTuning.ReadAsync(ct);
                             if (read == null) throw new Exception("tuning read null after upsert");
                             if (read.Summarization != 12 || read.MaxConcurrentTasks != 7 || read.SummarizationMinCellLength != 200 || read.StageTimeoutSeconds != 111) throw new Exception("tuning did not round-trip");
+                            if (read.ClassificationBatchSize != 40 || read.ClassificationBatchOverlap != 5 || read.ClassificationBatchConcurrency != 6) throw new Exception("classification batching tuning did not round-trip");
 
                             // A second upsert replaces the singleton (does not create a second row) and clamps.
-                            await db.IngestionTuning.UpsertAsync(new IngestionTuning { Summarization = 9999, MaxConcurrentTasks = 0 }, ct);
+                            await db.IngestionTuning.UpsertAsync(new IngestionTuning { Summarization = 9999, MaxConcurrentTasks = 0, ClassificationBatchSize = 0, ClassificationBatchConcurrency = 9999 }, ct);
                             IngestionTuning? read2 = await db.IngestionTuning.ReadAsync(ct);
                             if (read2 == null) throw new Exception("tuning read null after second upsert");
                             if (read2.Summarization != 256) throw new Exception("Summarization not clamped to 256");
                             if (read2.MaxConcurrentTasks != 1) throw new Exception("MaxConcurrentTasks not clamped to 1");
+                            if (read2.ClassificationBatchSize != 1) throw new Exception("ClassificationBatchSize not clamped to 1");
+                            if (read2.ClassificationBatchConcurrency != 64) throw new Exception("ClassificationBatchConcurrency not clamped to 64");
                         }),
 
                     new TestCaseDescriptor("ConcurrencyOverrides", "Subject_Overrides_Json_RoundTrip", "A subject's concurrency overrides serialize to/from JSON with only the set fields surviving",
@@ -90,13 +93,20 @@ namespace Test.Shared.Suites
                             if (manager.EffectiveSummarizationConcurrency(subjectId) != 4) throw new Exception("default summarization concurrency wrong");
                             if (manager.EffectiveStageTimeoutSeconds(subjectId) != 900) throw new Exception("default stage timeout wrong");
                             if (manager.EffectiveSummarizationMinCellLength(subjectId) != 128) throw new Exception("default min cell length wrong");
+                            if (manager.EffectiveClassificationBatchSize(subjectId) != 25) throw new Exception("default classification batch size wrong");
+                            if (manager.EffectiveClassificationBatchOverlap(subjectId) != 3) throw new Exception("default classification batch overlap wrong");
+                            if (manager.EffectiveClassificationBatchConcurrency(subjectId) != 4) throw new Exception("default classification batch concurrency wrong");
 
-                            // Override two fields; the others still resolve to the default, and other subjects are unaffected.
-                            manager.ApplySubjectOverride(subjectId, new SubjectConcurrencyOverrides { SummarizationConcurrency = 9, StageTimeoutSeconds = 42 });
+                            // Override several fields; the others still resolve to the default, and other subjects are unaffected.
+                            manager.ApplySubjectOverride(subjectId, new SubjectConcurrencyOverrides { SummarizationConcurrency = 9, StageTimeoutSeconds = 42, ClassificationBatchSize = 50, ClassificationBatchConcurrency = 8 });
                             if (manager.EffectiveSummarizationConcurrency(subjectId) != 9) throw new Exception("override summarization concurrency not applied");
                             if (manager.EffectiveStageTimeoutSeconds(subjectId) != 42) throw new Exception("override stage timeout not applied");
                             if (manager.EffectiveSummarizationMinCellLength(subjectId) != 128) throw new Exception("unset override field should stay at default");
+                            if (manager.EffectiveClassificationBatchSize(subjectId) != 50) throw new Exception("override classification batch size not applied");
+                            if (manager.EffectiveClassificationBatchConcurrency(subjectId) != 8) throw new Exception("override classification batch concurrency not applied");
+                            if (manager.EffectiveClassificationBatchOverlap(subjectId) != 3) throw new Exception("unset classification batch overlap should stay at default");
                             if (manager.EffectiveSummarizationConcurrency("other_subject") != 4) throw new Exception("override leaked to another subject");
+                            if (manager.EffectiveClassificationBatchSize("other_subject") != 25) throw new Exception("batch override leaked to another subject");
 
                             // Clearing reverts to the system default.
                             manager.ClearSubjectOverride(subjectId);

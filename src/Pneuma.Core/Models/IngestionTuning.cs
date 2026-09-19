@@ -54,6 +54,21 @@ namespace Pneuma.Core.Models
         /// <summary>Minimum trimmed cell length (characters) to summarize; shorter cells are skipped. Clamped to [0, 100000].</summary>
         public int SummarizationMinCellLength { get => _SummarizationMinCellLength; set => _SummarizationMinCellLength = Math.Clamp(value, 0, 100000); }
 
+        /// <summary>
+        /// Cells classified per model call. A document larger than this is split into batches that are classified
+        /// independently and merged, so no single classification call carries an unbounded prompt. Clamped to [1, 100000].
+        /// </summary>
+        public int ClassificationBatchSize { get => _ClassificationBatchSize; set => _ClassificationBatchSize = Math.Clamp(value, 1, 100000); }
+
+        /// <summary>
+        /// Cells of context included on each side of a classification batch (read symmetrically before and after the
+        /// batch's own cells) so relationships spanning a batch boundary are still seen. Clamped to [0, 1000].
+        /// </summary>
+        public int ClassificationBatchOverlap { get => _ClassificationBatchOverlap; set => _ClassificationBatchOverlap = Math.Clamp(value, 0, 1000); }
+
+        /// <summary>Maximum classification batches processed concurrently within a single job. Clamped to [1, 64].</summary>
+        public int ClassificationBatchConcurrency { get => _ClassificationBatchConcurrency; set => _ClassificationBatchConcurrency = Math.Clamp(value, 1, 64); }
+
         /// <summary>Per-stage timeout, in seconds. Clamped to [5, 3600].</summary>
         public int StageTimeoutSeconds { get => _StageTimeoutSeconds; set => _StageTimeoutSeconds = Math.Clamp(value, 5, 3600); }
 
@@ -79,6 +94,9 @@ namespace Pneuma.Core.Models
         private int _MaxConcurrentTasks = 4;
         private int _SummarizationConcurrency = 4;
         private int _SummarizationMinCellLength = 128;
+        private int _ClassificationBatchSize = 25;
+        private int _ClassificationBatchOverlap = 3;
+        private int _ClassificationBatchConcurrency = 4;
         private int _StageTimeoutSeconds = 900;
 
         #endregion

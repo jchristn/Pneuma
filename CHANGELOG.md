@@ -6,6 +6,22 @@ between releases, and the project will adopt semantic versioning at its stable 1
 
 ## [Unreleased]
 
+### Fixed
+- **Classification no longer times out on large documents.** Completion calls are no longer hard-capped at the
+  model endpoint's `MaximumTimeoutMs` (default 60s), which was cancelling slow ontology-classification calls
+  mid-flight and failing the job after its retries; ingestion model calls are bounded by the per-stage timeout
+  instead, and query calls by the request lifecycle.
+
+### Added
+- **Classification batching (per-subject and system-default tunables).** A document with more than
+  `classificationBatchSize` cells is now classified in independent, bounded batches instead of one enormous
+  model call — each batch reads `classificationBatchOverlap` context cells on **both** sides so a relationship
+  spanning a batch boundary is still detected, and the partial subgraphs are merged (duplicates deduped) by the
+  graph-merge stage. `classificationBatchConcurrency` bounds how many batches from one document run at once. All
+  three are exposed on `IngestionTuning` (`GET|PUT /v1.0/settings/ingestion`) and per-subject
+  `concurrencyOverrides`, editable live from the admin and subject dashboards. Schema migration 27 applies
+  automatically on startup.
+
 ### Removed
 - **Removed Partio; embedding, chunking, summarization, and model-endpoint management are now native.** The
   external Partio service (`:8400`, chunking/embedding/summarization) has been dropped from the stack

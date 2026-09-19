@@ -44,6 +44,15 @@ namespace Pneuma.Core.Models
         /// <summary>Override for the minimum cell length to summarize, or null to inherit.</summary>
         public int? SummarizationMinCellLength { get; set; } = null;
 
+        /// <summary>Override for the number of cells classified per model call, or null to inherit.</summary>
+        public int? ClassificationBatchSize { get; set; } = null;
+
+        /// <summary>Override for the classification batch context overlap (cells per side), or null to inherit.</summary>
+        public int? ClassificationBatchOverlap { get; set; } = null;
+
+        /// <summary>Override for the number of classification batches processed concurrently within a job, or null to inherit.</summary>
+        public int? ClassificationBatchConcurrency { get; set; } = null;
+
         /// <summary>Override for the per-stage timeout in seconds, or null to inherit.</summary>
         public int? StageTimeoutSeconds { get; set; } = null;
 
@@ -59,6 +68,8 @@ namespace Pneuma.Core.Models
                 && Classification == null && GraphMerge == null && Summarization == null
                 && Chunking == null && Embedding == null && Indexing == null
                 && SummarizationConcurrency == null && SummarizationMinCellLength == null
+                && ClassificationBatchSize == null && ClassificationBatchOverlap == null
+                && ClassificationBatchConcurrency == null
                 && StageTimeoutSeconds == null;
         }
 

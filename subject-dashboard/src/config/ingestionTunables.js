@@ -21,6 +21,10 @@ export const INGESTION_TUNABLE_GROUPS = [
     fields: ['maxConcurrentTasks', 'summarizationConcurrency', 'summarizationMinCellLength']
   },
   {
+    key: 'classificationBatching',
+    fields: ['classificationBatchSize', 'classificationBatchOverlap', 'classificationBatchConcurrency']
+  },
+  {
     key: 'timeouts',
     fields: ['stageTimeoutSeconds']
   }

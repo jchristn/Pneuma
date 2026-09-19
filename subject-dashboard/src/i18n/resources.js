@@ -170,6 +170,7 @@ const en = {
       groups: {
         perStage: 'Per-stage caps',
         jobPool: 'Job pool & summarization',
+        classificationBatching: 'Classification batching',
         timeouts: 'Timeouts'
       },
       fields: {
@@ -185,6 +186,9 @@ const en = {
         maxConcurrentTasks: 'Max concurrent jobs',
         summarizationConcurrency: 'Summarization concurrency',
         summarizationMinCellLength: 'Summarization min cell length',
+        classificationBatchSize: 'Classification batch size',
+        classificationBatchOverlap: 'Classification batch overlap',
+        classificationBatchConcurrency: 'Classification batch concurrency',
         stageTimeoutSeconds: 'Stage timeout (seconds)'
       },
       tips: {
@@ -200,6 +204,9 @@ const en = {
         maxConcurrentTasks: 'Size of the shared ingestion job pool — how many jobs run at once across all stages.',
         summarizationConcurrency: 'Maximum concurrent summarization calls within a single job.',
         summarizationMinCellLength: 'Cells shorter than this many characters are not summarized (0 summarizes everything).',
+        classificationBatchSize: 'Cells classified per model call. Documents larger than this are split into batches, so a slow model never has to classify a whole document in one call.',
+        classificationBatchOverlap: 'Context cells included on each side of a batch so relationships that span a batch boundary are still detected. Duplicates are merged automatically.',
+        classificationBatchConcurrency: 'Maximum classification batches from one document processed at the same time.',
         stageTimeoutSeconds: 'Abort a single ingestion stage if it runs longer than this many seconds.'
       }
     },
@@ -411,6 +418,7 @@ const es = {
       groups: {
         perStage: 'Límites por etapa',
         jobPool: 'Grupo de trabajos y resumen',
+        classificationBatching: 'Lotes de clasificación',
         timeouts: 'Tiempos de espera'
       },
       fields: {
@@ -426,6 +434,9 @@ const es = {
         maxConcurrentTasks: 'Trabajos concurrentes máx.',
         summarizationConcurrency: 'Concurrencia de resumen',
         summarizationMinCellLength: 'Longitud mín. de celda para resumen',
+        classificationBatchSize: 'Tamaño de lote de clasificación',
+        classificationBatchOverlap: 'Solapamiento de lote de clasificación',
+        classificationBatchConcurrency: 'Concurrencia de lotes de clasificación',
         stageTimeoutSeconds: 'Tiempo de espera de etapa (segundos)'
       }
     }

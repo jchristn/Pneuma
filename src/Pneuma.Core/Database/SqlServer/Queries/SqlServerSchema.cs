@@ -204,6 +204,12 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                         "summarizationmincelllength INT NOT NULL, stagetimeoutseconds INT NOT NULL, createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
                     "IF COL_LENGTH('dbo.subjects', 'concurrencyoverridesjson') IS NULL ALTER TABLE dbo.subjects ADD concurrencyoverridesjson NVARCHAR(MAX);"
                 }));
+                list.Add(new SchemaMigration(27, "Add classification batching tuning", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.ingestiontuning', 'classificationbatchsize') IS NULL ALTER TABLE dbo.ingestiontuning ADD classificationbatchsize INT NOT NULL DEFAULT 25;",
+                    "IF COL_LENGTH('dbo.ingestiontuning', 'classificationbatchoverlap') IS NULL ALTER TABLE dbo.ingestiontuning ADD classificationbatchoverlap INT NOT NULL DEFAULT 3;",
+                    "IF COL_LENGTH('dbo.ingestiontuning', 'classificationbatchconcurrency') IS NULL ALTER TABLE dbo.ingestiontuning ADD classificationbatchconcurrency INT NOT NULL DEFAULT 4;"
+                }));
                 return list;
             }
         }
