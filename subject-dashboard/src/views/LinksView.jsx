@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
 import ConfirmModal from '../components/ConfirmModal';
+import Modal from '../components/Modal';
 import ActionMenu from '../components/ActionMenu';
 import StatusPill from '../components/StatusPill';
 import IngestionLogModal from '../components/IngestionLogModal';
@@ -47,6 +48,8 @@ function LinksView() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [notice, setNotice] = useState('');
+  // Background cascade-delete notice shown as a modal (consistent with subject deletion) so it is not missed.
+  const [deleteNotice, setDeleteNotice] = useState('');
 
   const [detail, setDetail] = useState(null);
   const [logTarget, setLogTarget] = useState(null);
@@ -175,7 +178,7 @@ function LinksView() {
     try {
       await apiClient.deleteLink(deleteTarget.id);
       setDeleteTarget(null);
-      setNotice(t('links.deletingBackground', 'We are deleting this content link and everything associated with it in the background. You may close this window.'));
+      setDeleteNotice(t('links.deletingBackground', 'We are deleting this content link and everything associated with it in the background. You may close this window.'));
       await load(false);
     } catch (err) {
       setError(err.message);
@@ -216,7 +219,7 @@ function LinksView() {
       await apiClient.bulkDeleteLinks(selectedItems.map((link) => link.id));
       setBulkDeleteOpen(false);
       clear();
-      setNotice(t('links.deletingBackgroundBulk', 'We are deleting the selected content links in the background. You may close this window.'));
+      setDeleteNotice(t('links.deletingBackgroundBulk', 'We are deleting the selected content links in the background. You may close this window.'));
       await load(false);
     } catch (err) {
       setError(err.message);
@@ -363,6 +366,16 @@ function LinksView() {
           {notice}
         </div>
       )}
+      <Modal
+        isOpen={!!deleteNotice}
+        onClose={() => setDeleteNotice('')}
+        title={t('links.deletingTitle', 'Deleting in the background')}
+      >
+        <p>{deleteNotice}</p>
+        <div className="form-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setDeleteNotice('')}>{t('common.close')}</button>
+        </div>
+      </Modal>
       {subjects.length === 0 && !loading && (
         <div className="error-banner" style={{ background: 'var(--color-warning-bg)', color: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}>
           {t('subjects.empty')}

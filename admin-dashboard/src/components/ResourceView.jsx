@@ -343,6 +343,9 @@ function ResourceView({
     setPendingBulk(null);
     clear();
     await load();
+    // A bulk delete cascades in the background exactly like a single delete — surface the same notice modal
+    // so the operator sees that removal continues after the confirm, rather than getting no feedback.
+    if (action.key === 'delete' && postDeleteNotice) setNoticeOpen(true);
   };
 
   // Resources that expose a server-side bulk-delete endpoint (POST /v1.0/{resource}/delete) are deleted in a

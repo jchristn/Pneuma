@@ -243,6 +243,7 @@ function LinksView() {
         )}
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
+        postDeleteNotice={t('links.deletingBackground', 'We are deleting this content link and everything associated with it in the background. You may close this window.')}
         bulkActions={linkBulkActions}
         extraActions={[
           { key: 'reingest', label: t('links.reingest', 'Reingest Link'), tip: 'Re-run this link’s ingestion pipeline from the beginning.', onClick: (item) => setReingestTarget(item) },
