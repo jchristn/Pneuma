@@ -9,48 +9,41 @@ namespace Pneuma.Core.Ingestion.Pipeline
     using Pneuma.Core.Caching;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Configuration;
     using Pneuma.Core.Ingestion.Enums;
-    using Pneuma.Core.Graph;
-    using Pneuma.Core.Ingestion.Graph;
-    using Pneuma.Core.Integrations.Abstractions;
-    using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations.Models;
-    using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Ingestion.Stages;
+    using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Security;
-    using Pneuma.Core.Serialization;
     using Pneuma.Core.Storage;
-    using Pneuma.Core.Ingestion.Configuration;
     using Radiant;
     using SyslogLogging;
 
     /// <summary>
-    /// Orchestrates a single ingestion job through its two phases — categorization (type detection, cell
-    /// extraction, ontology classification into a candidate plan) and hydration (graph merge, embedding,
-    /// indexing) — handling stage timing, telemetry, operator cancellation, and terminal state. The work
-    /// each stage performs lives in <see cref="IngestionStages"/>; the recording of progress and state
-    /// lives in <see cref="IngestionJournal"/>.
+    /// Orchestrates a single ingestion job through its two phases — categorization (content retrieval, type
+    /// detection, cell extraction, ontology classification into a candidate plan) and hydration (canonicalization,
+    /// graph merge, relationship consolidation, summarization, chunking, embedding, indexing). Each phase is an
+    /// ordered list of <see cref="IStage"/> units run through a single <see cref="StageRunner"/> that applies the
+    /// concurrency gate, per-stage timeout, telemetry, and event logging uniformly. This class owns only the
+    /// cross-stage concerns: the retry loop, the phase boundaries, the delta-skip short-circuit, and terminal state.
     /// </summary>
     public class IngestionProcessor
     {
         #region Private-Members
 
         private readonly DatabaseDriverBase _Db;
-        private readonly IAtomizer _DocumentAtom;
-        private readonly IBlobStore _Blobs;
-        private readonly IArtifactStore _Artifacts;
-        private readonly IContentFetcher _Fetcher;
-        private readonly Aes256Cipher _Cipher;
-        private readonly LoggingModule _Logging;
-        private readonly TelemetryService _Telemetry;
         private readonly IngestionJournal _Journal;
-        private readonly IngestionStages _Stages;
+        private readonly ConcurrencyManager _Concurrency;
+        private readonly TelemetryService _Telemetry;
+        private readonly LoggingModule _Logging;
+        private readonly StageRunner _Runner;
+        private readonly IReadOnlyList<IStage> _CategorizationStages;
+        private readonly IReadOnlyList<IStage> _HydrationStages;
         private readonly int _MaxAttempts;
         private readonly int _RetryBackoffBaseMs;
         private readonly int _RetryBackoffMaxMs;
-        private readonly ConcurrencyManager _Concurrency;
 
         #endregion
 
@@ -66,9 +59,11 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="fetcher">Source content fetcher.</param>
         /// <param name="cipher">Cipher for decrypting model-runner keys.</param>
-        /// <param name="settings">Ingestion settings (per-stage timeout).</param>
+        /// <param name="settings">Ingestion settings (retry policy, embedding cache size).</param>
+        /// <param name="concurrency">Runtime concurrency manager.</param>
         /// <param name="logging">Logging module.</param>
         /// <param name="telemetry">Shared telemetry service for pipeline spans.</param>
+        /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public IngestionProcessor(
             DatabaseDriverBase db,
             IAtomizer documentAtom,
@@ -85,22 +80,37 @@ namespace Pneuma.Core.Ingestion.Pipeline
             TelemetryService telemetry)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
-            _DocumentAtom = documentAtom ?? throw new ArgumentNullException(nameof(documentAtom));
-            _Blobs = blobs ?? throw new ArgumentNullException(nameof(blobs));
-            _Artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
-            _Fetcher = fetcher ?? throw new ArgumentNullException(nameof(fetcher));
-            _Cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             _MaxAttempts = settings.MaxAttempts;
             _RetryBackoffBaseMs = settings.RetryBackoffBaseMs;
             _RetryBackoffMaxMs = settings.RetryBackoffMaxMs;
-            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
+
             _Journal = new IngestionJournal(db, logging);
             // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
             EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
-            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, _Concurrency, logging);
+            StageDependencies deps = new StageDependencies(db, processor, cipher, graphFactory, vectors, artifacts, fetcher, documentAtom, blobs, _Journal, embeddingCache, concurrency, logging);
+            _Runner = new StageRunner(db, _Journal, concurrency, telemetry);
+
+            _CategorizationStages = new List<IStage>
+            {
+                new ContentRetrievalStage(deps),
+                new TypeDetectionStage(deps),
+                new CellExtractionStage(deps),
+                new ClassificationStage(deps)
+            };
+            _HydrationStages = new List<IStage>
+            {
+                new OntologyCanonicalizationStage(deps),
+                new GraphMergeStage(deps),
+                new RelationshipConsolidationStage(deps),
+                new SummarizationStage(deps),
+                new ChunkingStage(deps),
+                new EmbeddingStage(deps),
+                new IndexingStage(deps)
+            };
         }
 
         #endregion
@@ -112,6 +122,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// </summary>
         /// <param name="job">The claimed job (already marked Processing).</param>
         /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="job"/> is null.</exception>
         public async Task ProcessAsync(IngestionJob job, CancellationToken token = default)
         {
             if (job == null) throw new ArgumentNullException(nameof(job));
@@ -128,9 +139,9 @@ namespace Pneuma.Core.Ingestion.Pipeline
                     "Ingestion started for " + job.SourceUrl + ".", 0, token).ConfigureAwait(false);
 
                 // Each claim gets up to MaxAttempts inline attempts: a transient failure (a stage timeout or an
-                // exception from a subordinate service) is retried after an exponential backoff rather than
-                // failing the job outright. Deterministic hard fails (unknown type, no cells, unchanged content)
-                // return a null categorization and are never retried; an operator "Stop" and server shutdown are
+                // exception from a subordinate service) is retried after an exponential backoff. Deterministic hard
+                // fails (unknown type, no cells, no endpoint, no collection) throw IngestionHardFailException and are
+                // never retried; unchanged content completes early; an operator "Stop" and server shutdown are
                 // handled distinctly and never retried.
                 int attempt = 0;
                 while (true)
@@ -143,13 +154,15 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
                     try
                     {
-                        // Stage 1 — Categorization: fetch, atomize, and classify into a candidate plan.
-                        CategorizationResult? categorization = await CategorizeAsync(job, jobSpan, token).ConfigureAwait(false);
-                        if (categorization == null) return; // a hard fail (or delta skip) was already recorded
+                        StageContext context = new StageContext(job);
 
-                        // Stage 2 — Hydration: commit the (auto-approved) candidate plan. There is no manual
-                        // approval gate; categorization flows straight into hydration.
-                        await HydrateAsync(job, categorization, token).ConfigureAwait(false);
+                        // Phase 1 — Categorization: fetch, atomize, and classify into a candidate plan. Returns false
+                        // when the job was already completed early (unchanged content).
+                        bool proceed = await RunCategorizationAsync(context, jobSpan, token).ConfigureAwait(false);
+                        if (!proceed) return;
+
+                        // Phase 2 — Hydration: commit the (auto-approved) candidate plan to the graph and index.
+                        await RunHydrationAsync(context, token).ConfigureAwait(false);
                         jobSpan?.SetOk(null);
                         return;
                     }
@@ -167,6 +180,14 @@ namespace Pneuma.Core.Ingestion.Pipeline
                     {
                         // Server shutdown — let the worker observe cancellation without marking the job failed.
                         throw;
+                    }
+                    catch (IngestionHardFailException e)
+                    {
+                        // Deterministic failure — re-running would fail identically, so fail now without retrying.
+                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed (non-retryable) at " + e.Stage + ": " + e.Message);
+                        jobSpan?.SetError(e.Message);
+                        await _Journal.FailAsync(job, e.Stage, e.Message, token).ConfigureAwait(false);
+                        return;
                     }
                     catch (OperationCanceledException)
                     {
@@ -197,8 +218,13 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
         #region Private-Methods
 
-        private async Task<CategorizationResult?> CategorizeAsync(IngestionJob job, RadiantSpan? jobSpan, CancellationToken token)
+        /// <summary>
+        /// Run the categorization phase's ordered stages. Returns true to proceed to hydration, or false when the
+        /// job was completed early because the fetched content is unchanged since the last successful ingestion.
+        /// </summary>
+        private async Task<bool> RunCategorizationAsync(StageContext context, RadiantSpan? jobSpan, CancellationToken token)
         {
+            IngestionJob job = context.Job;
             using (RadiantSpan? phaseSpan = _Telemetry.StartSpan("phase:Categorization", SpanKindEnum.Internal))
             {
                 phaseSpan?.SetTag("pneuma.phase", "Categorization");
@@ -208,80 +234,31 @@ namespace Pneuma.Core.Ingestion.Pipeline
                 string phaseOutcome = "ok";
                 try
                 {
-                    byte[] data = await RunStageAsync(job, IngestionStageEnum.ContentRetrieval,
-                        stageToken => DownloadAsync(job, stageToken),
-                        result => "Content retrieval complete — fetched " + result.Length + " byte(s) from " + job.SourceUrl + ".",
-                        token).ConfigureAwait(false);
-                    await _Journal.TryStoreAsync("source", () => _Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
-
-                    // Delta detection: hash the fetched bytes and, if they are identical to what the link last ingested
-                    // successfully, skip the expensive type-detect / extract / classify / merge / embed / index work and
-                    // complete immediately. Re-processing identical content is deterministic, so skipping is safe and
-                    // saves the LLM + embedding cost. A previously-failed link has no stored hash and always re-processes.
-                    string contentHash = ComputeContentHash(data);
-                    SubjectLink? existingLink = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
-                    if (existingLink != null
-                        && existingLink.Status == SubjectLinkStatusEnum.Ingested
-                        && !String.IsNullOrEmpty(existingLink.ContentHash)
-                        && String.Equals(existingLink.ContentHash, contentHash, StringComparison.Ordinal))
+                    foreach (IStage stage in _CategorizationStages)
                     {
-                        await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
-                            "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
-                            0, token).ConfigureAwait(false);
-                        await _Journal.CompleteAsync(job, token, contentHash).ConfigureAwait(false);
-                        jobSpan?.SetOk(null);
-                        return null;
+                        await _Runner.RunAsync(stage, context, token).ConfigureAwait(false);
+
+                        // Delta detection short-circuit: content retrieval found the fetched bytes unchanged since the
+                        // last successful ingestion, so skip the remaining (deterministic) work and complete now.
+                        if (context.CompleteEarly)
+                        {
+                            await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
+                                "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
+                                0, token).ConfigureAwait(false);
+                            await _Journal.CompleteAsync(job, token, context.ContentHash).ConfigureAwait(false);
+                            jobSpan?.SetOk(null);
+                            return false;
+                        }
                     }
 
-                    TypeDetectResult detected = await RunStageAsync(job, IngestionStageEnum.TypeDetection,
-                        stageToken => _DocumentAtom.DetectTypeAsync(data, stageToken),
-                        result => "Type detection complete — detected document type: " + result.Type + " (" + result.MimeType + ").",
-                        token).ConfigureAwait(false);
-                    if (detected.IsUnknown)
-                    {
-                        phaseOutcome = "failed";
-                        phaseSpan?.SetError("Unknown or unsupported document type.");
-                        jobSpan?.SetError("Unknown or unsupported document type.");
-                        await _Journal.FailAsync(job, IngestionStageEnum.TypeDetection, "Unknown or unsupported document type.", token).ConfigureAwait(false);
-                        return null;
-                    }
-                    job.DocumentType = detected.Type;
-
-                    List<ExtractedCell> cells = await RunStageAsync(job, IngestionStageEnum.CellExtraction,
-                        stageToken => _DocumentAtom.ExtractCellsAsync(detected.Type, data, stageToken),
-                        result => "Semantic cell extraction complete — extracted " + result.Count + " cell(s).",
-                        token).ConfigureAwait(false);
-                    job.BlobKey = await _Blobs.WriteAsync(job.Id, data, token).ConfigureAwait(false);
-                    await _Journal.TryStoreAsync("atoms", () => _Artifacts.PutAtomsAsync(job.LinkId, Json.Serialize(cells), token), token).ConfigureAwait(false);
-                    if (cells.Count == 0)
-                    {
-                        phaseOutcome = "failed";
-                        phaseSpan?.SetError("No semantic cells extracted.");
-                        jobSpan?.SetError("No semantic cells extracted.");
-                        await _Journal.FailAsync(job, IngestionStageEnum.CellExtraction, "No semantic cells extracted.", token).ConfigureAwait(false);
-                        return null;
-                    }
-
-                    Subject? subject = await _Db.Subjects.ReadByIdAsync(job.SubjectId, token).ConfigureAwait(false);
-                    string subjectName = subject?.DisplayName ?? "Unknown subject";
-
-                    CandidateSubgraph subgraph = await RunStageAsync(job, IngestionStageEnum.Classification,
-                        stageToken => _Stages.ClassifyAsync(job, cells, subjectName, stageToken),
-                        result => "Ontology / knowledge-graph mapping complete — proposed " + result.Nodes.Count + " node(s) and " + result.Edges.Count + " relationship(s).",
-                        token).ConfigureAwait(false);
-                    await _Journal.TryStoreAsync("subgraph", () => _Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
-
-                    string provenance = await _Stages.BuildPromptProvenanceAsync(job, token).ConfigureAwait(false);
-
-                    // End of the categorization phase: the candidate plan (proposed subgraph) is persisted and, under
-                    // auto-approval, flows straight into hydration. Emitted as Completed (not Processing) so the phase
-                    // reads as finished; the prompt provenance is folded in rather than logged as a separate row.
+                    // End of categorization: the candidate plan is persisted and, under auto-approval, flows straight
+                    // into hydration. Emitted as Completed (not Processing) so the phase reads as finished; the prompt
+                    // provenance is folded in rather than logged as a separate row.
                     await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
-                        "Categorization complete — candidate plan proposes " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count +
-                        " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + provenance + ".",
+                        "Categorization complete — candidate plan proposes " + context.Subgraph.Nodes.Count + " node(s) and " + context.Subgraph.Edges.Count +
+                        " relationship(s); auto-approved, proceeding to hydration. Prompt provenance (for reproducibility): " + context.Provenance + ".",
                         phaseSw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
-
-                    return new CategorizationResult { Cells = cells, Subgraph = subgraph, ContentHash = contentHash };
+                    return true;
                 }
                 catch (Exception)
                 {
@@ -297,8 +274,10 @@ namespace Pneuma.Core.Ingestion.Pipeline
             }
         }
 
-        private async Task HydrateAsync(IngestionJob job, CategorizationResult categorization, CancellationToken token)
+        /// <summary>Run the hydration phase's ordered stages and complete the job.</summary>
+        private async Task RunHydrationAsync(StageContext context, CancellationToken token)
         {
+            IngestionJob job = context.Job;
             using (RadiantSpan? phaseSpan = _Telemetry.StartSpan("phase:Hydration", SpanKindEnum.Internal))
             {
                 phaseSpan?.SetTag("pneuma.phase", "Hydration");
@@ -308,56 +287,21 @@ namespace Pneuma.Core.Ingestion.Pipeline
                 string phaseOutcome = "ok";
                 try
                 {
-                    // Start of the hydration phase: commit the approved plan to the graph, embeddings, and index.
                     await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Processing,
                         "Hydration started — committing the candidate plan to the knowledge graph and search index.",
                         0, token).ConfigureAwait(false);
 
-                    await RunStageAsync(job, IngestionStageEnum.OntologyCanonicalization,
-                        stageToken => _Stages.CanonicalizeAsync(job, categorization.Subgraph, stageToken),
-                        result => "Ontology canonicalization complete — normalized " + result + " node/edge type(s) to the canonical ontology.",
-                        token).ConfigureAwait(false);
+                    foreach (IStage stage in _HydrationStages)
+                    {
+                        await _Runner.RunAsync(stage, context, token).ConfigureAwait(false);
+                    }
 
-                    MergeResult merge = await RunStageAsync(job, IngestionStageEnum.GraphMerge,
-                        stageToken => _Stages.MergeAsync(job, categorization.Subgraph, categorization.Cells, stageToken),
-                        result => "Knowledge-graph insertion complete — inserted/linked " + result.NodeIds.Count + " node(s), including a cell node per extracted cell.",
-                        token).ConfigureAwait(false);
-                    job.GraphNodeIds = merge.NodeIds;
-
-                    await RunStageAsync(job, IngestionStageEnum.RelationshipConsolidation,
-                        stageToken => _Stages.ConsolidateRelationshipsAsync(job, categorization.Subgraph, merge, stageToken),
-                        result => "Relationship consolidation complete — created " + result.CreatedCount + " new relationship(s), consolidated " + result.ConsolidatedCount + " re-asserted one(s).",
-                        token).ConfigureAwait(false);
-
-                    // Summarization, chunking, and embedding run as three discrete, independently-timed stages.
-                    List<CellSummary> summaries = await RunStageAsync(job, IngestionStageEnum.Summarization,
-                        stageToken => _Stages.SummarizeCellsAsync(job, categorization.Cells, merge.CellNodeIds, stageToken),
-                        result => "Summarization complete — produced " + result.Count + " summary(ies) from " + categorization.Cells.Count + " cell(s).",
-                        token).ConfigureAwait(false);
-
-                    List<SemanticChunk> chunks = await RunStageAsync(job, IngestionStageEnum.Chunking,
-                        stageToken => _Stages.ChunkCellsAsync(job, categorization.Cells, merge.CellNodeIds, summaries, stageToken),
-                        result => "Chunking complete — produced " + result.Count + " chunk(s) from " + categorization.Cells.Count + " cell(s) and " + summaries.Count + " summary(ies).",
-                        token).ConfigureAwait(false);
-
-                    List<SemanticChunk> embeddedChunks = await RunStageAsync(job, IngestionStageEnum.Embedding,
-                        stageToken => _Stages.EmbedChunksAsync(job, chunks, stageToken),
-                        result => "Embedding complete — produced " + IngestionStages.CountEmbeddings(result) + " embedding vector(s) across " + result.Count + " chunk(s).",
-                        token).ConfigureAwait(false);
-                    await _Stages.PersistChunkArtifactsAsync(job, embeddedChunks, token).ConfigureAwait(false);
-
-                    await RunStageAsync(job, IngestionStageEnum.Indexing,
-                        stageToken => _Stages.IndexAsync(job, merge, embeddedChunks, stageToken),
-                        result => "Search indexing complete — stored " + result + " chunk document(s) in collection " + job.CollectionId + ", each linked back to its knowledge-graph node.",
-                        token).ConfigureAwait(false);
-
-                    // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish;
-                    // its "Hydration started" marker now has a matching completion before the job itself completes.
+                    // Close out the hydration phase so it does not linger as "Processing" after its sub-stages finish.
                     await _Journal.RecordEventAsync(job, IngestionStageEnum.Hydration, IngestionStatusEnum.Completed,
                         "Hydration complete — knowledge graph and search index updated.",
                         phaseSw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
 
-                    await _Journal.CompleteAsync(job, token, categorization.ContentHash).ConfigureAwait(false);
+                    await _Journal.CompleteAsync(job, token, context.ContentHash).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -373,30 +317,10 @@ namespace Pneuma.Core.Ingestion.Pipeline
             }
         }
 
-        /// <summary>Compute the hex SHA-256 of the fetched source bytes, used for re-ingestion delta detection.</summary>
-        /// <param name="data">The fetched source bytes.</param>
-        /// <returns>A lowercase hex SHA-256 string.</returns>
-        private static string ComputeContentHash(byte[] data)
-        {
-            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
-            {
-                byte[] hash = sha.ComputeHash(data ?? Array.Empty<byte>());
-                System.Text.StringBuilder builder = new System.Text.StringBuilder(hash.Length * 2);
-                for (int i = 0; i < hash.Length; i++) builder.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
-                return builder.ToString();
-            }
-        }
-
-        private async Task<byte[]> DownloadAsync(IngestionJob job, CancellationToken token)
-        {
-            return await _Fetcher.FetchAsync(job.SourceUrl, token).ConfigureAwait(false);
-        }
-
         /// <summary>
-        /// Decide whether a transiently-failed attempt should be retried and, if so, back off before the next
-        /// one. Returns true when the caller should retry (having waited the backoff), false when attempts are
-        /// exhausted and the job should fail. Bumps the persisted attempt count and records a "retrying" event
-        /// so the contention is visible in the follow-logs. Propagates cancellation on server shutdown.
+        /// Decide whether a transiently-failed attempt should be retried and, if so, back off before the next one.
+        /// Returns true when the caller should retry (having waited the backoff), false when attempts are exhausted.
+        /// Bumps the persisted attempt count and records a "retrying" event so the contention is visible in the log.
         /// </summary>
         /// <param name="job">The job.</param>
         /// <param name="attempt">The 1-based attempt number that just failed.</param>
@@ -415,8 +339,6 @@ namespace Pneuma.Core.Ingestion.Pipeline
                 " failed (" + reason + "); retrying in " + (delayMs / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "s.",
                 0, token).ConfigureAwait(false);
 
-            // Any in-place failure marker from a contended stage on this attempt is cleared at the top of the
-            // next loop iteration; the backoff delay observes shutdown by throwing (handled by the caller).
             if (delayMs > 0) await Task.Delay(delayMs, token).ConfigureAwait(false);
             return true;
         }
@@ -431,104 +353,6 @@ namespace Pneuma.Core.Ingestion.Pipeline
             if (scaled > _RetryBackoffMaxMs) scaled = _RetryBackoffMaxMs;
             if (scaled > Int32.MaxValue) scaled = Int32.MaxValue;
             return (int)scaled;
-        }
-
-        private async Task<T> RunStageAsync<T>(
-            IngestionJob job,
-            IngestionStageEnum stage,
-            Func<CancellationToken, Task<T>> action,
-            Func<T, string> message,
-            CancellationToken token)
-        {
-            // Honor an operator "Stop": if the job was cancelled out-of-band, abort before the next stage.
-            IngestionJob? current = await _Db.IngestionJobs.ReadAsync(job.TenantId, job.Id, token).ConfigureAwait(false);
-            if (current != null && current.Status == IngestionStatusEnum.Cancelled) throw new JobCancelledException();
-
-            job.Stage = stage;
-            await _Journal.UpdateJobAsync(job, token).ConfigureAwait(false);
-
-            // Per-stage concurrency gate (runtime-adjustable via the ConcurrencyManager / Padlock): bound how
-            // many jobs run this stage at once, per subject or by the shared system default. Acquisition happens
-            // outside the stage timeout so time spent waiting for a slot is not charged against it. When no slot
-            // is immediately free (the acquire ValueTask has not completed synchronously), surface a "waiting"
-            // event so the follow-logs make the contention visible rather than looking stalled.
-            IngestionJobEvent? queuedEvent = null;
-            double queueMs = 0;
-            ValueTask<IDisposable> acquire = _Concurrency.AcquireStageAsync(stage, job.SubjectId, token);
-            Stopwatch queueSw = Stopwatch.StartNew();
-            if (!acquire.IsCompleted)
-            {
-                queuedEvent = await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Queued,
-                    "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
-                    0, token).ConfigureAwait(false);
-            }
-            IDisposable slot = await acquire.ConfigureAwait(false);
-            queueSw.Stop();
-            if (queuedEvent != null) queueMs = queueSw.Elapsed.TotalMilliseconds;
-            try
-            {
-                using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage, SpanKindEnum.Internal))
-                {
-                    span?.SetTag("pneuma.stage", stage.ToString());
-                    span?.SetTag("pneuma.job.id", job.Id);
-
-                    Stopwatch sw = Stopwatch.StartNew();
-                    try
-                    {
-                        using (CancellationTokenSource stageCts = CancellationTokenSource.CreateLinkedTokenSource(token))
-                        {
-                            stageCts.CancelAfter(TimeSpan.FromSeconds(_Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId)));
-                            T result = await action(stageCts.Token).ConfigureAwait(false);
-                            sw.Stop();
-                            PneumaMetrics.RecordIngestionStage(stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
-                            span?.SetOk(null);
-
-                            // If the stage was contended, update its queued entry in place (carrying the wait
-                            // time) rather than appending a second row for the same stage.
-                            if (queuedEvent != null)
-                            {
-                                await _Journal.ResolveEventAsync(queuedEvent, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, queueMs, token).ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Completed, message(result), sw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
-                            }
-                            return result;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        sw.Stop();
-                        PneumaMetrics.RecordIngestionStage(stage.ToString(), "failed", sw.Elapsed.TotalSeconds);
-                        span?.RecordException(e, true);
-                        span?.SetError(e.Message);
-
-                        // Resolve a contended stage's queued entry to Failed in place so it isn't left dangling
-                        // as a "queued" row beside the failure. Skip on server shutdown (outer-token cancel),
-                        // where the queued entry is intentionally left as-is. The transient marker tells the
-                        // failure handler the terminal event is already recorded, avoiding a duplicate row.
-                        if (queuedEvent != null && !token.IsCancellationRequested)
-                        {
-                            await _Journal.ResolveEventAsync(queuedEvent, IngestionStatusEnum.Failed, e.Message, sw.Elapsed.TotalMilliseconds, queueMs, token).ConfigureAwait(false);
-                            job.StageFailureRecorded = true;
-                        }
-                        throw;
-                    }
-                }
-            }
-            finally
-            {
-                slot.Dispose();
-            }
-        }
-
-        #endregion
-
-        #region Nested-Types
-
-        /// <summary>Raised internally when an operator cancels a job mid-flight so the pipeline stops without failing.</summary>
-        private sealed class JobCancelledException : Exception
-        {
         }
 
         #endregion

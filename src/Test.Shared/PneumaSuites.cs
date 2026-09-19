@@ -26,6 +26,7 @@ namespace Test.Shared
                     GraphSuite.Build(),
                     RetrievalSuite.Build(),
                     IngestionSuite.Build(),
+                    IngestionStagesSuite.Build(),
                     ExternalServicesSuite.Build(),
                     ApiSuite.Build(),
                     CollectionsSuite.Build(),

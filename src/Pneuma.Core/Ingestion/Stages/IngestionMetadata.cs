@@ -10,8 +10,8 @@ namespace Pneuma.Core.Ingestion.Stages
 
     /// <summary>
     /// Stamps a job's operator-supplied labels and tags onto its ingested chunks (RecallDB tags) and its source
-    /// graph node (LiteGraph labels/tags), guarding the reserved provenance and ontology keys. Factored out of
-    /// <see cref="IngestionStages"/> so that pipeline class stays focused on stage orchestration.
+    /// graph node (LiteGraph labels/tags), guarding the reserved provenance and ontology keys. Shared by the
+    /// graph-merge and indexing stages so their stage classes stay focused on their own work.
     /// </summary>
     public static class IngestionMetadata
     {

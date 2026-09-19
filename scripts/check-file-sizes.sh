@@ -26,17 +26,13 @@ BACKEND_ALLOWLIST=(
   # A single test suite: many independent TestCaseDescriptors in one static class.
   "src/Test.Shared/Suites/ApiSuite.cs"
   "src/Test.Shared/Suites/DatabaseSuite.cs"
+  # The per-stage ingestion suite: success + failure case per pipeline stage, plus the shared test fakes.
+  "src/Test.Shared/Suites/IngestionStagesSuite.cs"
   # A single cohesive class of MCP entity/report tool handlers (one method per tool).
   "src/Pneuma.Server/Mcp/McpEntityTools.cs"
   # The declarative MCP tool catalog: one static class of tool-schema descriptors (the tools/list contract).
   # Splitting the schema data across files would hurt discoverability of the single source of tool truth.
   "src/Pneuma.Server/Mcp/McpToolCatalog.cs"
-  # The ingestion pipeline's per-stage work in one region-organized class (metadata stamping already split out
-  # into IngestionMetadata.cs); the stages share enough context that further splitting hurts readability.
-  "src/Pneuma.Core/Ingestion/Stages/IngestionStages.cs"
-  # The ingestion orchestrator: the retry loop, the per-stage span+meter runner, and the two phase methods in
-  # one cohesive region-organized class; splitting the shared job/attempt/telemetry state across files hurts it.
-  "src/Pneuma.Core/Ingestion/Pipeline/IngestionProcessor.cs"
   # The content-link route registrar: one class of related link endpoints (submit/bulk, list/read, log,
   # source/atoms/chunks/vectors/subgraph artifacts, delete/bulk-delete, reingest/bulk-reingest) sharing helpers.
   "src/Pneuma.Server/Routes/SubjectLinkRoutes.cs"
