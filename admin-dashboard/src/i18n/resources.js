@@ -87,7 +87,8 @@ const en = {
       prompts: 'Prompts',
       requests: 'Request History',
       explorer: 'API Explorer',
-      settings: 'Settings'
+      settings: 'Settings',
+      processing: 'Processing'
     },
     topbar: {
       theme: 'Toggle theme',
@@ -269,7 +270,62 @@ const en = {
       subtitle: 'Thumbs up/down and comments left on chat answers.'
     },
     subjects: {
-      viewLinks: 'View Links'
+      viewLinks: 'View Links',
+      concurrencyOverrides: 'Concurrency overrides (advanced)',
+      concurrencyOverridesTip: 'Optional per-subject ingestion concurrency. Each knob overrides the system default for this subject only; leave a field blank to inherit the current default (shown as its placeholder).',
+      concurrencyOverridesHint: 'Advanced. Blank fields inherit the system default shown as the placeholder. Only the fields you set are saved as overrides.',
+      overrideDefault: 'Default {{value}}',
+      overrideInherit: 'Inherit default'
+    },
+    processing: {
+      title: 'Processing',
+      subtitle: 'System-default ingestion concurrency. Changes are applied live — no restart required.',
+      liveNotice: 'Changes take effect immediately across new ingestion work — no server restart is required.',
+      save: 'Save defaults',
+      saved: 'Ingestion concurrency saved and applied.',
+      saveError: 'Failed to save ingestion concurrency.',
+      loadError: 'Failed to load ingestion concurrency.',
+      forbidden: 'You do not have permission to view or edit ingestion concurrency.',
+      groups: {
+        perStage: 'Per-stage caps',
+        jobPool: 'Job pool & summarization',
+        timeouts: 'Timeouts'
+      },
+      groupHints: {
+        perStage: 'The maximum number of items each pipeline stage processes in parallel.',
+        jobPool: 'How many ingestion jobs run at once, plus summarization tuning.',
+        timeouts: 'Per-stage time limits before an ingestion stage is aborted.'
+      },
+      fields: {
+        contentRetrieval: 'Content retrieval',
+        typeDetection: 'Type detection',
+        cellExtraction: 'Cell extraction',
+        classification: 'Classification',
+        graphMerge: 'Graph merge',
+        summarization: 'Summarization',
+        chunking: 'Chunking',
+        embedding: 'Embedding',
+        indexing: 'Indexing',
+        maxConcurrentTasks: 'Max concurrent jobs',
+        summarizationConcurrency: 'Summarization concurrency',
+        summarizationMinCellLength: 'Summarization min cell length',
+        stageTimeoutSeconds: 'Stage timeout (seconds)'
+      },
+      tips: {
+        contentRetrieval: 'Maximum source URLs fetched in parallel during the content-retrieval stage.',
+        typeDetection: 'Maximum documents whose type is detected in parallel.',
+        cellExtraction: 'Maximum documents parsed into semantic cells in parallel.',
+        classification: 'Maximum cells classified against the ontology in parallel.',
+        graphMerge: 'Maximum graph-merge operations run in parallel when writing entities and relationships.',
+        summarization: 'Maximum summarization operations run in parallel across the pipeline.',
+        chunking: 'Maximum documents chunked for retrieval in parallel.',
+        embedding: 'Maximum embedding batches computed in parallel. Match to your embedding endpoint throughput.',
+        indexing: 'Maximum index/upsert batches written to the retrieval store in parallel.',
+        maxConcurrentTasks: 'Size of the shared ingestion job pool — how many jobs run at once across all stages.',
+        summarizationConcurrency: 'Maximum concurrent summarization calls within a single job.',
+        summarizationMinCellLength: 'Cells shorter than this many characters are not summarized (0 summarizes everything).',
+        stageTimeoutSeconds: 'Abort a single ingestion stage if it runs longer than this many seconds.'
+      }
     },
     ask: {
       subtitle: 'Chat with the corpus. The assistant can search and traverse the knowledge graph to answer.',

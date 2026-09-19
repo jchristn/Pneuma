@@ -18,8 +18,8 @@ namespace Pneuma.Server.Services
         private readonly DatabaseDriverBase _Db;
         private readonly IngestionProcessor _Processor;
         private readonly IngestionSettings _Settings;
+        private readonly ConcurrencyManager _Concurrency;
         private readonly LoggingModule _Logging;
-        private readonly SemaphoreSlim _Slots;
         private Task? _Loop;
 
         #endregion
@@ -31,13 +31,13 @@ namespace Pneuma.Server.Services
         /// <param name="processor">Ingestion processor.</param>
         /// <param name="settings">Ingestion settings.</param>
         /// <param name="logging">Logging module.</param>
-        public IngestionWorkerService(DatabaseDriverBase db, IngestionProcessor processor, IngestionSettings settings, LoggingModule logging)
+        public IngestionWorkerService(DatabaseDriverBase db, IngestionProcessor processor, IngestionSettings settings, ConcurrencyManager concurrency, LoggingModule logging)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Processor = processor ?? throw new ArgumentNullException(nameof(processor));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _Slots = new SemaphoreSlim(_Settings.MaxConcurrentTasks, _Settings.MaxConcurrentTasks);
         }
 
         #endregion
@@ -60,9 +60,10 @@ namespace Pneuma.Server.Services
         {
             while (!token.IsCancellationRequested)
             {
+                IDisposable slot;
                 try
                 {
-                    await _Slots.WaitAsync(token).ConfigureAwait(false);
+                    slot = await _Concurrency.AcquireJobSlotAsync(token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -81,7 +82,7 @@ namespace Pneuma.Server.Services
 
                 if (job == null)
                 {
-                    _Slots.Release();
+                    slot.Dispose();
                     try
                     {
                         await Task.Delay(_Settings.PollIntervalMs, token).ConfigureAwait(false);
@@ -94,6 +95,7 @@ namespace Pneuma.Server.Services
                 }
 
                 IngestionJob claimed = job;
+                IDisposable held = slot;
                 _ = Task.Run(async () =>
                 {
                     try
@@ -106,7 +108,7 @@ namespace Pneuma.Server.Services
                     }
                     finally
                     {
-                        _Slots.Release();
+                        held.Dispose();
                     }
                 }, token);
             }

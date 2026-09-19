@@ -337,6 +337,32 @@
             },
             "url": "{{baseUrl}}/v1.0/settings"
           }
+        },
+        {
+          "name": "Get Ingestion Settings",
+          "description": "Read the dashboard-tunable ingestion concurrency (IngestionTuning): per-stage caps plus the job pool, summarization, and timeout knobs. Admin-only.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/settings/ingestion"
+          }
+        },
+        {
+          "name": "Update Ingestion Settings",
+          "description": "Persist and apply (live, no restart) the ingestion concurrency defaults. GET /v1.0/settings/ingestion first, then edit and PUT the same shape.",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentRetrieval\": 4,\n  \"typeDetection\": 8,\n  \"cellExtraction\": 4,\n  \"classification\": 4,\n  \"graphMerge\": 2,\n  \"summarization\": 4,\n  \"chunking\": 8,\n  \"embedding\": 4,\n  \"indexing\": 4,\n  \"maxConcurrentTasks\": 4,\n  \"summarizationConcurrency\": 4,\n  \"summarizationMinCellLength\": 200,\n  \"stageTimeoutSeconds\": 300\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/settings/ingestion"
+          }
         }
       ]
     },
@@ -399,6 +425,7 @@
       "item": [
         {
           "name": "Create Subject",
+          "description": "Optionally include a nullable-per-field `concurrencyOverrides` object (same keys as PUT /v1.0/settings/ingestion) to override ingestion concurrency for this subject; omitted/null fields inherit the system default. See the Update Subject example.",
           "event": [
             {
               "listen": "test",
@@ -627,7 +654,7 @@
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"example-subject\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Example Subject's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\"\n}"
+              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"example-subject\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Example Subject's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\",\n  \"concurrencyOverrides\": {\n    \"embedding\": 2,\n    \"maxConcurrentTasks\": 2\n  }\n}"
             }
           }
         },

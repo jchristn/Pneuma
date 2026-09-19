@@ -195,6 +195,15 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                 {
                     "ALTER TABLE ingestionjobs ADD COLUMN IF NOT EXISTS deletionstatus TEXT NOT NULL DEFAULT 'None';"
                 }));
+                list.Add(new SchemaMigration(26, "Add ingestion tuning singleton and subject concurrency overrides", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS ingestiontuning (" +
+                        "id TEXT PRIMARY KEY, contentretrieval INTEGER NOT NULL, typedetection INTEGER NOT NULL, cellextraction INTEGER NOT NULL, " +
+                        "classification INTEGER NOT NULL, graphmerge INTEGER NOT NULL, summarization INTEGER NOT NULL, chunking INTEGER NOT NULL, " +
+                        "embedding INTEGER NOT NULL, indexing INTEGER NOT NULL, maxconcurrenttasks INTEGER NOT NULL, summarizationconcurrency INTEGER NOT NULL, " +
+                        "summarizationmincelllength INTEGER NOT NULL, stagetimeoutseconds INTEGER NOT NULL, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                    "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS concurrencyoverridesjson TEXT;"
+                }));
                 return list;
             }
         }

@@ -160,7 +160,48 @@ const en = {
       graphRoot: 'Graph Root',
       createTitle: 'Create Subject',
       editTitle: 'Edit Subject',
-      empty: 'You have no subjects yet. Create one to start submitting content links.'
+      empty: 'You have no subjects yet. Create one to start submitting content links.',
+      concurrencyOverrides: 'Concurrency overrides (advanced)',
+      concurrencyOverridesHint: 'Advanced. Blank fields inherit the system default shown as the placeholder. Only the fields you set are saved as overrides.',
+      overrideDefault: 'Default {{value}}',
+      overrideInherit: 'Inherit default'
+    },
+    processing: {
+      groups: {
+        perStage: 'Per-stage caps',
+        jobPool: 'Job pool & summarization',
+        timeouts: 'Timeouts'
+      },
+      fields: {
+        contentRetrieval: 'Content retrieval',
+        typeDetection: 'Type detection',
+        cellExtraction: 'Cell extraction',
+        classification: 'Classification',
+        graphMerge: 'Graph merge',
+        summarization: 'Summarization',
+        chunking: 'Chunking',
+        embedding: 'Embedding',
+        indexing: 'Indexing',
+        maxConcurrentTasks: 'Max concurrent jobs',
+        summarizationConcurrency: 'Summarization concurrency',
+        summarizationMinCellLength: 'Summarization min cell length',
+        stageTimeoutSeconds: 'Stage timeout (seconds)'
+      },
+      tips: {
+        contentRetrieval: 'Maximum source URLs fetched in parallel during the content-retrieval stage.',
+        typeDetection: 'Maximum documents whose type is detected in parallel.',
+        cellExtraction: 'Maximum documents parsed into semantic cells in parallel.',
+        classification: 'Maximum cells classified against the ontology in parallel.',
+        graphMerge: 'Maximum graph-merge operations run in parallel when writing entities and relationships.',
+        summarization: 'Maximum summarization operations run in parallel across the pipeline.',
+        chunking: 'Maximum documents chunked for retrieval in parallel.',
+        embedding: 'Maximum embedding batches computed in parallel. Match to your embedding endpoint throughput.',
+        indexing: 'Maximum index/upsert batches written to the retrieval store in parallel.',
+        maxConcurrentTasks: 'Size of the shared ingestion job pool — how many jobs run at once across all stages.',
+        summarizationConcurrency: 'Maximum concurrent summarization calls within a single job.',
+        summarizationMinCellLength: 'Cells shorter than this many characters are not summarized (0 summarizes everything).',
+        stageTimeoutSeconds: 'Abort a single ingestion stage if it runs longer than this many seconds.'
+      }
     },
     links: {
       title: 'Content Links',
@@ -359,6 +400,34 @@ const es = {
       restart: 'Reiniciar',
       actions: 'Acciones',
       status: 'Estado'
+    },
+    subjects: {
+      concurrencyOverrides: 'Anulaciones de concurrencia (avanzado)',
+      concurrencyOverridesHint: 'Avanzado. Los campos en blanco heredan el valor predeterminado del sistema mostrado como marcador. Solo se guardan los campos que definas.',
+      overrideDefault: 'Predeterminado {{value}}',
+      overrideInherit: 'Heredar predeterminado'
+    },
+    processing: {
+      groups: {
+        perStage: 'Límites por etapa',
+        jobPool: 'Grupo de trabajos y resumen',
+        timeouts: 'Tiempos de espera'
+      },
+      fields: {
+        contentRetrieval: 'Recuperación de contenido',
+        typeDetection: 'Detección de tipo',
+        cellExtraction: 'Extracción de celdas',
+        classification: 'Clasificación',
+        graphMerge: 'Fusión de grafo',
+        summarization: 'Resumen',
+        chunking: 'Fragmentación',
+        embedding: 'Incrustación',
+        indexing: 'Indexación',
+        maxConcurrentTasks: 'Trabajos concurrentes máx.',
+        summarizationConcurrency: 'Concurrencia de resumen',
+        summarizationMinCellLength: 'Longitud mín. de celda para resumen',
+        stageTimeoutSeconds: 'Tiempo de espera de etapa (segundos)'
+      }
     }
   }
 };

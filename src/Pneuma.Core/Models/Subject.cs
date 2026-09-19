@@ -1,6 +1,8 @@
 namespace Pneuma.Core.Models
 {
     using System;
+    using System.Text.Json;
+    using System.Text.Json.Serialization;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
 
@@ -190,6 +192,21 @@ namespace Pneuma.Core.Models
         /// </summary>
         public bool PublishedForChat { get; set; } = true;
 
+        /// <summary>
+        /// The subject's ingestion concurrency/tuning overrides, serialized as JSON, or null when the subject
+        /// inherits the system defaults for everything. Persisted form; the API surface uses
+        /// <see cref="ConcurrencyOverrides"/>.
+        /// </summary>
+        [JsonIgnore]
+        public string? ConcurrencyOverridesJson { get; set; } = null;
+
+        /// <summary>The subject's ingestion concurrency overrides (null to inherit the system defaults for everything).</summary>
+        public SubjectConcurrencyOverrides? ConcurrencyOverrides
+        {
+            get { return GetConcurrencyOverrides(); }
+            set { SetConcurrencyOverrides(value); }
+        }
+
         /// <summary>Whether the subject is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 
@@ -198,6 +215,27 @@ namespace Pneuma.Core.Models
 
         /// <summary>UTC last-update timestamp.</summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>Deserialize the subject's concurrency overrides, or null when none are set / the JSON is invalid.</summary>
+        /// <returns>The overrides, or null.</returns>
+        public SubjectConcurrencyOverrides? GetConcurrencyOverrides()
+        {
+            if (String.IsNullOrWhiteSpace(ConcurrencyOverridesJson)) return null;
+            try { return JsonSerializer.Deserialize<SubjectConcurrencyOverrides>(ConcurrencyOverridesJson!); }
+            catch (JsonException) { return null; }
+        }
+
+        /// <summary>Set the subject's concurrency overrides; a null or empty set clears the stored JSON.</summary>
+        /// <param name="overrides">The overrides to store, or null to clear.</param>
+        public void SetConcurrencyOverrides(SubjectConcurrencyOverrides? overrides)
+        {
+            if (overrides == null || overrides.IsEmpty()) { ConcurrencyOverridesJson = null; return; }
+            ConcurrencyOverridesJson = JsonSerializer.Serialize(overrides);
+        }
 
         #endregion
 

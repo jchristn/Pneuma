@@ -9,6 +9,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
 import CopyableId from '../components/CopyableId';
 import FacetFilterEditor from '../components/FacetFilterEditor';
+import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
 
 
 // Sensible starter prompts pre-filled when creating a subject. Appended after the global prompts, so they
@@ -42,7 +43,8 @@ const EMPTY_FORM = {
   ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION,
   rerankingPrompt: DEFAULT_RERANKING_PROMPT,
   promptRewritePrompt: DEFAULT_PROMPT_REWRITE,
-  retrievalFilterJson: ''
+  retrievalFilterJson: '',
+  concurrencyOverrides: {}
 };
 
 function endpointLabel(ep) { return ep.name || ep.model || ep.id; }
@@ -68,6 +70,7 @@ function SubjectsView() {
   const [embeddingEndpoints, setEmbeddingEndpoints] = useState([]);
   const [completionEndpoints, setCompletionEndpoints] = useState([]);
   const [collections, setCollections] = useState([]);
+  const [ingestionDefaults, setIngestionDefaults] = useState(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -102,13 +105,19 @@ function SubjectsView() {
     if (!apiClient) return undefined;
     let cancelled = false;
     (async () => {
-      const [e, col] = await Promise.allSettled([apiClient.listIngestionEndpoints(), apiClient.listCollections()]);
+      const [e, col, ing] = await Promise.allSettled([
+        apiClient.listIngestionEndpoints(),
+        apiClient.listCollections(),
+        apiClient.getIngestionSettings()
+      ]);
       if (cancelled) return;
       if (e.status === 'fulfilled') {
         setEmbeddingEndpoints(asArray(e.value?.embedding).filter((x) => x.active !== false));
         setCompletionEndpoints(asArray(e.value?.completion).filter((x) => x.active !== false));
       }
       if (col.status === 'fulfilled') setCollections(asArray(col.value).filter((x) => (x.active ?? x.Active) !== false));
+      // System-default ingestion concurrency populates the placeholders in the overrides editor (best-effort).
+      if (ing.status === 'fulfilled') setIngestionDefaults(ing.value || {});
     })();
     return () => { cancelled = true; };
   }, [apiClient]);
@@ -148,7 +157,8 @@ function SubjectsView() {
       ontologyDefinitionPrompt: subject.ontologyDefinitionPrompt || '',
       rerankingPrompt: subject.rerankingPrompt != null ? subject.rerankingPrompt : DEFAULT_RERANKING_PROMPT,
       promptRewritePrompt: subject.promptRewritePrompt != null ? subject.promptRewritePrompt : DEFAULT_PROMPT_REWRITE,
-      retrievalFilterJson: subject.retrievalFilterJson || ''
+      retrievalFilterJson: subject.retrievalFilterJson || '',
+      concurrencyOverrides: (subject.concurrencyOverrides && typeof subject.concurrencyOverrides === 'object') ? subject.concurrencyOverrides : {}
     });
     setFormError('');
     setFormOpen(true);
@@ -178,7 +188,13 @@ function SubjectsView() {
       chunkStrategy: form.chunkStrategy || 'FixedTokenCount',
       chunkMaxTokens: Math.max(16, Number(form.chunkMaxTokens) || 256),
       chunkOverlapTokens: Math.max(0, Number(form.chunkOverlapTokens) || 0),
-      historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90)
+      historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90),
+      // Only the concurrency knobs the operator set are sent as overrides; the rest inherit the system default.
+      concurrencyOverrides: Object.fromEntries(
+        Object.entries(form.concurrencyOverrides || {})
+          .filter(([, v]) => v !== null && v !== undefined && v !== '')
+          .map(([k, v]) => [k, Number(v)])
+      )
     };
     try {
       if (editing) {
@@ -448,6 +464,11 @@ function SubjectsView() {
             <label title={t('subjects.retrievalFilterTip', 'Optional default facet filter restricting which ingested chunks answers may draw on.')}>{t('subjects.retrievalFilter', 'Retrieval Filter (optional)')}</label>
             <FacetFilterEditor value={form.retrievalFilterJson} onChange={(json) => setForm({ ...form, retrievalFilterJson: json })} />
           </div>
+          <ConcurrencyOverridesEditor
+            value={form.concurrencyOverrides}
+            onChange={(next) => setForm({ ...form, concurrencyOverrides: next })}
+            defaults={ingestionDefaults}
+          />
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setFormOpen(false)} disabled={saving}>
               {t('common.cancel')}

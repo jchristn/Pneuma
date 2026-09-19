@@ -361,6 +361,18 @@ class ApiClient {
     return this._request('PUT', '/v1.0/settings', { body: settings });
   }
 
+  // Dashboard-tunable ingestion concurrency (system defaults). Returns an IngestionTuning object with
+  // per-stage caps plus the job pool, summarization, and timeout knobs. Admin-only.
+  getIngestionSettings() {
+    return this._request('GET', '/v1.0/settings/ingestion');
+  }
+
+  // Persist and apply (live, no restart) the ingestion concurrency defaults. body is the same shape
+  // returned by getIngestionSettings().
+  updateIngestionSettings(body) {
+    return this._request('PUT', '/v1.0/settings/ingestion', { body });
+  }
+
   /**
    * Execute an arbitrary request from the API Explorer. Returns the raw Response
    * so the caller can inspect status, headers, and streaming bodies.

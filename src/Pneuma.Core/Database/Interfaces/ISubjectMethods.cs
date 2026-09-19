@@ -48,6 +48,12 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Subjects awaiting or undergoing deletion.</returns>
         Task<List<Subject>> EnumeratePendingDeletionAsync(CancellationToken token = default);
 
+        /// <summary>Enumerate, across all tenants, subjects that have any per-subject concurrency overrides set.
+        /// Used to load the overrides into the runtime limiter at startup.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Subjects with concurrency overrides.</returns>
+        Task<List<Subject>> EnumerateWithConcurrencyOverridesAsync(CancellationToken token = default);
+
         /// <summary>Update a subject.</summary>
         /// <param name="subject">Subject to update.</param>
         /// <param name="token">Cancellation token.</param>

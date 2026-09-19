@@ -43,8 +43,7 @@ namespace Pneuma.Server.Services
         private readonly IngestionJournal _Journal;
         private readonly EmbeddingCache _EmbeddingCache;
         private readonly LoggingModule _Logging;
-        private readonly int _SummarizationMinCellLength;
-        private readonly int _SummarizationConcurrency;
+        private readonly ConcurrencyManager _Concurrency;
 
         #endregion
 
@@ -59,8 +58,7 @@ namespace Pneuma.Server.Services
         /// <param name="artifacts">Per-stage S3 artifact store.</param>
         /// <param name="journal">Journal for stage events and best-effort artifact writes.</param>
         /// <param name="embeddingCache">Bounded embedding cache so identical text is not re-embedded.</param>
-        /// <param name="summarizationMinCellLength">Minimum trimmed cell length (characters) to summarize; shorter cells are skipped.</param>
-        /// <param name="summarizationConcurrency">Maximum cells summarized concurrently within a single job.</param>
+        /// <param name="concurrency">Runtime concurrency manager (effective per-subject summarization tuning).</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         public IngestionStages(
@@ -72,8 +70,7 @@ namespace Pneuma.Server.Services
             IArtifactStore artifacts,
             IngestionJournal journal,
             EmbeddingCache embeddingCache,
-            int summarizationMinCellLength,
-            int summarizationConcurrency,
+            ConcurrencyManager concurrency,
             LoggingModule logging)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
@@ -85,8 +82,7 @@ namespace Pneuma.Server.Services
             _Journal = journal ?? throw new ArgumentNullException(nameof(journal));
             _EmbeddingCache = embeddingCache ?? throw new ArgumentNullException(nameof(embeddingCache));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _SummarizationMinCellLength = summarizationMinCellLength < 0 ? 0 : summarizationMinCellLength;
-            _SummarizationConcurrency = summarizationConcurrency < 1 ? 1 : summarizationConcurrency;
+            _Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
             _Classifier = new PolyPromptClassifier(logging);
         }
 
@@ -238,6 +234,10 @@ namespace Pneuma.Server.Services
             ResolvedPrompt summarizeResolved = await new PromptResolver(_Db).ResolveAsync(job.TenantId, job.SubjectId, "cell.summarize", null, token).ConfigureAwait(false);
             string? summarizationPrompt = String.IsNullOrWhiteSpace(summarizeResolved.EffectiveContent) ? null : summarizeResolved.EffectiveContent;
 
+            // Effective per-subject tuning (subject override falling back to the system default).
+            int minCellLength = _Concurrency.EffectiveSummarizationMinCellLength(job.SubjectId);
+            int summarizationConcurrency = _Concurrency.EffectiveSummarizationConcurrency(job.SubjectId);
+
             // Only summarize cells with enough substance to be worth a model call — short fragments (headings,
             // captions, single list items) are skipped so a large document (hundreds of cells) does not fire a
             // model call per trivial cell.
@@ -245,7 +245,7 @@ namespace Pneuma.Server.Services
             for (int i = 0; i < cells.Count; i++)
             {
                 string? text = cells[i]?.Text;
-                if (!String.IsNullOrWhiteSpace(text) && text!.Trim().Length >= _SummarizationMinCellLength) targets.Add(i);
+                if (!String.IsNullOrWhiteSpace(text) && text!.Trim().Length >= minCellLength) targets.Add(i);
             }
             if (targets.Count == 0) return new List<CellSummary>();
 
@@ -254,7 +254,7 @@ namespace Pneuma.Server.Services
             // non-fatal — it is logged and its summary skipped — so one bad cell cannot thrash the whole job;
             // cancellation (operator stop / stage timeout) still propagates.
             CellSummary?[] produced = new CellSummary?[targets.Count];
-            using (SemaphoreSlim gate = new SemaphoreSlim(_SummarizationConcurrency, _SummarizationConcurrency))
+            using (SemaphoreSlim gate = new SemaphoreSlim(summarizationConcurrency, summarizationConcurrency))
             {
                 List<Task> tasks = new List<Task>(targets.Count);
                 for (int slot = 0; slot < targets.Count; slot++)

@@ -96,7 +96,30 @@ namespace Pneuma.Server
             };
             TenantProvisioningService provisioning = new TenantProvisioningService(provisioners, logging);
 
-            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, provisioning, modelHealth, artifactStore, clients.Blobs, logging, telemetry);
+            // Runtime-adjustable ingestion concurrency: system defaults come from pneuma.json on first run and are
+            // persisted (an ingestiontuning singleton) so later edits via the dashboard survive restarts; per-subject
+            // overrides layer on top. The manager backs every stage gate + the job pool with a Padlock so changes
+            // apply live. Seed the singleton from the configured settings if it does not yet exist.
+            Pneuma.Core.Models.IngestionTuning ingestionTuningDefaults = new Pneuma.Core.Models.IngestionTuning
+            {
+                ContentRetrieval = settings.Ingestion.StageConcurrency.ContentRetrieval,
+                TypeDetection = settings.Ingestion.StageConcurrency.TypeDetection,
+                CellExtraction = settings.Ingestion.StageConcurrency.CellExtraction,
+                Classification = settings.Ingestion.StageConcurrency.Classification,
+                GraphMerge = settings.Ingestion.StageConcurrency.GraphMerge,
+                Summarization = settings.Ingestion.StageConcurrency.Summarization,
+                Chunking = settings.Ingestion.StageConcurrency.Chunking,
+                Embedding = settings.Ingestion.StageConcurrency.Embedding,
+                Indexing = settings.Ingestion.StageConcurrency.Indexing,
+                MaxConcurrentTasks = settings.Ingestion.MaxConcurrentTasks,
+                SummarizationConcurrency = settings.Ingestion.SummarizationConcurrency,
+                SummarizationMinCellLength = settings.Ingestion.SummarizationMinCellLength,
+                StageTimeoutSeconds = settings.Ingestion.StageTimeoutSeconds
+            };
+            ConcurrencyManager concurrency = new ConcurrencyManager(ingestionTuningDefaults);
+            await concurrency.InitializeAsync(database, CancellationToken.None).ConfigureAwait(false);
+
+            PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, provisioning, modelHealth, artifactStore, clients.Blobs, concurrency, logging, telemetry);
             server.Start();
 
             if (settings.S3.Enabled)
@@ -149,8 +172,8 @@ namespace Pneuma.Server
             NativeSemanticProcessor semanticProcessor = new NativeSemanticProcessor(database, authentication.Cipher, logging);
             IngestionProcessor processor = new IngestionProcessor(
                 database, clients.DocumentAtom, semanticProcessor, graphFactory, clients.Vectors, clients.Blobs,
-                artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, logging, telemetry);
-            IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, logging);
+                artifactStore, fetcher, authentication.Cipher, settings.Ingestion, settings.Retrieval, concurrency, logging, telemetry);
+            IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, concurrency, logging);
 
             using (CancellationTokenSource shutdown = new CancellationTokenSource())
             {

@@ -106,6 +106,9 @@ namespace Pneuma.Core.Database
         /// <summary>Evaluation result methods.</summary>
         public IEvalResultMethods EvalResults { get; protected set; } = null!;
 
+        /// <summary>Ingestion tuning (singleton concurrency defaults) methods.</summary>
+        public IIngestionTuningMethods IngestionTuning { get; protected set; } = null!;
+
         #endregion
 
         #region Public-Methods

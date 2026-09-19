@@ -81,6 +81,7 @@ namespace Pneuma.Core.Database.Sqlite
             EvalFacts = new EvalFactMethods(this);
             EvalRuns = new EvalRunMethods(this);
             EvalResults = new EvalResultMethods(this);
+            IngestionTuning = new IngestionTuningMethods(this);
         }
 
         #endregion

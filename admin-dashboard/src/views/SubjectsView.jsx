@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import ResourceView from '../components/ResourceView';
 import FacetFilterEditor from '../components/FacetFilterEditor';
+import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
 import StatusPill from '../components/StatusPill';
 import { formatDateTime } from '../i18n/formatters';
 
@@ -58,9 +59,14 @@ function SubjectsView() {
   const [embeddingOptions, setEmbeddingOptions] = useState([]);
   const [completionOptions, setCompletionOptions] = useState([]);
   const [collectionOptions, setCollectionOptions] = useState([]);
+  const [ingestionDefaults, setIngestionDefaults] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
+    // System-default ingestion concurrency populates the placeholders in the per-subject overrides editor.
+    apiClient.getIngestionSettings()
+      .then((res) => { if (!cancelled) setIngestionDefaults(res || {}); })
+      .catch(() => { if (!cancelled) setIngestionDefaults(null); });
     apiClient.listIngestionEndpoints()
       .then((resp) => {
         if (cancelled) return;
@@ -125,6 +131,9 @@ function SubjectsView() {
     { name: 'ontologyClassifyPrompt', label: 'Ontology Classification Prompt', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_ONTOLOGY_CLASSIFY, tip: 'Appended after the global ontology classification prompt during ingestion. A sensible default is supplied; edit or clear it to taste.' },
     { name: 'ontologyDefinitionPrompt', label: 'Ontology Definition', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_ONTOLOGY_DEFINITION, tip: 'Appended after the global ontology definition when mapping atoms into the graph. A sensible default is supplied; edit or clear it to taste.' },
     { name: 'retrievalFilterJson', label: 'Retrieval Filter (optional)', type: 'custom', fullWidth: true, tip: 'Optional default facet filter restricting which ingested chunks answers may draw on. Add required/excluded labels (e.g. html, pdf) and tag key/value pairs; a per-request filter narrows this further. Leave empty for no filter.', render: (val, set) => <FacetFilterEditor value={val} onChange={set} /> },
+    // Advanced, collapsed-by-default: per-subject ingestion concurrency overrides. Blank fields inherit the
+    // system default (shown as each input's placeholder). Only the fields the operator sets are submitted.
+    { name: 'concurrencyOverrides', label: t('subjects.concurrencyOverrides'), type: 'custom', fullWidth: true, omitIfEmpty: false, tip: t('subjects.concurrencyOverridesTip'), render: (val, set) => <ConcurrencyOverridesEditor value={val} onChange={set} defaults={ingestionDefaults} /> },
     { name: 'description', label: 'Description', type: 'textarea', rows: 3, fullWidth: true, tip: 'Optional notes shown in the subjects list to help operators tell similar subjects apart.' },
     { name: 'tagline', label: 'Ask-Page Tagline', type: 'textarea', rows: 2, fullWidth: true, default: DEFAULT_TAGLINE, tip: "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject." }
   ];

@@ -40,6 +40,7 @@ namespace Pneuma.Server
         private readonly ModelRunnerGate _ModelRunnerGate;
         private readonly IArtifactStore _Artifacts;
         private readonly IBlobStore _Blobs;
+        private readonly ConcurrencyManager _Concurrency;
         private readonly LoggingModule _Logging;
         private readonly TelemetryService _Telemetry;
         private readonly Webserver _Server;
@@ -79,6 +80,7 @@ namespace Pneuma.Server
             ModelHealthMonitor modelHealth,
             IArtifactStore artifacts,
             IBlobStore blobs,
+            ConcurrencyManager concurrency,
             LoggingModule logging,
             TelemetryService telemetry)
         {
@@ -95,6 +97,7 @@ namespace Pneuma.Server
             if (modelHealth == null) throw new ArgumentNullException(nameof(modelHealth));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
             if (blobs == null) throw new ArgumentNullException(nameof(blobs));
+            if (concurrency == null) throw new ArgumentNullException(nameof(concurrency));
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             if (telemetry == null) throw new ArgumentNullException(nameof(telemetry));
 
@@ -112,6 +115,7 @@ namespace Pneuma.Server
             _ModelRunnerGate = new ModelRunnerGate(_Settings.ModelRunner.MaxConcurrentRequests, _Settings.ModelRunner.MaxQueueDepth);
             _Artifacts = artifacts;
             _Blobs = blobs;
+            _Concurrency = concurrency;
             _Logging = logging;
             _Telemetry = telemetry;
 
@@ -178,13 +182,14 @@ namespace Pneuma.Server
             new ChatHistoryRoutes(_Database, _Authorization).Register(_Server);
             new AnalyticsRoutes(_Database, _Authorization).Register(_Server);
             new SettingsRoutes(_Settings, _Authorization).Register(_Server);
+            new IngestionSettingsRoutes(_Database, _Authorization, _Concurrency).Register(_Server);
             new RoleRoutes(_Database, _Authorization).Register(_Server);
             new PermissionRoutes(_Database, _Authorization).Register(_Server);
             new AssignmentRoutes(_Database, _Authorization).Register(_Server);
             new AuditRoutes(_Database, _Authorization).Register(_Server);
             LiteGraphTenantAdmin cascadeLiteGraphAdmin = new LiteGraphTenantAdmin(_Settings.Integrations.LiteGraph.Endpoint, _Settings.Integrations.LiteGraph.BearerToken, _Logging);
             CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs, _Collections, cascadeLiteGraphAdmin);
-            new SubjectRoutes(_Database, _Authorization, cascade).Register(_Server);
+            new SubjectRoutes(_Database, _Authorization, cascade, _Concurrency).Register(_Server);
             new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
             new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization).Register(_Server);

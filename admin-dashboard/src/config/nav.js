@@ -52,6 +52,7 @@ export const NAV_GROUPS = [
   {
     labelKey: 'nav.groupSystem',
     items: [
+      { section: 'processing', labelKey: 'nav.processing', icon: 'cpu', adminOnly: true, tip: 'Ingestion concurrency: per-stage caps, the job pool, summarization, and stage timeouts. Applied live.' },
       { section: 'settings', labelKey: 'nav.settings', icon: 'gear', tip: 'Server configuration: retrieval tuning, integrations, request capture, and more.' }
     ]
   }
@@ -81,5 +82,6 @@ export const SECTION_META = {
   prompts: { titleKey: 'prompts.title', subtitleKey: 'prompts.subtitle' },
   requests: { titleKey: 'requests.title', subtitleKey: 'requests.subtitle' },
   explorer: { titleKey: 'explorer.title', subtitleKey: 'explorer.subtitle' },
-  settings: { titleKey: 'settings.title', subtitleKey: 'settings.subtitle' }
+  settings: { titleKey: 'settings.title', subtitleKey: 'settings.subtitle' },
+  processing: { titleKey: 'processing.title', subtitleKey: 'processing.subtitle' }
 };

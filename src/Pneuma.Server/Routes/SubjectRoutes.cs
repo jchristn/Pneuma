@@ -25,6 +25,7 @@ namespace Pneuma.Server.Routes
         private readonly DatabaseDriverBase _Db;
         private readonly AuthorizationService _Authz;
         private readonly CascadeDeletionService _Cascade;
+        private readonly ConcurrencyManager _Concurrency;
 
         #endregion
 
@@ -34,14 +35,24 @@ namespace Pneuma.Server.Routes
         /// <param name="db">Database driver.</param>
         /// <param name="authz">Authorization service.</param>
         /// <param name="cascade">Cascade deletion service, used to remove a subject's subordinate objects.</param>
-        public SubjectRoutes(DatabaseDriverBase db, AuthorizationService authz, CascadeDeletionService cascade)
+        /// <param name="concurrency">Runtime concurrency manager (applies per-subject concurrency overrides live).</param>
+        public SubjectRoutes(DatabaseDriverBase db, AuthorizationService authz, CascadeDeletionService cascade, ConcurrencyManager concurrency)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (cascade == null) throw new ArgumentNullException(nameof(cascade));
+            if (concurrency == null) throw new ArgumentNullException(nameof(concurrency));
             _Db = db;
             _Authz = authz;
             _Cascade = cascade;
+            _Concurrency = concurrency;
+        }
+
+        private void ApplyConcurrencyOverrides(Subject subject)
+        {
+            SubjectConcurrencyOverrides? overrides = subject.GetConcurrencyOverrides();
+            if (overrides == null || overrides.IsEmpty()) _Concurrency.ClearSubjectOverride(subject.Id);
+            else _Concurrency.ApplySubjectOverride(subject.Id, overrides);
         }
 
         #endregion
@@ -134,6 +145,7 @@ namespace Pneuma.Server.Routes
             subject.UrlSlug = desiredSlug;
 
             Subject created = await _Db.Subjects.CreateAsync(subject, ctx.Token).ConfigureAwait(false);
+            ApplyConcurrencyOverrides(created);
             await RouteHelper.SendJsonAsync(ctx, 201, created).ConfigureAwait(false);
         }
 
@@ -231,6 +243,7 @@ namespace Pneuma.Server.Routes
             existing.RerankingPrompt = update.RerankingPrompt;
             existing.PromptRewritePrompt = update.PromptRewritePrompt;
             existing.RetrievalFilterJson = update.RetrievalFilterJson;
+            existing.ConcurrencyOverridesJson = update.ConcurrencyOverridesJson;
             existing.HistoryRetentionDays = update.HistoryRetentionDays;
 
             // A changed slug must stay unique within the tenant; an explicit clash with another subject is a conflict.
@@ -250,6 +263,7 @@ namespace Pneuma.Server.Routes
             }
 
             Subject saved = await _Db.Subjects.UpdateAsync(existing, ctx.Token).ConfigureAwait(false);
+            ApplyConcurrencyOverrides(saved);
             await RouteHelper.SendJsonAsync(ctx, 200, saved).ConfigureAwait(false);
         }
 

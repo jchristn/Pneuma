@@ -188,6 +188,11 @@ class ApiClient {
   async listCollections(options = {}) {
     return this._request('GET', '/v1.0/collections', options);
   }
+  // System-default ingestion concurrency (IngestionTuning). Used to show the current default as the
+  // placeholder for each per-subject concurrency override. May be admin-only server-side.
+  async getIngestionSettings(options = {}) {
+    return this._request('GET', '/v1.0/settings/ingestion', options);
+  }
   // Submitting a link enqueues an ingestion job server-side. The backend requires an embedding
   // endpoint, a completion endpoint, and a target collection.
   // The subject owns its embedding/inference models and collection, so submission carries only url/title

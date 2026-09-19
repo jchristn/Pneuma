@@ -195,6 +195,15 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                 {
                     "IF COL_LENGTH('dbo.ingestionjobs', 'deletionstatus') IS NULL ALTER TABLE dbo.ingestionjobs ADD deletionstatus NVARCHAR(32) NOT NULL DEFAULT 'None';"
                 }));
+                list.Add(new SchemaMigration(26, "Add ingestion tuning singleton and subject concurrency overrides", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.ingestiontuning', N'U') IS NULL CREATE TABLE dbo.ingestiontuning (" +
+                        "id NVARCHAR(64) PRIMARY KEY, contentretrieval INT NOT NULL, typedetection INT NOT NULL, cellextraction INT NOT NULL, " +
+                        "classification INT NOT NULL, graphmerge INT NOT NULL, summarization INT NOT NULL, chunking INT NOT NULL, " +
+                        "embedding INT NOT NULL, indexing INT NOT NULL, maxconcurrenttasks INT NOT NULL, summarizationconcurrency INT NOT NULL, " +
+                        "summarizationmincelllength INT NOT NULL, stagetimeoutseconds INT NOT NULL, createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                    "IF COL_LENGTH('dbo.subjects', 'concurrencyoverridesjson') IS NULL ALTER TABLE dbo.subjects ADD concurrencyoverridesjson NVARCHAR(MAX);"
+                }));
                 return list;
             }
         }

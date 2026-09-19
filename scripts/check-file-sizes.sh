@@ -63,6 +63,9 @@ FRONTEND_ALLOWLIST=(
   # The admin dashboard's i18n string bundle: one flat resource object of UI translations that grows with the
   # UI surface. Splitting it across files would fragment the single translation source.
   "admin-dashboard/src/i18n/resources.js"
+  # The subject dashboard's i18n string bundle (en + es): same rationale as the admin bundle — one translation
+  # source that grows with the UI surface.
+  "subject-dashboard/src/i18n/resources.js"
 )
 
 violations=0

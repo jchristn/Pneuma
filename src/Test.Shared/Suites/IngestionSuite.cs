@@ -315,7 +315,8 @@ namespace Test.Shared.Suites
             Pneuma.Server.Settings.IngestionSettings settings = new Pneuma.Server.Settings.IngestionSettings();
             Pneuma.Server.Settings.TelemetrySettings telemetrySettings = new Pneuma.Server.Settings.TelemetrySettings { Enabled = false };
             Pneuma.Server.Services.TelemetryService telemetry = new Pneuma.Server.Services.TelemetryService(telemetrySettings, logging);
-            return new IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), logging, telemetry);
+            Pneuma.Server.Services.ConcurrencyManager concurrency = new Pneuma.Server.Services.ConcurrencyManager(new Pneuma.Core.Models.IngestionTuning());
+            return new IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, new Pneuma.Server.Settings.RetrievalSettings(), concurrency, logging, telemetry);
         }
 
         // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the

@@ -107,7 +107,9 @@ namespace Test.Shared.Support
                     new RecallDbTenantProvisioner(recall, "default", 8),
                     new LiteGraphTenantProvisioner(Database, new FakeLiteGraphTenantAdmin())
                 }, logging);
-            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, provisioning, modelHealth, new NullArtifactStore(), blobs, logging, telemetry);
+            ConcurrencyManager concurrency = new ConcurrencyManager(new Pneuma.Core.Models.IngestionTuning());
+            concurrency.InitializeAsync(Database, CancellationToken.None).GetAwaiter().GetResult();
+            _Server = new PneumaServer(settings, Database, authentication, authorization, capture, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), recall, recall, recall, provisioning, modelHealth, new NullArtifactStore(), blobs, concurrency, logging, telemetry);
             _Server.Start();
 
             BaseUrl = "http://127.0.0.1:" + port;

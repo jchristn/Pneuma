@@ -23,7 +23,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, concurrencyoverridesjson, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
@@ -33,7 +33,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.RerankerType.ToString()) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.ChunkStrategy) + ", " + Sanitizer.Num(subject.ChunkMaxTokens) + ", " + Sanitizer.Num(subject.ChunkOverlapTokens) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
                 Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
                 Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
-                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
+                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Str(subject.ConcurrencyOverridesJson) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
                 Sanitizer.Ts(subject.CreatedUtc) + ", " + Sanitizer.Ts(subject.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return subject;
@@ -90,6 +90,17 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<Subject>> EnumerateWithConcurrencyOverridesAsync(CancellationToken token = default)
+        {
+            DataTable table = await Query(
+                "SELECT * FROM subjects WHERE concurrencyoverridesjson IS NOT NULL ORDER BY createdutc ASC;",
+                token).ConfigureAwait(false);
+            List<Subject> result = new List<Subject>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
+        }
+
+        /// <inheritdoc />
         public async Task<Subject> UpdateAsync(Subject subject, CancellationToken token = default)
         {
             if (subject == null) throw new ArgumentNullException(nameof(subject));
@@ -122,6 +133,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ", deletionstatus = " + Sanitizer.Str(subject.DeletionStatus.ToString()) +
                 ", active = " + Sanitizer.Bit(subject.Active) +
                 ", publishedforchat = " + Sanitizer.Bit(subject.PublishedForChat) +
+                ", concurrencyoverridesjson = " + Sanitizer.Str(subject.ConcurrencyOverridesJson) +
                 ", isprotected = " + Sanitizer.Bit(subject.IsProtected) +
                 ", lastupdateutc = " + Sanitizer.Ts(subject.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(subject.TenantId) + " AND id = " + Sanitizer.Str(subject.Id) + ";";
@@ -206,6 +218,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 DeletionStatus = RowReader.GetEnum<SubjectDeletionStatusEnum>(row, "deletionstatus", SubjectDeletionStatusEnum.None),
                 Active = RowReader.GetBool(row, "active"),
                 PublishedForChat = RowReader.GetBool(row, "publishedforchat"),
+                ConcurrencyOverridesJson = RowReader.GetNullableString(row, "concurrencyoverridesjson"),
                 IsProtected = RowReader.GetBool(row, "isprotected"),
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")

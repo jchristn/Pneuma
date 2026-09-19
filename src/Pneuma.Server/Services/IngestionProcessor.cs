@@ -43,11 +43,10 @@ namespace Pneuma.Server.Services
         private readonly TelemetryService _Telemetry;
         private readonly IngestionJournal _Journal;
         private readonly IngestionStages _Stages;
-        private readonly int _StageTimeoutSeconds;
         private readonly int _MaxAttempts;
         private readonly int _RetryBackoffBaseMs;
         private readonly int _RetryBackoffMaxMs;
-        private readonly Dictionary<IngestionStageEnum, SemaphoreSlim> _StageGates;
+        private readonly ConcurrencyManager _Concurrency;
 
         #endregion
 
@@ -79,6 +78,7 @@ namespace Pneuma.Server.Services
             Aes256Cipher cipher,
             IngestionSettings settings,
             RetrievalSettings retrieval,
+            ConcurrencyManager concurrency,
             LoggingModule logging,
             TelemetryService telemetry)
         {
@@ -90,7 +90,7 @@ namespace Pneuma.Server.Services
             _Cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (retrieval == null) throw new ArgumentNullException(nameof(retrieval));
-            _StageTimeoutSeconds = settings.StageTimeoutSeconds;
+            _Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
             _MaxAttempts = settings.MaxAttempts;
             _RetryBackoffBaseMs = settings.RetryBackoffBaseMs;
             _RetryBackoffMaxMs = settings.RetryBackoffMaxMs;
@@ -99,25 +99,7 @@ namespace Pneuma.Server.Services
             _Journal = new IngestionJournal(db, logging);
             // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
             EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
-            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, settings.SummarizationMinCellLength, settings.SummarizationConcurrency, logging);
-            _StageGates = BuildStageGates(settings.StageConcurrency);
-        }
-
-        private static Dictionary<IngestionStageEnum, SemaphoreSlim> BuildStageGates(IngestionStageConcurrencySettings c)
-        {
-            return new Dictionary<IngestionStageEnum, SemaphoreSlim>
-            {
-                { IngestionStageEnum.ContentRetrieval, new SemaphoreSlim(c.ContentRetrieval, c.ContentRetrieval) },
-                { IngestionStageEnum.TypeDetection, new SemaphoreSlim(c.TypeDetection, c.TypeDetection) },
-                { IngestionStageEnum.CellExtraction, new SemaphoreSlim(c.CellExtraction, c.CellExtraction) },
-                { IngestionStageEnum.Classification, new SemaphoreSlim(c.Classification, c.Classification) },
-                { IngestionStageEnum.GraphMerge, new SemaphoreSlim(c.GraphMerge, c.GraphMerge) },
-                { IngestionStageEnum.RelationshipConsolidation, new SemaphoreSlim(c.GraphMerge, c.GraphMerge) },
-                { IngestionStageEnum.Summarization, new SemaphoreSlim(c.Summarization, c.Summarization) },
-                { IngestionStageEnum.Chunking, new SemaphoreSlim(c.Chunking, c.Chunking) },
-                { IngestionStageEnum.Embedding, new SemaphoreSlim(c.Embedding, c.Embedding) },
-                { IngestionStageEnum.Indexing, new SemaphoreSlim(c.Indexing, c.Indexing) }
-            };
+            _Stages = new IngestionStages(db, processor, cipher, graphFactory, vectors, artifacts, _Journal, embeddingCache, _Concurrency, logging);
         }
 
         #endregion
@@ -188,7 +170,7 @@ namespace Pneuma.Server.Services
                     catch (OperationCanceledException)
                     {
                         // A per-stage timeout is treated as transient and retried.
-                        string message = "Stage '" + job.Stage + "' timed out after " + _StageTimeoutSeconds + " seconds.";
+                        string message = "Stage '" + job.Stage + "' timed out after " + _Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId) + " seconds.";
                         if (await TryScheduleRetryAsync(job, attempt, message, token).ConfigureAwait(false)) continue;
                         _Logging.Warn("[IngestionProcessor] job " + job.Id + " " + message);
                         jobSpan?.SetError(message);
@@ -464,24 +446,24 @@ namespace Pneuma.Server.Services
             job.Stage = stage;
             await _Journal.UpdateJobAsync(job, token).ConfigureAwait(false);
 
-            // Per-stage concurrency gate: bound how many jobs run this stage at once (independent of how many
-            // jobs run overall) so a large enqueue cannot overwhelm the model runners / backends. Acquired
-            // outside the stage timeout so time spent waiting for a slot is not charged against the timeout.
-            // When no slot is immediately free, surface a friendly "waiting" event so the follow-logs make the
-            // contention visible rather than looking stalled.
-            SemaphoreSlim? gate = _StageGates.TryGetValue(stage, out SemaphoreSlim? resolved) ? resolved : null;
+            // Per-stage concurrency gate (runtime-adjustable via the ConcurrencyManager / Padlock): bound how
+            // many jobs run this stage at once, per subject or by the shared system default. Acquisition happens
+            // outside the stage timeout so time spent waiting for a slot is not charged against it. When no slot
+            // is immediately free (the acquire ValueTask has not completed synchronously), surface a "waiting"
+            // event so the follow-logs make the contention visible rather than looking stalled.
             IngestionJobEvent? queuedEvent = null;
             double queueMs = 0;
-            if (gate != null && !gate.Wait(0))
+            ValueTask<IDisposable> acquire = _Concurrency.AcquireStageAsync(stage, job.SubjectId, token);
+            Stopwatch queueSw = Stopwatch.StartNew();
+            if (!acquire.IsCompleted)
             {
-                Stopwatch queueSw = Stopwatch.StartNew();
                 queuedEvent = await _Journal.RecordEventAsync(job, stage, IngestionStatusEnum.Queued,
                     "Waiting for a free slot at this step — other documents are being processed. It will start automatically once one frees up.",
                     0, token).ConfigureAwait(false);
-                await gate.WaitAsync(token).ConfigureAwait(false);
-                queueSw.Stop();
-                queueMs = queueSw.Elapsed.TotalMilliseconds;
             }
+            IDisposable slot = await acquire.ConfigureAwait(false);
+            queueSw.Stop();
+            if (queuedEvent != null) queueMs = queueSw.Elapsed.TotalMilliseconds;
             try
             {
                 using (RadiantSpan? span = _Telemetry.StartSpan("stage:" + stage, SpanKindEnum.Internal))
@@ -494,7 +476,7 @@ namespace Pneuma.Server.Services
                     {
                         using (CancellationTokenSource stageCts = CancellationTokenSource.CreateLinkedTokenSource(token))
                         {
-                            stageCts.CancelAfter(TimeSpan.FromSeconds(_StageTimeoutSeconds));
+                            stageCts.CancelAfter(TimeSpan.FromSeconds(_Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId)));
                             T result = await action(stageCts.Token).ConfigureAwait(false);
                             sw.Stop();
                             PneumaMetrics.RecordIngestionStage(stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
@@ -535,7 +517,7 @@ namespace Pneuma.Server.Services
             }
             finally
             {
-                gate?.Release();
+                slot.Dispose();
             }
         }
 

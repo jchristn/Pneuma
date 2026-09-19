@@ -193,6 +193,16 @@ namespace Pneuma.Core.Database.Mysql.Queries
                 {
                     "ALTER TABLE ingestionjobs ADD COLUMN deletionstatus VARCHAR(32) NOT NULL DEFAULT 'None';"
                 }));
+                list.Add(new SchemaMigration(26, "Add ingestion tuning singleton and subject concurrency overrides", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS ingestiontuning (" +
+                        "id VARCHAR(64) PRIMARY KEY, contentretrieval INT NOT NULL, typedetection INT NOT NULL, cellextraction INT NOT NULL, " +
+                        "classification INT NOT NULL, graphmerge INT NOT NULL, summarization INT NOT NULL, chunking INT NOT NULL, " +
+                        "embedding INT NOT NULL, indexing INT NOT NULL, maxconcurrenttasks INT NOT NULL, summarizationconcurrency INT NOT NULL, " +
+                        "summarizationmincelllength INT NOT NULL, stagetimeoutseconds INT NOT NULL, createdutc VARCHAR(32) NOT NULL, lastupdateutc VARCHAR(32) NOT NULL" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
+                    "ALTER TABLE subjects ADD COLUMN concurrencyoverridesjson TEXT;"
+                }));
                 return list;
             }
         }
