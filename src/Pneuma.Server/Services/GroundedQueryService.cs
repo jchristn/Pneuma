@@ -306,7 +306,7 @@ namespace Pneuma.Server.Services
             // `max`, so fusion and diversity selection have alternatives to choose among rather than being
             // limited to the top-`max` of each channel. Then select the passages to ground on.
             int poolSize = Math.Clamp(max * 4, max, 200);
-            RetrievalPool pool = await GatherAsync(tenantId, question, poolSize, subjectId, RetrievalModeEnum.Hybrid, requestFilter, null, token).ConfigureAwait(false);
+            RetrievalPool pool = await GatherAsync(tenantId, question, poolSize, subjectId, RetrievalModeEnum.Hybrid, requestFilter, null, true, token).ConfigureAwait(false);
             if (pool.OrderedIds.Count == 0) return new List<GraphNode>();
             Dictionary<string, int> positionByNode = pool.PositionByNode;
             IGraphRepository graph = pool.Graph!;
@@ -407,12 +407,12 @@ namespace Pneuma.Server.Services
         /// <param name="collectionOverride">Optional explicit collection id; overrides the subject/default resolution.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The ranked hits, most relevant first.</returns>
-        public async Task<List<RetrievedChunk>> SearchAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter = null, string? collectionOverride = null, CancellationToken token = default)
+        public async Task<List<RetrievedChunk>> SearchAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter = null, string? collectionOverride = null, CancellationToken token = default, bool resolveNodes = true)
         {
             List<RetrievedChunk> results = new List<RetrievedChunk>();
             if (String.IsNullOrWhiteSpace(question)) return results;
 
-            RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, token).ConfigureAwait(false);
+            RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, resolveNodes, token).ConfigureAwait(false);
             foreach (string id in pool.OrderedIds)
             {
                 if (results.Count >= max) break;
@@ -938,7 +938,7 @@ namespace Pneuma.Server.Services
         /// an RRF-ordered id list. Both the grounded path and the search endpoint build on this so retrieval
         /// behaves identically across them.
         /// </summary>
-        private async Task<RetrievalPool> GatherAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter, string? collectionOverride, CancellationToken token)
+        private async Task<RetrievalPool> GatherAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter, string? collectionOverride, bool resolveNodes, CancellationToken token)
         {
             RetrievalPool pool = new RetrievalPool();
 
@@ -989,8 +989,11 @@ namespace Pneuma.Server.Services
 
                         if (!pool.NodeById.TryGetValue(nodeId, out GraphNode? node))
                         {
-                            node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
-                            node = HydrateFromHit(node, nodeId, hit.Snippet);
+                            // Resolving the full graph node is a per-hit LiteGraph round-trip; skip it when the caller
+                            // does not need the node (e.g. subject search, which only groups by link/snippet/score).
+                            // HydrateFromHit then synthesizes a lightweight node from the hit's content.
+                            GraphNode? resolved = resolveNodes ? await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false) : null;
+                            node = HydrateFromHit(resolved, nodeId, hit.Snippet);
                             if (node == null) continue;
                             if (hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId) && String.IsNullOrEmpty(node.CanonicalName))
                             {
@@ -1033,8 +1036,10 @@ namespace Pneuma.Server.Services
                             if (String.IsNullOrEmpty(hit.NodeId)) continue;
                             if (!pool.NodeById.TryGetValue(hit.NodeId, out GraphNode? node))
                             {
-                                node = hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false);
-                                node = HydrateFromHit(node, hit.NodeId, hit.Content);
+                                // Prefer a node the vector store already returned; otherwise resolve from LiteGraph
+                                // only when the caller needs full nodes. When skipping, HydrateFromHit builds a stub.
+                                GraphNode? resolved = resolveNodes ? (hit.Node ?? await graph.ReadNodeAsync(hit.NodeId, token).ConfigureAwait(false)) : hit.Node;
+                                node = HydrateFromHit(resolved, hit.NodeId, hit.Content);
                                 if (node == null) continue;
                                 pool.NodeById[hit.NodeId] = node;
                                 pool.PositionByNode[hit.NodeId] = hit.Position;
