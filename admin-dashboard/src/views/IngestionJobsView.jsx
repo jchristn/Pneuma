@@ -96,6 +96,7 @@ function IngestionJobsView() {
 
   const { selectedItems, clear, selection } = useTableSelection(rows);
   const stoppableSelected = selectedItems.filter(isStoppable);
+  const restartableSelected = selectedItems.filter(isRestartable);
 
   const stop = async (job) => {
     await apiClient.stopJob(getId(job));
@@ -127,6 +128,15 @@ function IngestionJobsView() {
     await load();
   };
 
+  const bulkRestart = async () => {
+    for (const job of restartableSelected) {
+      await apiClient.restartJob(getId(job));
+    }
+    setModal(null);
+    clear();
+    await load();
+  };
+
   const bulkDelete = async () => {
     const ids = selectedItems.map((job) => getId(job));
     setModal(null);
@@ -141,6 +151,9 @@ function IngestionJobsView() {
       count={selectedItems.length}
       onClear={clear}
       actions={[
+        { key: 'restart', label: t('jobs.restart', 'Restart Job'), disabled: restartableSelected.length === 0,
+          tip: restartableSelected.length === 0 ? t('jobs.bulkRestartNone', 'Only jobs that have not completed can be restarted.') : t('jobs.bulkRestartTip', { count: restartableSelected.length, defaultValue: `Restart ${restartableSelected.length} job(s) from the beginning.` }),
+          onClick: () => setModal({ type: 'bulk-restart' }) },
         { key: 'stop', label: t('jobs.stop'), danger: true, disabled: stoppableSelected.length === 0,
           tip: stoppableSelected.length === 0 ? t('jobs.bulkStopNone', 'Only queued or in-progress jobs can be stopped.') : t('jobs.bulkStopTip', { count: stoppableSelected.length, defaultValue: `Stop ${stoppableSelected.length} in-progress job(s).` }),
           onClick: () => setModal({ type: 'bulk-stop' }) },
@@ -223,6 +236,11 @@ function IngestionJobsView() {
       {modal?.type === 'delete' && (
         <ConfirmModal title={t('jobs.delete')} message={t('jobs.deleteConfirm')} danger
           confirmLabel={t('common.delete')} onConfirm={() => remove(modal.item)} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'bulk-restart' && (
+        <ConfirmModal title={t('jobs.restart', 'Restart Job')}
+          message={t('jobs.bulkRestartConfirm', { count: restartableSelected.length, defaultValue: `Restart ${restartableSelected.length} job(s) from the beginning?` })}
+          confirmLabel={t('jobs.restart', 'Restart Job')} onConfirm={bulkRestart} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'bulk-stop' && (
         <ConfirmModal title={t('jobs.stop')} danger

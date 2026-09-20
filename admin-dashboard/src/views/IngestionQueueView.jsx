@@ -11,8 +11,8 @@ import ConfirmModal from '../components/ConfirmModal';
 import JsonViewer from '../components/JsonViewer';
 import ErrorBanner from '../components/ErrorBanner';
 import CopyableId from '../components/CopyableId';
-import CopyButton from '../components/CopyButton';
 import StatusPill, { toneForStatus } from '../components/StatusPill';
+import FollowLogsModal from '../components/FollowLogsModal';
 import { getId } from '../components/ResourceView';
 import { stageLabel } from '../components/IngestionTimeline';
 import { formatDateTime } from '../i18n/formatters';
@@ -23,45 +23,10 @@ function isFailed(job) {
   return String(job?.status || '').toLowerCase() === 'failed';
 }
 
-function JobDetail({ detail }) {
-  const { t } = useTranslation();
-  const job = detail?.job || detail?.Job || detail || {};
-  const events = detail?.events || detail?.Events || [];
-  return (
-    <div>
-      <dl className="kv-grid" style={{ marginBottom: '1rem' }}>
-        <dt>ID</dt><dd><CopyableId value={getId(job)} /></dd>
-        <dt>Status</dt><dd><StatusPill label={job.status} tone={toneForStatus(job.status)} /></dd>
-        <dt>Link</dt><dd><CopyableId value={job.linkId} /></dd>
-        <dt>Created</dt><dd>{formatDateTime(job.createdUtc)}</dd>
-        <dt>Updated</dt><dd>{formatDateTime(job.updatedUtc || job.completedUtc)}</dd>
-        {job.lastError && <><dt>Last Error</dt><dd style={{ color: 'var(--color-danger)' }}>{job.lastError}</dd></>}
-      </dl>
-      <h3 style={{ fontSize: 'var(--font-size-sm)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
-        {t('jobs.timeline')}
-      </h3>
-      {events.length === 0 ? (
-        <p style={{ color: 'var(--color-text-secondary)' }}>{t('jobs.noEvents')}</p>
-      ) : (
-        <ul className="timeline">
-          {events.map((ev, i) => (
-            <li className="timeline-item" key={i}>
-              <span className={`timeline-marker ${toneForStatus(ev.status || ev.state)}`} />
-              <div className="timeline-content">
-                <div className="timeline-stage">{ev.stage ? stageLabel(ev.stage) : (ev.name || ev.type || `Stage ${i + 1}`)}</div>
-                <div className="timeline-meta">
-                  {(ev.status || ev.state) && <StatusPill label={ev.status || ev.state} tone={toneForStatus(ev.status || ev.state)} />}{' '}
-                  {formatDateTime(ev.timestampUtc || ev.createdUtc || ev.time)}
-                </div>
-                {ev.message && <div className="timeline-meta">{ev.message}</div>}
-                {ev.error && <div className="timeline-meta" style={{ color: 'var(--color-danger)' }}>{ev.error}</div>}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+// A terminal job's log is a static record ("View Logs"); an in-flight one streams ("Follow Logs").
+function isTerminal(job) {
+  const s = String(job?.status || '').toLowerCase();
+  return s === 'completed' || s === 'failed' || s === 'error' || s === 'cancelled' || s === 'canceled';
 }
 
 function IngestionQueueView() {
@@ -74,8 +39,6 @@ function IngestionQueueView() {
   const [subjectId, setSubjectId] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [modal, setModal] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   // Brief, dismissible notice shown after a background deletion is dispatched (202 Accepted).
   const [notice, setNotice] = useState('');
 
@@ -99,19 +62,8 @@ function IngestionQueueView() {
     apiClient.list('subjects').then((r) => setSubjects(normalizeList(r).items)).catch(() => {});
   }, [apiClient]);
 
-  const openDetail = useCallback(async (job) => {
-    setModal({ type: 'detail', item: job });
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const d = await apiClient.getJob(getId(job));
-      setDetail(d);
-    } catch {
-      setDetail({ job });
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [apiClient]);
+  // Open the consolidated Follow Logs / Job Detail modal (the shared FollowLogsModal fetches the log itself).
+  const openLogs = useCallback((job) => setModal({ type: 'follow', item: job }), []);
 
   const { selectedItems, clear, selection } = useTableSelection(rows);
   const failedSelected = selectedItems.filter(isFailed);
@@ -179,7 +131,7 @@ function IngestionQueueView() {
       const deleting = job.deletionStatus === 'Pending' || job.deletionStatus === 'Deleting';
       return (
       <ActionMenu items={[
-        { key: 'view', label: t('common.view'), tip: 'Open this job’s details and its stage-by-stage progress.', onClick: () => openDetail(job) },
+        { key: 'follow', label: isTerminal(job) ? t('jobs.viewLogs', 'View Logs') : t('jobs.followLogs', 'Follow Logs'), tip: 'Open this job’s stage-by-stage log (streams live until it finishes).', onClick: () => openLogs(job) },
         { key: 'json', label: t('common.viewJson'), tip: 'Inspect the raw job record returned by the API.', onClick: () => setModal({ type: 'json', item: job }) },
         { key: 'restart', label: t('jobs.restart'), tip: 'Re-run this failed job from the beginning with the same settings.', hidden: !isFailed(job) || deleting, onClick: () => setModal({ type: 'restart', item: job }) },
         { key: 'delete', label: t('jobs.delete'), tip: 'Delete this job and cascade-remove its graph nodes, indexed chunks, and logs.', hidden: deleting, danger: true, onClick: () => setModal({ type: 'delete', item: job }) }
@@ -209,23 +161,11 @@ function IngestionQueueView() {
         </div>
       </div>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError(null)} />}
-      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openDetail}
+      <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={openLogs}
         selection={selection} bulkBar={bulkBar} />
 
-      {modal?.type === 'detail' && (
-        <Modal title={t('jobs.detail')} size="lg"
-          headerExtra={(
-            <>
-              <CopyButton value={JSON.stringify(detail?.events ?? detail?.Events ?? [], null, 2)} label={t('jobs.copyLogs')} />
-              {isFailed(modal.item) ? (
-                <button type="button" className="button-primary" onClick={() => setModal({ type: 'restart', item: modal.item })}>{t('jobs.restart')}</button>
-              ) : <CopyButton value={String(getId(modal.item))} label="ID" />}
-            </>
-          )}
-          onClose={() => setModal(null)}
-          footer={<button type="button" className="button-secondary" onClick={() => setModal(null)}>{t('common.close')}</button>}>
-          {detailLoading ? <div className="table-loading"><div className="loading-spinner" /></div> : <JobDetail detail={detail} />}
-        </Modal>
+      {modal?.type === 'follow' && (
+        <FollowLogsModal job={modal.item} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'json' && <JsonViewer data={modal.item} onClose={() => setModal(null)} />}
       {modal?.type === 'restart' && (

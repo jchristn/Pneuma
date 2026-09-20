@@ -48,22 +48,22 @@ function StageBadge({ stage }) {
   );
 }
 
-// Shared column widths so the Step / Time-in-state / Job / Actions columns line up across all three tables.
-// The Document column has no fixed width: with table-layout:fixed it takes the remaining space and its cell
-// truncates the (often long) link with an ellipsis rather than widening the table off-screen.
+// Shared column widths (percentages that sum to 100%) so, with table-layout:fixed + width:100%, every table is
+// exactly as wide as its container — it never overflows horizontally — and the columns line up across all three
+// tables. The Document column gets the largest share and truncates its (often long) link with an ellipsis.
 function LiveColgroup() {
   return (
     <colgroup>
-      <col />
-      <col style={{ width: '12rem' }} />
-      <col style={{ width: '7rem' }} />
-      <col style={{ width: '8rem' }} />
-      <col style={{ width: '3rem' }} />
+      <col style={{ width: '42%' }} />
+      <col style={{ width: '22%' }} />
+      <col style={{ width: '13%' }} />
+      <col style={{ width: '15%' }} />
+      <col style={{ width: '8%' }} />
     </colgroup>
   );
 }
 
-function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor }) {
+function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor, onRowClick }) {
   return (
     <section style={{ marginBottom: '1.5rem' }}>
       <h3 style={{ fontSize: 'var(--font-size-sm)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
@@ -73,31 +73,29 @@ function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor }) {
       {items.length === 0 ? (
         <p style={{ color: 'var(--color-text-secondary)' }}>{t('live.none')}</p>
       ) : (
-        <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-          <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-            <LiveColgroup />
-            <thead>
-              <tr>
-                <th>{t('live.document')}</th>
-                <th>{t('live.step')}</th>
-                <th>{t('live.inState')}</th>
-                <th>{t('live.job')}</th>
-                <th aria-label={t('common.actions')} />
+        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+          <LiveColgroup />
+          <thead>
+            <tr>
+              <th>{t('live.document')}</th>
+              <th>{t('live.step')}</th>
+              <th>{t('live.inState')}</th>
+              <th>{t('live.job')}</th>
+              <th aria-label={t('common.actions')} />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.jobId} className="clickable" style={{ cursor: 'pointer' }} onClick={() => onRowClick(item)}>
+                <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{item.sourceUrl}</td>
+                <td style={{ overflow: 'hidden' }}><StageBadge stage={item.stage} /></td>
+                <td><span className="mono">{formatElapsed(elapsedMs(item.stateSinceUtc, nowMs))}</span></td>
+                <td style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><CopyableId value={item.jobId} truncateLen={10} /></td>
+                <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}><ActionMenu items={actionsFor(item)} /></td>
               </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.jobId}>
-                  <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{item.sourceUrl}</td>
-                  <td><StageBadge stage={item.stage} /></td>
-                  <td><span className="mono">{formatElapsed(elapsedMs(item.stateSinceUtc, nowMs))}</span></td>
-                  <td><CopyableId value={item.jobId} truncateLen={12} /></td>
-                  <td style={{ textAlign: 'right' }}><ActionMenu items={actionsFor(item)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </section>
   );
@@ -156,6 +154,9 @@ function IngestionLiveView() {
   // A live entry maps to a job-like object the shared job modals/actions understand (they key off id/status/stage).
   const asJob = (item, status) => ({ id: item.jobId, status, stage: item.stage, sourceUrl: item.sourceUrl });
 
+  // Clicking a row opens the consolidated Follow Logs / Job Detail modal.
+  const openFollow = (status) => (item) => setModal({ type: 'follow', job: asJob(item, status) });
+
   const actionsFor = (status) => (item) => {
     const job = asJob(item, status);
     return [
@@ -193,9 +194,9 @@ function IngestionLiveView() {
         <p style={{ color: 'var(--color-text-secondary)' }}>{t('live.idle')}</p>
       ) : (
         <>
-          <LiveSection titleKey="live.running" hint={t('live.runningHint')} items={snapshot.running} nowMs={nowMs} t={t} actionsFor={actionsFor('Processing')} />
-          <LiveSection titleKey="live.waiting" hint={t('live.waitingHint')} items={snapshot.waitingForSlot} nowMs={nowMs} t={t} actionsFor={actionsFor('Processing')} />
-          <LiveSection titleKey="live.queued" hint={t('live.queuedHint')} items={snapshot.queued} nowMs={nowMs} t={t} actionsFor={actionsFor('Queued')} />
+          <LiveSection titleKey="live.running" hint={t('live.runningHint')} items={snapshot.running} nowMs={nowMs} t={t} actionsFor={actionsFor('Processing')} onRowClick={openFollow('Processing')} />
+          <LiveSection titleKey="live.waiting" hint={t('live.waitingHint')} items={snapshot.waitingForSlot} nowMs={nowMs} t={t} actionsFor={actionsFor('Processing')} onRowClick={openFollow('Processing')} />
+          <LiveSection titleKey="live.queued" hint={t('live.queuedHint')} items={snapshot.queued} nowMs={nowMs} t={t} actionsFor={actionsFor('Queued')} onRowClick={openFollow('Queued')} />
         </>
       )}
 
