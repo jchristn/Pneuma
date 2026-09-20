@@ -22,6 +22,7 @@ function AppRoutes() {
       <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/dashboard" element={<Navigate to="/dashboard/home" replace />} />
       <Route path="/dashboard/:section" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      <Route path="/dashboard/:section/:tab" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

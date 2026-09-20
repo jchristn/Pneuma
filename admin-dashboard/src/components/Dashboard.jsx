@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { SECTION_META } from '../config/nav';
+import { SECTION_META, WORKSPACE_TABS, LEGACY_REDIRECTS } from '../config/nav';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import WorkspaceTabs from './WorkspaceTabs';
 import SetupWizard from './SetupWizard';
 
 import HomeView from '../views/HomeView';
@@ -68,14 +69,28 @@ const VIEWS = {
 };
 
 function Dashboard() {
-  const { section = 'home' } = useParams();
+  const { section = 'home', tab } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
-  const { apiClient } = useAuth();
+  const { apiClient, authContext } = useAuth();
+  const isAdmin = !!authContext?.isAdmin;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
 
-  const ViewComponent = VIEWS[section] || NotFound;
+  // An old single-view URL (e.g. /dashboard/subjects, /dashboard/jobs) redirects to its consolidated tab home,
+  // preserving any query string (e.g. /dashboard/ask?thread=...).
+  const legacy = !WORKSPACE_TABS[section] ? LEGACY_REDIRECTS[section] : null;
+  useEffect(() => {
+    if (legacy) navigate(`/dashboard/${legacy.section}/${legacy.tab}${location.search || ''}`, { replace: true });
+  }, [legacy, navigate, location.search]);
+
+  // Resolve the active workspace, its (role-filtered) tabs, and the active tab's view component.
+  const allTabs = WORKSPACE_TABS[section] || null;
+  const tabs = allTabs ? allTabs.filter((tt) => !tt.adminOnly || isAdmin) : [];
+  const activeTab = tabs.find((tt) => tt.key === tab) || tabs[0] || null;
+  const ViewComponent = activeTab ? (VIEWS[activeTab.view] || NotFound) : NotFound;
+  const showTabs = tabs.length > 1;
 
   // First run: with no subjects and no model endpoints yet, offer the guided setup wizard (once, unless
   // the operator dismisses it). A reliable local check on subjects anchors the decision.
@@ -100,15 +115,20 @@ function Dashboard() {
     document.title = `${title} · ${t('app.name')}`;
   }, [section, t]);
 
-  useEffect(() => { setSidebarOpen(false); }, [section]);
+  useEffect(() => { setSidebarOpen(false); }, [section, tab]);
 
   const handleNavigate = (newSection) => navigate(`/dashboard/${newSection}`);
+  const selectTab = (selected) => navigate(`/dashboard/${section}/${selected.key}`);
+
+  // While a legacy URL is redirecting, render nothing to avoid a flash of NotFound.
+  if (legacy) return null;
 
   return (
     <div className="shell">
       <Topbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
       <Sidebar activeSection={section} onNavigate={handleNavigate} open={sidebarOpen} />
       <main className="workspace">
+        {showTabs && <WorkspaceTabs tabs={tabs} activeKey={activeTab?.key} onSelect={selectTab} />}
         <ViewComponent />
       </main>
       {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
