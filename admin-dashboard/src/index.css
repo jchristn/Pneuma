@@ -188,9 +188,16 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .sidebar-nav { flex: 1; padding: var(--spacing-sm); }
 .nav-group { margin-bottom: var(--spacing-sm); }
 .nav-group-label {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
   font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--color-text-secondary); padding: 0 var(--spacing-sm); margin-bottom: 0.15rem;
+  color: var(--color-text-secondary); padding: 0.2rem var(--spacing-sm); margin-bottom: 0.15rem;
+  background: transparent; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
+.nav-group-label:hover { color: var(--color-text); }
+.nav-group.active > .nav-group-label { color: var(--color-text); }
+.nav-group-chevron { display: inline-flex; transition: transform 0.15s ease; opacity: 0.7; }
+.nav-group-chevron svg { width: 12px; height: 12px; }
+.nav-group.collapsed .nav-group-chevron { transform: rotate(-90deg); }
 .nav-item {
   display: flex; align-items: center; justify-content: flex-start; gap: 0.5rem;
   padding: 0.25rem var(--spacing-sm); margin-bottom: 0;
