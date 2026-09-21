@@ -225,7 +225,7 @@ function HomeView() {
         </div>
         <div ref={reqChartRef}>
           {chartLoading ? (
-            <div className="chart-empty"><span className="loading-spinner" /> {t('common.loading')}</div>
+            <div className="table-loading" role="status"><div className="loading-spinner" /> {t('common.loading')}</div>
           ) : (
             <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
           )}
@@ -253,7 +253,11 @@ function HomeView() {
           <div className="chart-stat"><span className="chart-stat-value">{formatNumber(ingestionTotal)}</span><span className="chart-stat-label">{t('chart.stageEventsTotal', 'Stage events')}</span></div>
         </div>
         <div ref={ingChartRef}>
-          <IngestionActivityChart summary={ingestion} rangeId={rangeId} />
+          {ingestionLoading ? (
+            <div className="table-loading" role="status"><div className="loading-spinner" /> {t('common.loading')}</div>
+          ) : (
+            <IngestionActivityChart summary={ingestion} rangeId={rangeId} />
+          )}
         </div>
       </div>
 

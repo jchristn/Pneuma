@@ -146,7 +146,7 @@ function RequestHistoryView() {
           </div>
         </div>
         {chartLoading ? (
-          <div className="chart-empty"><span className="loading-spinner" /> {t('common.loading')}</div>
+          <div className="table-loading" role="status"><div className="loading-spinner" /> {t('common.loading')}</div>
         ) : (
           <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
         )}
