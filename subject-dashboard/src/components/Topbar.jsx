@@ -27,7 +27,10 @@ function Topbar() {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <img src="/logo.png" alt="Pneuma" className="topbar-logo" />
+        <button type="button" className="topbar-logo-button" onClick={() => navigate('/dashboard/home')}
+          title="Go to the home dashboard." aria-label={t('nav.home', 'Home')}>
+          <img src="/logo.png" alt="Pneuma" className="topbar-logo" />
+        </button>
         <div className="topbar-endpoint" title={serverUrl}>
           <span className="copyable-id-value">{serverUrl}</span>
           <CopyButton value={serverUrl} title="Copy endpoint" />

@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import LanguageSelector from '../i18n/LanguageSelector';
@@ -9,6 +10,7 @@ const GITHUB_URL = 'https://github.com/jchristn/pneuma';
 const DISCORD_URL = 'https://discord.gg/tRAN8HgvK5';
 
 function Topbar({ onToggleSidebar }) {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { serverUrl, authContext, theme, toggleTheme, logout } = useAuth();
 
@@ -21,7 +23,10 @@ function Topbar({ onToggleSidebar }) {
     <header className="topbar">
       <div className="topbar-left">
         <button type="button" className="icon-button hamburger" onClick={onToggleSidebar} aria-label="Menu" title="Show or hide the navigation sidebar.">☰</button>
-        <img className="topbar-logo" src={logo} alt="Pneuma" />
+        <button type="button" className="topbar-logo-button" onClick={() => navigate('/dashboard/home')}
+          title="Go to the home dashboard." aria-label={t('nav.home', 'Home')}>
+          <img className="topbar-logo" src={logo} alt="Pneuma" />
+        </button>
         <span className="chip" title={`API server this dashboard is talking to: ${serverUrl}`}>
           <span>{t('topbar.endpoint')}</span>
           <span className="chip-value">{serverUrl}</span>
