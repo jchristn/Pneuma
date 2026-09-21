@@ -285,6 +285,12 @@ class ApiClient {
     });
   }
 
+  // Warm the subject's embedding model ahead of a search so the first query does not pay the model's
+  // cold-load cost. Returns { success, modelId, modelName, ready, elapsedMs }.
+  warmSubjectEmbedding(subjectId) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/search/warmup`);
+  }
+
   // Vector collections (RecallDB). Returns an EnumerationResult of { id, name, description, dimensionality, active }.
   listCollections() {
     return this._request('GET', '/v1.0/collections');

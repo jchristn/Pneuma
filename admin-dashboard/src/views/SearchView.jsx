@@ -22,14 +22,46 @@ function SearchView() {
   const [error, setError] = useState(null);
   const [searched, setSearched] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(null);
+  const [runnerNames, setRunnerNames] = useState({}); // embedding model id -> display name
+  const [warming, setWarming] = useState(false);
+  const [warmModelName, setWarmModelName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     apiClient.list('subjects', { maxResults: 1000 })
       .then((resp) => { if (!cancelled) setSubjects(normalizeList(resp).items); })
       .catch(() => { if (!cancelled) setSubjects([]); });
+    // Model-runner names so we can name the embedding model the moment a subject is chosen (before the
+    // warm-up round-trip returns).
+    apiClient.list('model-runners', { maxResults: 1000 })
+      .then((resp) => {
+        if (cancelled) return;
+        const map = {};
+        normalizeList(resp).items.forEach((r) => { map[r.id || r.Id] = r.name || r.Name || r.id || r.Id; });
+        setRunnerNames(map);
+      })
+      .catch(() => { if (!cancelled) setRunnerNames({}); });
     return () => { cancelled = true; };
   }, [apiClient]);
+
+  // Selecting a subject warms its embedding model (a trivial embed) so the first real search does not pay the
+  // model's cold-load cost. The model provider (e.g. Ollama) unloads idle models, so this front-runs the load
+  // while the operator is still typing.
+  useEffect(() => {
+    if (!subjectId) { setWarming(false); setWarmModelName(''); return undefined; }
+    const subject = subjects.find((s) => (s.id || s.Id) === subjectId);
+    const modelId = subject?.embeddingModel || subject?.EmbeddingModel;
+    if (!modelId) { setWarming(false); setWarmModelName(''); return undefined; }
+
+    let cancelled = false;
+    setWarmModelName(runnerNames[modelId] || modelId);
+    setWarming(true);
+    apiClient.warmSubjectEmbedding(subjectId)
+      .then((resp) => { if (!cancelled && (resp?.modelName || resp?.ModelName)) setWarmModelName(resp.modelName || resp.ModelName); })
+      .catch(() => { /* warm-up is best-effort; the search still works, just cold once */ })
+      .finally(() => { if (!cancelled) setWarming(false); });
+    return () => { cancelled = true; };
+  }, [apiClient, subjectId, subjects, runnerNames]);
 
   // size is passed explicitly so a page-size change can re-run with the new value without waiting for
   // the state update to flush through the callback's closure.
@@ -107,6 +139,12 @@ function SearchView() {
           </button>
         </div>
       </form>
+
+      {warming && (
+        <div className="table-loading" role="status">
+          <div className="loading-spinner" /> {t('search.initializingModel', { name: warmModelName })}
+        </div>
+      )}
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 

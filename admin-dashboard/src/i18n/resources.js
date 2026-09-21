@@ -390,6 +390,7 @@ const en = {
       source: 'Source Link',
       maxResults: 'Max results',
       showing: 'Showing {{from}} to {{to}} of {{total}} results ({{ms}} ms)',
+      initializingModel: 'Initializing embedding model {{name}}…',
       noResults: 'No documents matched your search.'
     },
     ingestionLog: {

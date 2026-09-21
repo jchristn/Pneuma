@@ -110,6 +110,38 @@ namespace Pneuma.Server.Services
             get { return _Retrieval.SearchPoolSize; }
         }
 
+        /// <summary>
+        /// Warm a subject's embedding model by issuing a trivial embed, so a model provider that unloads idle
+        /// models (e.g. Ollama) reloads it before the user's first search rather than during it. Idempotent and
+        /// cheap once the model is resident. Intended to be called when the operator selects a subject to search.
+        /// </summary>
+        /// <param name="tenantId">Tenant that owns the subject.</param>
+        /// <param name="subjectId">Subject whose embedding model should be warmed.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The warm-up outcome, including the model's display name and how long the embed took.</returns>
+        public async Task<EmbeddingWarmupResult> WarmEmbeddingModelAsync(string tenantId, string subjectId, CancellationToken token = default)
+        {
+            EmbeddingWarmupResult result = new EmbeddingWarmupResult();
+
+            Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            if (subject == null) return result;
+
+            string? modelId = subject.EmbeddingModel;
+            result.ModelId = modelId;
+            if (!String.IsNullOrEmpty(modelId))
+            {
+                ModelRunner? runner = await _Db.ModelRunners.ReadAsync(modelId!, token).ConfigureAwait(false);
+                result.ModelName = runner?.Name ?? modelId;
+            }
+
+            DateTime started = DateTime.UtcNow;
+            List<float>? embedding = await EmbedQueryAsync("warmup", modelId, token).ConfigureAwait(false);
+            result.ElapsedMs = (long)(DateTime.UtcNow - started).TotalMilliseconds;
+            result.Ready = embedding != null && embedding.Count > 0;
+            result.Success = true;
+            return result;
+        }
+
         /// <summary>Answer a grounded question end to end (non-streaming).</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="question">The question.</param>

@@ -68,6 +68,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Search the corpus (full-text, vector, or hybrid) for representative nodes", "Search"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{subjectId}/search", SubjectSearchAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Search a subject's documents (full-text, vector, or hybrid), paginated by score", "Search"));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/search/warmup", SubjectSearchWarmupAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Warm the subject's embedding model so the first search does not pay the cold-load cost", "Search"));
         }
 
         #endregion
@@ -214,6 +216,22 @@ namespace Pneuma.Server.Routes
                 Objects = objects
             };
             await RouteHelper.SendJsonAsync(ctx, 200, envelope).ConfigureAwait(false);
+        }
+
+        private async Task SubjectSearchWarmupAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await _Authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, ctx.Token).ConfigureAwait(false))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 403, "Forbidden", "Not permitted.").ConfigureAwait(false);
+                return;
+            }
+
+            string tenantId = rc.TenantId ?? String.Empty;
+            string subjectId = RouteHelper.Param(ctx, "subjectId");
+
+            EmbeddingWarmupResult result = await _Query.WarmEmbeddingModelAsync(tenantId, subjectId, ctx.Token).ConfigureAwait(false);
+            await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
         }
 
         /// <summary>
