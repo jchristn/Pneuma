@@ -224,7 +224,11 @@ function HomeView() {
           <div className="chart-stat"><span className="chart-stat-value" style={{ color: 'var(--color-danger)' }}>{formatNumber(totals.failure)}</span><span className="chart-stat-label">{t('chart.failed')}</span></div>
         </div>
         <div ref={reqChartRef}>
-          <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
+          {chartLoading ? (
+            <div className="chart-empty"><span className="loading-spinner" /> {t('common.loading')}</div>
+          ) : (
+            <ActivityChart summary={summary} rangeId={rangeId} onBucketClick={handleBucketClick} />
+          )}
         </div>
       </div>
 
