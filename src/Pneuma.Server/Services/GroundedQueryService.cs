@@ -423,28 +423,17 @@ namespace Pneuma.Server.Services
 
             RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, resolveNodes, token).ConfigureAwait(false);
 
-            // Fused RRF scores are tiny by construction — each channel contributes weight/(k + rank), so even a
-            // perfect top hit peaks near 1/(k+1) (~0.016 at the default k=60) regardless of how well it matched.
-            // Reporting that raw value makes strong matches look broken. For hybrid mode, normalize the fused
-            // score to [0,1] against the strongest hit so callers see an intuitive relevance value while the RRF
-            // ordering is preserved. Single-channel modes already report the raw channel score (cosine / TsRank).
-            double topRrf = 0.0;
-            if (mode == RetrievalModeEnum.Hybrid)
-            {
-                foreach (string id in pool.OrderedIds)
-                {
-                    double r = pool.RrfByNode.TryGetValue(id, out double rv) ? rv : 0.0;
-                    if (r > topRrf) topRrf = r;
-                }
-            }
-
             foreach (string id in pool.OrderedIds)
             {
                 if (results.Count >= max) break;
                 GraphNode node = pool.NodeById[id];
-                double score = mode == RetrievalModeEnum.Hybrid
-                    ? (topRrf > 0.0 && pool.RrfByNode.TryGetValue(id, out double r) ? r / topRrf : 0.0)
-                    : (pool.BestRawByNode.TryGetValue(id, out double s) ? s : 0.0);
+                // Report the actual relevance score the retrieval store returned for the hit — cosine similarity
+                // for the vector channel, TsRank for full-text — taking the best across whichever channels
+                // matched this node (BestRawByNode). This holds for every mode, including hybrid: Reciprocal-Rank
+                // Fusion (pool.OrderedIds) is used only to *order* the fused list because it is scale-independent,
+                // but its fused value is tiny by construction (~1/(k+rank)) and meaningless as a displayed score,
+                // so the surfaced score stays the real retrieval-store relevance.
+                double score = pool.BestRawByNode.TryGetValue(id, out double s) ? s : 0.0;
                 results.Add(new RetrievedChunk
                 {
                     Node = node,
