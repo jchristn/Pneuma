@@ -101,6 +101,15 @@ namespace Pneuma.Server.Services
 
         #region Public-Methods
 
+        /// <summary>
+        /// The number of candidate chunks the subject-search endpoint should over-fetch before grouping hits
+        /// by source link and paginating. Sourced from <see cref="RetrievalSettings.SearchPoolSize"/>.
+        /// </summary>
+        public int SearchPoolSize
+        {
+            get { return _Retrieval.SearchPoolSize; }
+        }
+
         /// <summary>Answer a grounded question end to end (non-streaming).</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="question">The question.</param>
@@ -413,14 +422,28 @@ namespace Pneuma.Server.Services
             if (String.IsNullOrWhiteSpace(question)) return results;
 
             RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, resolveNodes, token).ConfigureAwait(false);
+
+            // Fused RRF scores are tiny by construction — each channel contributes weight/(k + rank), so even a
+            // perfect top hit peaks near 1/(k+1) (~0.016 at the default k=60) regardless of how well it matched.
+            // Reporting that raw value makes strong matches look broken. For hybrid mode, normalize the fused
+            // score to [0,1] against the strongest hit so callers see an intuitive relevance value while the RRF
+            // ordering is preserved. Single-channel modes already report the raw channel score (cosine / TsRank).
+            double topRrf = 0.0;
+            if (mode == RetrievalModeEnum.Hybrid)
+            {
+                foreach (string id in pool.OrderedIds)
+                {
+                    double r = pool.RrfByNode.TryGetValue(id, out double rv) ? rv : 0.0;
+                    if (r > topRrf) topRrf = r;
+                }
+            }
+
             foreach (string id in pool.OrderedIds)
             {
                 if (results.Count >= max) break;
                 GraphNode node = pool.NodeById[id];
-                // A single-channel mode reports the raw channel score (cosine similarity / TsRank); hybrid reports
-                // the fused RRF score. Ordering follows the same score, so both are consistent with the ranking.
                 double score = mode == RetrievalModeEnum.Hybrid
-                    ? (pool.RrfByNode.TryGetValue(id, out double r) ? r : 0.0)
+                    ? (topRrf > 0.0 && pool.RrfByNode.TryGetValue(id, out double r) ? r / topRrf : 0.0)
                     : (pool.BestRawByNode.TryGetValue(id, out double s) ? s : 0.0);
                 results.Add(new RetrievedChunk
                 {

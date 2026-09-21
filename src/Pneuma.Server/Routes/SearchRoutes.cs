@@ -150,7 +150,7 @@ namespace Pneuma.Server.Routes
             // them up per source link. A source link is many chunk documents; each hit carries its link id.
             // resolveNodes:false — this view only needs each hit's link/snippet/score/document id (all carried on
             // the RecallDB hit), so we skip the per-hit LiteGraph node round-trip that otherwise dominated latency.
-            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, 1000, subjectId, mode, requestFilter, collectionOverride, ctx.Token, false).ConfigureAwait(false);
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, _Query.SearchPoolSize, subjectId, mode, requestFilter, collectionOverride, ctx.Token, false).ConfigureAwait(false);
 
             List<string> order = new List<string>();
             Dictionary<string, SearchGroup> groups = new Dictionary<string, SearchGroup>(StringComparer.Ordinal);

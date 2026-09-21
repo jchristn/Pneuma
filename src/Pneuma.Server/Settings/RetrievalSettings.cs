@@ -23,6 +23,7 @@ namespace Pneuma.Server.Settings
         private double _LexicalWeight = 1.0;
         private double _SemanticWeight = 1.0;
         private double _DiversityLambda = 0.7;
+        private int _SearchPoolSize = 250;
 
         #endregion
 
@@ -183,6 +184,19 @@ namespace Pneuma.Server.Settings
 
         /// <summary>Bearer API key for the cross-encoder rerank endpoint (may be null).</summary>
         public string? CrossEncoderRerankApiKey { get; set; } = null;
+
+        /// <summary>
+        /// How many candidate chunks the subject-search endpoint over-fetches from the retrieval store before
+        /// fusing the channels, rolling the hits up per source link, and paginating. A source link spans many
+        /// chunks, so the pool must exceed the page size to cover enough distinct links; larger values improve
+        /// link coverage and deep-pagination at the cost of more retrieval-store work and latency per query.
+        /// Default 250; clamped to [20, 2000].
+        /// </summary>
+        public int SearchPoolSize
+        {
+            get { return _SearchPoolSize; }
+            set { _SearchPoolSize = Math.Clamp(value, 20, 2000); }
+        }
 
         #endregion
     }
