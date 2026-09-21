@@ -388,6 +388,8 @@ const en = {
       passage: 'Top passage',
       document: 'Document',
       source: 'Source Link',
+      maxResults: 'Max results',
+      showing: 'Showing {{from}} to {{to}} of {{total}} results ({{ms}} ms)',
       noResults: 'No documents matched your search.'
     },
     ingestionLog: {

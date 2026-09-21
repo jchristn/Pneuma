@@ -6,7 +6,8 @@ import PageHeader from '../components/PageHeader';
 import ErrorBanner from '../components/ErrorBanner';
 import CopyableId from '../components/CopyableId';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
 
 function SearchView() {
   const { t } = useTranslation();
@@ -14,11 +15,13 @@ function SearchView() {
   const [subjects, setSubjects] = useState([]);
   const [subjectId, setSubjectId] = useState('');
   const [query, setQuery] = useState('');
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [result, setResult] = useState(null);
   const [skip, setSkip] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searched, setSearched] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,31 +31,44 @@ function SearchView() {
     return () => { cancelled = true; };
   }, [apiClient]);
 
-  const runSearch = useCallback(async (nextSkip) => {
+  // size is passed explicitly so a page-size change can re-run with the new value without waiting for
+  // the state update to flush through the callback's closure.
+  const runSearch = useCallback(async (nextSkip, size = pageSize) => {
     if (!subjectId || !query.trim()) return;
     setLoading(true);
     setError(null);
+    const started = performance.now();
     try {
-      const resp = await apiClient.searchSubjectDocuments(subjectId, query.trim(), { maxResults: PAGE_SIZE, skip: nextSkip });
+      const resp = await apiClient.searchSubjectDocuments(subjectId, query.trim(), { maxResults: size, skip: nextSkip });
+      setElapsedMs(performance.now() - started);
       setResult(resp);
       setSkip(nextSkip);
       setSearched(true);
     } catch (err) {
+      setElapsedMs(performance.now() - started);
       setError(err?.message || 'Search failed');
       setResult(null);
     } finally {
       setLoading(false);
     }
-  }, [apiClient, subjectId, query]);
+  }, [apiClient, subjectId, query, pageSize]);
 
   const onSubmit = (e) => { e.preventDefault(); runSearch(0); };
+
+  // Changing the page size restarts pagination and re-runs immediately when a search is already showing.
+  const onPageSizeChange = (e) => {
+    const size = Number(e.target.value);
+    setPageSize(size);
+    if (searched) runSearch(0, size);
+  };
 
   const objects = result?.objects || result?.Objects || [];
   const total = result?.totalRecords ?? result?.TotalRecords ?? 0;
   const from = total === 0 ? 0 : skip + 1;
-  const to = Math.min(skip + PAGE_SIZE, total);
+  const to = Math.min(skip + pageSize, total);
   const canPrev = skip > 0;
-  const canNext = skip + PAGE_SIZE < total;
+  const canNext = skip + pageSize < total;
+  const msLabel = elapsedMs == null ? 0 : Math.round(elapsedMs);
 
   return (
     <div>
@@ -75,6 +91,15 @@ function SearchView() {
             onChange={(e) => setQuery(e.target.value)}
             title="Keywords to match against the indexed chunk text (full-text search, not a question). Results link to the matching documents." />
         </div>
+        <div className="field" style={{ minWidth: '110px' }}>
+          <label htmlFor="search-max" className="has-tip" title="How many results to fetch and show per page.">{t('search.maxResults')}</label>
+          <select id="search-max" value={pageSize} onChange={onPageSizeChange}
+            title="How many results to fetch and show per page.">
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
         <div className="field" style={{ alignSelf: 'flex-end' }}>
           <button type="submit" className="button-primary" disabled={!subjectId || !query.trim() || loading}
             title="Run the full-text search over the selected subject’s documents.">
@@ -86,7 +111,7 @@ function SearchView() {
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {searched && !loading && objects.length === 0 && !error && (
-        <div className="ilog-empty">{t('search.noResults')}</div>
+        <div className="ilog-empty">{t('search.noResults')} ({msLabel} ms)</div>
       )}
 
       {objects.length > 0 && (
@@ -132,10 +157,10 @@ function SearchView() {
             </div>
           </div>
           <div className="table-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
-            <span className="pagination-info">{t('table.showing', { from, to, total })}</span>
+            <span className="pagination-info">{t('search.showing', { from, to, total, ms: msLabel })}</span>
             <div className="pagination-controls">
-              <button type="button" onClick={() => runSearch(Math.max(0, skip - PAGE_SIZE))} disabled={!canPrev || loading}>{t('table.prev')}</button>
-              <button type="button" onClick={() => runSearch(skip + PAGE_SIZE)} disabled={!canNext || loading}>{t('table.next')}</button>
+              <button type="button" onClick={() => runSearch(Math.max(0, skip - pageSize))} disabled={!canPrev || loading}>{t('table.prev')}</button>
+              <button type="button" onClick={() => runSearch(skip + pageSize)} disabled={!canNext || loading}>{t('table.next')}</button>
             </div>
           </div>
         </>
