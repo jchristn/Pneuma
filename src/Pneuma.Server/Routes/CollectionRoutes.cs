@@ -61,7 +61,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/collections", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List vector collections", "Collections"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.PUT, "/v1.0/collections", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a vector collection", "Collections"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a vector collection", "Collections").WithRequestBody(OpenApiBodies.Json<CreateCollectionRequest>("Collection to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/collections/{collectionId}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a vector collection", "Collections"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/collections/{collectionId}", DeleteAsync, RouteHelper.ExceptionAsync,

@@ -65,13 +65,13 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/eval/facts", ListFactsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List evaluation facts", "Eval"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/facts", CreateFactAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create an evaluation fact", "Eval"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create an evaluation fact", "Eval").WithRequestBody(OpenApiBodies.Json<EvalFact>("Create an evaluation fact")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/eval/facts/{id}", DeleteFactAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an evaluation fact", "Eval"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/eval/runs", ListRunsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List evaluation runs", "Eval"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/runs", StartRunAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Queue an evaluation run (processed by a background worker)", "Eval"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Queue an evaluation run (processed by a background worker)", "Eval").WithRequestBody(OpenApiBodies.Json<EvalRun>("Queue an evaluation run")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/eval/runs/{id}", RunDetailAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get an evaluation run and its results", "Eval"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/eval/runs/{id}/stream", StreamRunAsync, RouteHelper.ExceptionAsync,
@@ -79,7 +79,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/eval/runs/{id}/cancel", CancelRunAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Cancel a queued or running evaluation run", "Eval"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/runs/delete", BulkDeleteRunsAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple evaluation runs", "Eval"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple evaluation runs", "Eval").WithRequestBody(OpenApiBodies.Json<IdListRequest>("Delete multiple evaluation runs")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/eval/runs/{id}", DeleteRunAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an evaluation run", "Eval"));
         }

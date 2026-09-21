@@ -61,7 +61,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/settings/ingestion", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read ingestion concurrency tuning (system defaults)", "Settings"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.PUT, "/v1.0/settings/ingestion", WriteAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update ingestion concurrency tuning (applied live)", "Settings"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update ingestion concurrency tuning (applied live)", "Settings").WithRequestBody(OpenApiBodies.Json<IngestionTuning>("Update ingestion concurrency tuning")));
         }
 
         #endregion

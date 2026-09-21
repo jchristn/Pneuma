@@ -68,9 +68,9 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/links", SubmitAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Submit a content link for ingestion", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Submit a content link for ingestion", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitLinkRequest>("Content link to submit for ingestion")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/links/bulk", BulkSubmitAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Submit multiple content links for ingestion", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Submit multiple content links for ingestion", "Subjects").WithRequestBody(OpenApiBodies.Json<BulkSubmitLinkRequest>("Content links to submit for ingestion")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{subjectId}/links", ListBySubjectAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List a subject's links", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/links", ListAsync, RouteHelper.ExceptionAsync,
@@ -90,11 +90,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/subgraph", SubgraphAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored candidate subgraph", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/links/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple content links (background cascade)", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple content links (background cascade)", "Subjects").WithRequestBody(OpenApiBodies.Json<IdListRequest>("Link ids to delete")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/links/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a content link", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/links/reingest", BulkReingestAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Reingest multiple content links (queues a fresh ingestion job per link)", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Reingest multiple content links (queues a fresh ingestion job per link)", "Subjects").WithRequestBody(OpenApiBodies.Json<IdListRequest>("Link ids to reingest")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/links/{id}/reingest", ReingestAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Reingest a content link (queues a fresh ingestion job, forcing a full re-run)", "Subjects"));
         }

@@ -60,7 +60,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{id}/prompts", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List a subject's prompts (effective content, inherited vs overridden)", "Prompts"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/subjects/{id}/prompts/{key}", UpsertAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Set a per-subject prompt override", "Prompts"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Set a per-subject prompt override", "Prompts").WithRequestBody(OpenApiBodies.Json<SubjectPromptUpdateRequest>("Per-subject prompt override to set")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/subjects/{id}/prompts/{key}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Clear a per-subject prompt override (revert to global)", "Prompts"));
         }

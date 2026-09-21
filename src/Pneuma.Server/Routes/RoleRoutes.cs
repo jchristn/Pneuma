@@ -58,11 +58,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/roles", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List roles", "Authorization"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/roles", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a role", "Authorization"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a role", "Authorization").WithRequestBody(OpenApiBodies.Json<UserRole>("Create a role")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/roles/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a role", "Authorization"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/roles/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a role", "Authorization"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a role", "Authorization").WithRequestBody(OpenApiBodies.Json<UserRole>("Update a role")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/roles/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a role", "Authorization"));
         }

@@ -64,16 +64,16 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/feedback", ListFeedbackAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List chat feedback", "Feedback"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/feedback", SubmitFeedbackAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Submit feedback on a chat answer", "Feedback"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Submit feedback on a chat answer", "Feedback").WithRequestBody(OpenApiBodies.Json<SubmitFeedbackRequest>("Feedback to submit")));
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/threads", ListThreadsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List conversation threads", "History"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/threads", CreateThreadAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a conversation thread", "History"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a conversation thread", "History").WithRequestBody(OpenApiBodies.Json<ThreadRequest>("Thread to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/threads/{id}", ThreadDetailAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get a thread with its turns", "History"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/threads/{id}", RenameThreadAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Rename a conversation thread", "History"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Rename a conversation thread", "History").WithRequestBody(OpenApiBodies.Json<ThreadRequest>("Thread rename request")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/threads/{id}", DeleteThreadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a conversation thread and its turns", "History"));
         }

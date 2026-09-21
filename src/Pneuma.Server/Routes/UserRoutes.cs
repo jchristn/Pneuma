@@ -59,11 +59,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/users", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List users", "Users"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/users", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a user", "Users"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a user", "Users").WithRequestBody(OpenApiBodies.Json<CreateUserRequest>("User to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/users/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a user", "Users"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/users/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a user", "Users"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a user", "Users").WithRequestBody(OpenApiBodies.Json<CreateUserRequest>("User fields to update")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/users/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a user", "Users"));
         }

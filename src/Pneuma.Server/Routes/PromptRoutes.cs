@@ -58,11 +58,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/prompts", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List prompts", "Prompts"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/prompts", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a prompt", "Prompts"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a prompt", "Prompts").WithRequestBody(OpenApiBodies.Json<Prompt>("Create a prompt")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/prompts/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a prompt", "Prompts"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/prompts/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a prompt", "Prompts"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a prompt", "Prompts").WithRequestBody(OpenApiBodies.Json<Prompt>("Update a prompt")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/prompts/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a prompt", "Prompts"));
         }

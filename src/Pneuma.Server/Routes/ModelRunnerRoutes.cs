@@ -76,7 +76,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/model-runners", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List model endpoints", "ModelRunners"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/model-runners", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a model endpoint", "ModelRunners"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a model endpoint", "ModelRunners").WithRequestBody(OpenApiBodies.Json<CreateModelEndpointRequest>("Create a model endpoint")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/model-runners/health", HealthListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Health of all model endpoints (deduplicated by base URL)", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}/health", HealthByIdAsync, RouteHelper.ExceptionAsync,
@@ -88,7 +88,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/model-runners/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a model endpoint", "ModelRunners"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/model-runners/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a model endpoint", "ModelRunners"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a model endpoint", "ModelRunners").WithRequestBody(OpenApiBodies.Json<CreateModelEndpointRequest>("Update a model endpoint")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/model-runners/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a model endpoint", "ModelRunners"));
         }

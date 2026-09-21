@@ -55,7 +55,7 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PreAuthentication.Static.Add(HttpMethod.POST, "/v1.0/token", CreateTokenAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a session token", "Tokens"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a session token", "Tokens").WithRequestBody(OpenApiBodies.Json<LoginRequest>("Login credentials")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/token", ValidateTokenAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Validate the current token", "Tokens"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/token/details", TokenDetailsAsync, RouteHelper.ExceptionAsync,

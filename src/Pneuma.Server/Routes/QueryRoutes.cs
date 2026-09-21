@@ -71,13 +71,13 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query", QueryAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question of the corpus", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question of the corpus", "Search").WithRequestBody(OpenApiBodies.Json<QueryRequest>("Ask a grounded question of the corpus")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query/stream", QueryStreamAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question and stream the answer (SSE)", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Ask a grounded question and stream the answer (SSE)", "Search").WithRequestBody(OpenApiBodies.Json<QueryRequest>("Ask a grounded question and stream the answer (SSE)")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/query/global", QueryGlobalAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Ask a global/thematic question answered from a subject's community summaries", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Ask a global/thematic question answered from a subject's community summaries", "Search").WithRequestBody(OpenApiBodies.Json<QueryRequest>("Ask a global/thematic question answered from a subject's community summaries")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/warmup", WarmupAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Warm the answering model so the first question is fast", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Warm the answering model so the first question is fast", "Search").WithRequestBody(OpenApiBodies.Json<QueryRequest>("Warm the answering model so the first question is fast")));
         }
 
         #endregion

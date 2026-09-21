@@ -74,7 +74,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/jobs/{id}/log", LogAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get an ingestion job's live per-stage log", "Ingestion"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/jobs/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple ingestion jobs and their artifacts", "Ingestion"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple ingestion jobs and their artifacts", "Ingestion").WithRequestBody(OpenApiBodies.Json<IdListRequest>("Delete multiple ingestion jobs and their artifacts")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/jobs/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an ingestion job and its artifacts", "Ingestion"));
         }

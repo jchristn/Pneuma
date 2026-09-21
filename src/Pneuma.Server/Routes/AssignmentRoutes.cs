@@ -58,7 +58,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/assignments", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List assignments for a user", "Authorization"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/assignments", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create an assignment", "Authorization"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create an assignment", "Authorization").WithRequestBody(OpenApiBodies.Json<UserRoleAssignment>("Assignment to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/assignments/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete an assignment", "Authorization"));
         }

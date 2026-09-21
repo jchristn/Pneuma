@@ -123,7 +123,12 @@ export function getRequestBodyTemplate(requestBody, spec) {
   const body = requestBody.$ref ? resolveRef(requestBody.$ref, spec) : requestBody;
   const content = body?.content || {};
   const json = content['application/json'] || content['application/*+json'];
-  if (!json || !json.schema) return '';
+  if (!json) return '';
+  // Prefer an explicit example the server attached (a representative, input-only body). It lives at the
+  // media-type level; fall back to a schema-level example, then to synthesizing one from the schema.
+  const explicit = json.example ?? json.schema?.example;
+  if (explicit !== undefined && explicit !== null) return JSON.stringify(explicit, null, 2);
+  if (!json.schema) return '';
   const example = exampleForSchema(json.schema, spec);
   if (example === null || example === undefined) return '';
   return JSON.stringify(example, null, 2);

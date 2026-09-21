@@ -63,7 +63,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/credentials", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List credentials", "Credentials"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/credentials", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a credential", "Credentials"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a credential", "Credentials").WithRequestBody(OpenApiBodies.Json<CreateCredentialRequest>("Create a credential")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/credentials/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a credential", "Credentials"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/credentials/{id}", DeleteAsync, RouteHelper.ExceptionAsync,

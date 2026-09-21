@@ -58,7 +58,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/settings", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read server settings", "Settings"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.PUT, "/v1.0/settings", WriteAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Overwrite server settings", "Settings"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Overwrite server settings", "Settings").WithRequestBody(OpenApiBodies.Json<AppSettings>("Server settings to overwrite")));
         }
 
         #endregion

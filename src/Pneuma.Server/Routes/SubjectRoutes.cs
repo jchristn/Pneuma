@@ -74,15 +74,15 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/subjects", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List subjects", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subjects", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a subject", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a subject", "Subjects").WithRequestBody(OpenApiBodies.Json<Subject>("Subject to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/by-slug/{slug}", ReadBySlugAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Resolve a subject by its URL slug", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a subject", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/subjects/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a subject", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a subject", "Subjects").WithRequestBody(OpenApiBodies.Json<Subject>("Subject fields to update")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subjects/delete", BulkDeleteAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple subjects (background cascade)", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete multiple subjects (background cascade)", "Subjects").WithRequestBody(OpenApiBodies.Json<IdListRequest>("Subject ids to delete")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/subjects/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a subject", "Subjects"));
         }

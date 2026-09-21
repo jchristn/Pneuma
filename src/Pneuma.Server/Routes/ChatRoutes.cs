@@ -67,7 +67,7 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
 
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/chat/stream", ChatStreamAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Multi-turn agentic chat over the corpus, streamed (SSE)", "Search"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Multi-turn agentic chat over the corpus, streamed (SSE)", "Search").WithRequestBody(OpenApiBodies.Json<ChatRequest>("Chat request")));
         }
 
         #endregion

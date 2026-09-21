@@ -67,11 +67,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/tenants", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List tenants", "Tenants"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/tenants", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a tenant", "Tenants"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a tenant", "Tenants").WithRequestBody(OpenApiBodies.Json<CreateTenantRequest>("Tenant to create")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/tenants/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a tenant", "Tenants"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/tenants/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a tenant", "Tenants"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a tenant", "Tenants").WithRequestBody(OpenApiBodies.Json<Tenant>("Tenant fields to update")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/tenants/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a tenant", "Tenants"));
         }

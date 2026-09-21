@@ -58,11 +58,11 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/permissions", ListAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List permissions", "Authorization"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/permissions", CreateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Create a permission", "Authorization"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Create a permission", "Authorization").WithRequestBody(OpenApiBodies.Json<Permission>("Create a permission")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/permissions/{id}", ReadAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a permission", "Authorization"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.PUT, "/v1.0/permissions/{id}", UpdateAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("Update a permission", "Authorization"));
+                openApiMetadata: OpenApiRouteMetadata.Create("Update a permission", "Authorization").WithRequestBody(OpenApiBodies.Json<Permission>("Update a permission")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/permissions/{id}", DeleteAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Delete a permission", "Authorization"));
         }
