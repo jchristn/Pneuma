@@ -4,10 +4,6 @@ namespace Pneuma.Core.Integrations.Implementations
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Pneuma.Chunking.Chunking;
-    using Pneuma.Chunking.Enums;
-    using Pneuma.Chunking.Models;
-    using Pneuma.Chunking.Tokenization;
     using Pneuma.Core.Database;
     using Pneuma.Core.Integrations;
     using Pneuma.Core.Integrations.Abstractions;
@@ -18,12 +14,15 @@ namespace Pneuma.Core.Integrations.Implementations
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
     using SyslogLogging;
+    using TextChunker.Chunking;
+    using TextChunker.Enums;
 
     /// <summary>
     /// Native <see cref="ISemanticProcessor"/> that chunks, embeds, and summarizes inside Pneuma, resolving
     /// model endpoints from the model-runner store and calling providers directly through PolyPrompt. Replaces the prior
-    /// external processor. Chunking uses the built-in cl100k_base tokenizer (matching the boundaries
-    /// the prior chunk path produced); embeddings are L2-normalized so cosine retrieval is stable.
+    /// external processor. Chunking uses the TextChunker library, which counts tokens in the embedding model's own
+    /// tokenizer when a model id is supplied (cl100k_base otherwise); embeddings are L2-normalized so cosine
+    /// retrieval is stable.
     /// </summary>
     public class NativeSemanticProcessor : ISemanticProcessor
     {
@@ -77,41 +76,32 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
-        public Task<List<SemanticChunk>> ChunkAsync(string text, ChunkingOptions? options = null, CancellationToken token = default)
+        public async Task<List<SemanticChunk>> ChunkAsync(string text, ChunkingOptions? options = null, CancellationToken token = default)
         {
             List<SemanticChunk> chunks = new List<SemanticChunk>();
-            if (String.IsNullOrWhiteSpace(text)) return Task.FromResult(chunks);
+            if (String.IsNullOrWhiteSpace(text)) return chunks;
 
             ChunkingOptions effective = options ?? new ChunkingOptions();
-            ITokenizerAdapter tokenizer = TokenizerAdapterFactory.Create(new ResolvedTokenizationProfile());
-            ChunkStrategyEnum strategy = MapStrategy(effective.Strategy);
-            ChunkingConfiguration config = new ChunkingConfiguration
+
+            // Overlap must stay below the chunk size, or no window could advance.
+            int overlap = effective.OverlapCount < effective.MaxTokens ? effective.OverlapCount : effective.MaxTokens / 4;
+            TextChunker.Models.ChunkingOptions chunkerOptions = new TextChunker.Models.ChunkingOptions
             {
-                Strategy = strategy,
-                FixedTokenCount = effective.MaxTokens,
-                OverlapCount = effective.OverlapCount
+                Strategy = MapStrategy(effective.Strategy),
+                MaxTokens = effective.MaxTokens,
+                OverlapCount = overlap,
+                ModelId = String.IsNullOrWhiteSpace(effective.ModelId) ? null : effective.ModelId,
+                ComputeHashes = false
             };
 
-            List<string> raw;
-            switch (strategy)
+            Chunker chunker = new Chunker();
+            await foreach (TextChunker.Models.Chunk chunk in chunker.ChunkText(text, chunkerOptions, token).ConfigureAwait(false))
             {
-                case ChunkStrategyEnum.SentenceBased:
-                    raw = SentenceChunker.Chunk(text, config, tokenizer, effective.MaxTokens);
-                    break;
-                case ChunkStrategyEnum.ParagraphBased:
-                    raw = ParagraphChunker.Chunk(text, config, tokenizer, effective.MaxTokens);
-                    break;
-                default:
-                    raw = FixedTokenChunker.Chunk(text, config, tokenizer, effective.MaxTokens);
-                    break;
+                if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
+                chunks.Add(new SemanticChunk { Text = chunk.Text });
             }
 
-            foreach (string chunk in raw)
-            {
-                if (String.IsNullOrWhiteSpace(chunk)) continue;
-                chunks.Add(new SemanticChunk { Text = chunk });
-            }
-            return Task.FromResult(chunks);
+            return chunks;
         }
 
         /// <inheritdoc />
@@ -132,7 +122,7 @@ namespace Pneuma.Core.Integrations.Implementations
                 token.ThrowIfCancellationRequested();
                 int count = Math.Min(_EmbedBatchSize, texts.Count - offset);
                 List<string> batch = texts.GetRange(offset, count);
-                EmbeddingResponse response = await client.EmbedAsync(batch, embeddingOptions, token).ConfigureAwait(false);
+                EmbeddingResponse response = await EmbedWithRetryAsync(client, batch, embeddingOptions, token).ConfigureAwait(false);
                 if (response == null || !response.Success) throw new InvalidOperationException("Embedding request failed: " + (response?.Error ?? "no response") + ".");
                 if (response.Embeddings.Count != batch.Count) throw new InvalidOperationException("Embedding provider returned " + response.Embeddings.Count + " vectors for " + batch.Count + " inputs.");
 
@@ -207,7 +197,35 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             if (String.Equals(strategy, "SentenceBased", StringComparison.OrdinalIgnoreCase)) return ChunkStrategyEnum.SentenceBased;
             if (String.Equals(strategy, "ParagraphBased", StringComparison.OrdinalIgnoreCase)) return ChunkStrategyEnum.ParagraphBased;
+            if (String.Equals(strategy, "Recursive", StringComparison.OrdinalIgnoreCase)) return ChunkStrategyEnum.Recursive;
             return ChunkStrategyEnum.FixedTokenCount;
+        }
+
+        /// <summary>
+        /// Embed a batch, retrying rate limiting (429) and transient server errors (5xx) with exponential backoff
+        /// (1, 2, 4, 8, 16 s). A shared or hosted model endpoint answers "at capacity" under load; without a retry
+        /// here one such response failed the whole ingestion stage.
+        /// </summary>
+        private static async Task<EmbeddingResponse> EmbedWithRetryAsync(CompletionClientBase client, List<string> batch, EmbeddingOptions options, CancellationToken token)
+        {
+            EmbeddingResponse response = await client.EmbedAsync(batch, options, token).ConfigureAwait(false);
+            for (int attempt = 1; attempt <= 5 && IsTransientFailure(response); attempt++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), token).ConfigureAwait(false);
+                response = await client.EmbedAsync(batch, options, token).ConfigureAwait(false);
+            }
+
+            return response;
+        }
+
+        private static bool IsTransientFailure(EmbeddingResponse? response)
+        {
+            if (response == null) return true;
+            if (response.Success) return false;
+            string error = response.Error ?? String.Empty;
+            return error.Contains("429", StringComparison.Ordinal) || error.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("HTTP 5", StringComparison.Ordinal) || error.Contains("502", StringComparison.Ordinal)
+                || error.Contains("503", StringComparison.Ordinal) || error.Contains("504", StringComparison.Ordinal);
         }
 
         private static List<List<float>> OrderVectors(List<EmbeddingResult> embeddings, int count)

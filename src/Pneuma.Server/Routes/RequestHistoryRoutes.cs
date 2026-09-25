@@ -153,7 +153,7 @@ namespace Pneuma.Server.Routes
         private static string? Q(System.Collections.Specialized.NameValueCollection? q, string key)
         {
             string? value = q?[key];
-            return String.IsNullOrEmpty(value) ? null : value;
+            return String.IsNullOrEmpty(value) ? null : System.Net.WebUtility.UrlDecode(value);
         }
 
         private static DateTime? ParseUtc(string? value)

@@ -98,8 +98,8 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
                 return;
             }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
-            string? threadId = ctx.Request.Query.Elements?["threadId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
+            string? threadId = RouteHelper.Query(ctx, "threadId");
             List<ChatTurnRecord> turns = String.IsNullOrEmpty(threadId)
                 ? await _Db.ChatTurns.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false)
                 : await _Db.ChatTurns.EnumerateByThreadAsync(rc.TenantId, threadId!, ctx.Token).ConfigureAwait(false);
@@ -142,7 +142,7 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
                 return;
             }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
             List<ChatThread> threads = await _Db.ChatThreads.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false);
             EnumerationResult<ChatThread> result = EnumerationHelper.Paginate(threads, RouteHelper.ReadEnumerationQuery(ctx), t => t.LastActivityUtc, t => t.Id);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);
@@ -241,7 +241,7 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
                 return;
             }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
             List<ChatFeedback> feedback = await _Db.ChatFeedback.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false);
 
             // Enrich each feedback with its rated turn so the Feedback modal can show the full prompt/response

@@ -7,6 +7,8 @@ namespace Test.Shared.Suites
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Models;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Streaming;
@@ -481,6 +483,57 @@ namespace Test.Shared.Suites
                             if (response.StatusCode != HttpStatusCode.Unauthorized) throw new Exception("MCP without a token should be 401, got " + (int)response.StatusCode);
                         }),
 
+                    new TestCaseDescriptor("Api", "Mcp_Ping_ReturnsEmptyObject", "MCP ping returns an empty-object result (not \"pong\") and initialize advertises tools",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            HttpResponseMessage pingResp = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}", ct);
+                            string pingBody = await pingResp.Content.ReadAsStringAsync(ct);
+                            if (pingResp.StatusCode != HttpStatusCode.OK) throw new Exception("ping not 200: " + (int)pingResp.StatusCode);
+                            if (!pingBody.Contains("\"result\":{}") || pingBody.Contains("pong")) throw new Exception("ping should return an empty object result: " + pingBody);
+
+                            string init = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}";
+                            string initBody = await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, init, ct)).Content.ReadAsStringAsync(ct);
+                            if (!initBody.Contains("protocolVersion") || !initBody.Contains("\"tools\"")) throw new Exception("initialize should return a protocol version and the tools capability: " + initBody);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_Notification_Returns202", "An MCP notification is acknowledged with HTTP 202 and no JSON-RPC body",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            HttpResponseMessage response = await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}", ct);
+                            if ((int)response.StatusCode != 202) throw new Exception("notifications/initialized should be 202, got " + (int)response.StatusCode);
+                            string body = await response.Content.ReadAsStringAsync(ct);
+                            if (body.Contains("jsonrpc")) throw new Exception("a notification should not carry a JSON-RPC response: " + body);
+                        }),
+
+                    new TestCaseDescriptor("Api", "Mcp_BareToolMethod_And_UnknownTool_Rejected", "Tools are reachable only through tools/call; a bare tool method is -32601 and an unknown tool is rejected",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+
+                            string bareBody = await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"pneuma_capabilities\"}", ct)).Content.ReadAsStringAsync(ct);
+                            if (!bareBody.Contains("-32601") || bareBody.Contains("\"result\"")) throw new Exception("a bare tool-name method should be -32601: " + bareBody);
+
+                            string unknown = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_no_such_tool\",\"arguments\":{}}}";
+                            string unknownBody = await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, unknown, ct)).Content.ReadAsStringAsync(ct);
+                            // Tool authorization is deny-by-default, so an unrecognized tool is refused before dispatch.
+                            if (!unknownBody.Contains("\"error\"") || unknownBody.Contains("\"result\"")) throw new Exception("an unknown tool should be rejected with a JSON-RPC error: " + unknownBody);
+
+                            string noName = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"arguments\":{}}}";
+                            string noNameBody = await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, noName, ct)).Content.ReadAsStringAsync(ct);
+                            if (!noNameBody.Contains("-32602")) throw new Exception("tools/call without a name should be -32602: " + noNameBody);
+
+                            string okCall = "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"pneuma_capabilities\",\"arguments\":{}}}";
+                            string okBody = await (await Send(HttpMethod.Post, server.BaseUrl + "/mcp", token, okCall, ct)).Content.ReadAsStringAsync(ct);
+                            if (!McpResultText(okBody).Contains("Pneuma")) throw new Exception("pneuma_capabilities through tools/call should succeed: " + okBody);
+                        }),
+
                     new TestCaseDescriptor("Api", "Mcp_EnumerateSubjects_Paged", "pneuma_enumerate_subjects returns a paged EnumerationResult with a total count",
                         executeAsync: async ct =>
                         {
@@ -632,6 +685,63 @@ namespace Test.Shared.Suites
                             if (response.StatusCode != HttpStatusCode.OK) throw new Exception("pneuma_search call not 200: " + (int)response.StatusCode);
                             string body = await response.Content.ReadAsStringAsync(ct);
                             if (!body.Contains("\\\"count\\\"") && !body.Contains("count")) throw new Exception("search result should carry a bounded count");
+                            if (!body.Contains("Hybrid")) throw new Exception("pneuma_search should run hybrid retrieval by default: " + body);
+                        }),
+
+                    new TestCaseDescriptor("Api", "SubjectSearch_HybridFollowsFusedOrder", "Hybrid subject search ranks documents by the fused ranking (not by whichever channel's raw score is larger) and decodes the query string",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            HttpResponseMessage who = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/token", token, null, ct);
+                            string whoBody = await who.Content.ReadAsStringAsync(ct);
+                            string tenantId = System.Text.Json.JsonDocument.Parse(whoBody).RootElement.GetProperty("tenantId").GetString() ?? String.Empty;
+
+                            // A real embedding path (model runner -> PolyPrompt -> endpoint) that embeds every query as [0.1, 0.2].
+                            using StubEmbeddingEndpoint embedder = new StubEmbeddingEndpoint(new float[] { 0.1f, 0.2f });
+                            ModelRunner runner = await server.Database.ModelRunners.CreateAsync(new ModelRunner
+                            {
+                                Name = "stub-embed",
+                                Provider = Pneuma.Core.Enums.ModelRunnerProviderEnum.Ollama,
+                                BaseUrl = embedder.BaseUrl,
+                                ApiType = "Ollama",
+                                Capabilities = new List<Pneuma.Core.Enums.ModelCapabilityEnum> { Pneuma.Core.Enums.ModelCapabilityEnum.Embedding },
+                                DefaultEmbeddingModel = "stub",
+                                Active = true,
+                                HealthCheckEnabled = false
+                            }, ct);
+                            RecallCollection col = await server.Recall.CreateCollectionAsync(tenantId, new RecallCollection { Name = "kb", Dimensionality = 2 }, ct);
+                            Subject subject = await server.Database.Subjects.CreateAsync(new Subject { TenantId = tenantId, DisplayName = "Fusion", Collection = col.Id, EmbeddingModel = runner.Id }, ct);
+
+                            // The fake embeds every query as [0.1, 0.2]. A: keyword match only (vector far, rank 3).
+                            // B: vector-nearest (cosine 1.0) with no keyword match. C: keyword match and vector rank 2.
+                            // Fused: A and C (both channels) lead, B trails. The old raw-score sort put B first,
+                            // because its cosine 1.0 beats every keyword score.
+                            await server.Recall.StoreChunksAsync(tenantId, col.Id, new List<ChunkDocument>
+                            {
+                                SearchDoc("k1", "lnk_a", "nodeA", subject.Id, "apple apple apple", 1f, 0f),
+                                SearchDoc("k2", "lnk_b", "nodeB", subject.Id, "banana bread", 0.1f, 0.2f),
+                                SearchDoc("k3", "lnk_c", "nodeC", subject.Id, "apple pie", 0.2f, 0.3f)
+                            }, ct);
+
+                            HttpResponseMessage hybrid = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/subjects/" + subject.Id + "/search?q=apple&mode=hybrid", token, null, ct);
+                            string hybridBody = await hybrid.Content.ReadAsStringAsync(ct);
+                            System.Text.Json.JsonElement objects = System.Text.Json.JsonDocument.Parse(hybridBody).RootElement.GetProperty("objects");
+                            if (objects.GetArrayLength() != 3) throw new Exception("expected three documents: " + hybridBody);
+                            string first = objects[0].GetProperty("linkId").GetString() ?? String.Empty;
+                            string last = objects[2].GetProperty("linkId").GetString() ?? String.Empty;
+                            if (first == "lnk_b" || last != "lnk_b") throw new Exception("the vector-only document should rank last under fusion, got first=" + first + " last=" + last);
+                            if (objects[0].GetProperty("fusedScore").GetDouble() < objects[2].GetProperty("fusedScore").GetDouble()) throw new Exception("documents should be in fused-score order");
+
+                            // %20 and + must both decode to a space: "apple pie" matches only C in the text channel.
+                            foreach (string encoded in new[] { "apple%20pie", "apple+pie" })
+                            {
+                                HttpResponseMessage text = await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/subjects/" + subject.Id + "/search?q=" + encoded + "&mode=text", token, null, ct);
+                                string textBody = await text.Content.ReadAsStringAsync(ct);
+                                System.Text.Json.JsonElement textObjects = System.Text.Json.JsonDocument.Parse(textBody).RootElement.GetProperty("objects");
+                                if (textObjects.GetArrayLength() != 1 || textObjects[0].GetProperty("linkId").GetString() != "lnk_c")
+                                    throw new Exception("q=" + encoded + " should decode to 'apple pie' and match only C: " + textBody);
+                            }
                         }),
 
                     new TestCaseDescriptor("Api", "Mcp_Search_AcceptsMetadataFilter", "pneuma_search accepts a metadataFilter argument",
@@ -762,6 +872,19 @@ namespace Test.Shared.Suites
                             if (!body.Contains("insufficientSupport")) throw new Exception("an empty corpus should stream a complete event with insufficientSupport");
                         })
                 });
+        }
+
+        private static ChunkDocument SearchDoc(string key, string linkId, string nodeId, string subjectId, string content, float e0, float e1)
+        {
+            return new ChunkDocument
+            {
+                DocumentKey = key,
+                DocumentId = linkId,
+                Position = 0,
+                Content = content,
+                Embedding = new List<float> { e0, e1 },
+                Tags = new Dictionary<string, string> { { "litegraphNodeId", nodeId }, { "linkId", linkId }, { "subjectId", subjectId } }
+            };
         }
 
         private static async Task<string> LoginAsync(string baseUrl, string email, string password, CancellationToken ct)

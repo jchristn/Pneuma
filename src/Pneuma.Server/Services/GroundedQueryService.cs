@@ -2,6 +2,7 @@ namespace Pneuma.Server.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Text;
     using System.Text.RegularExpressions;
     using System.Threading;
@@ -17,6 +18,7 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
@@ -149,16 +151,12 @@ namespace Pneuma.Server.Services
         /// <param name="subjectId">Optional subject to scope retrieval to; null searches the whole tenant.</param>
         /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to the best relevance score of its chunks.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="overrides">Optional per-request retrieval overrides (administrators only; validated by the caller).</param>
         /// <returns>The grounded answer.</returns>
-        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
+        public async Task<GroundedAnswer> AnswerAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default, RetrievalOverrides? overrides = null)
         {
             Subject? subject = String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
-
-            // Optional prompt-rewrite: the rewritten form drives retrieval + reranking; the answer still addresses
-            // the user's original question.
-            string retrievalQuestion = await RewriteQuestionAsync(tenantId, subject, question, token).ConfigureAwait(false);
-
-            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, retrievalQuestion, max, subjectId, citedLinkScores, requestFilter, token).ConfigureAwait(false);
+            List<GraphNode> sources = await RetrieveForAnswerAsync(tenantId, subject, question, max, subjectId, citedLinkScores, requestFilter, token, overrides).ConfigureAwait(false);
             if (sources.Count == 0)
             {
                 return new GroundedAnswer
@@ -168,9 +166,6 @@ namespace Pneuma.Server.Services
                     InsufficientSupport = true
                 };
             }
-
-            // Optional reranking: reorder the retrieved sources by relevance to the (rewritten) question.
-            sources = await RerankAsync(tenantId, subject, retrievalQuestion, sources, NodeText, token).ConfigureAwait(false);
 
             ModelRunner? runner = await ResolveAnswerRunnerAsync(tenantId, subject, token).ConfigureAwait(false);
             if (runner == null)
@@ -183,7 +178,9 @@ namespace Pneuma.Server.Services
                 };
             }
 
+            Stopwatch stage = Stopwatch.StartNew();
             GeneratedAnswer generated = await GenerateAnswerDetailedAsync(question, sources, tenantId, runner, subjectId, token).ConfigureAwait(false);
+            PneumaMetrics.RecordRetrievalStage("generate", stage.Elapsed.TotalSeconds);
             return new GroundedAnswer
             {
                 Answer = generated.Text,
@@ -192,6 +189,51 @@ namespace Pneuma.Server.Services
                 AnswerModel = generated.Model,
                 GenerationMs = generated.DurationMs
             };
+        }
+
+        /// <summary>
+        /// Retrieve the grounding sources for an answer: the optional prompt rewrite (the rewritten form drives
+        /// retrieval and reranking; the answer still addresses the original question), hybrid retrieval with
+        /// diversity selection and optional neighbor expansion, then the optional rerank. Shared by the
+        /// non-streaming and streaming answer routes so they ground on the same passages.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subject">The subject in scope (already loaded), or null.</param>
+        /// <param name="question">The user's question.</param>
+        /// <param name="max">Maximum primary sources.</param>
+        /// <param name="subjectId">Subject id to scope retrieval to, or null for the whole tenant.</param>
+        /// <param name="citedLinkScores">Optional sink mapping each cited content-link id to its best relevance score.</param>
+        /// <param name="requestFilter">Optional per-request facet filter.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <param name="overrides">Optional per-request retrieval overrides.</param>
+        /// <returns>The sources in presentation order (empty when nothing was retrieved).</returns>
+        public async Task<List<GraphNode>> RetrieveForAnswerAsync(string tenantId, Subject? subject, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default, RetrievalOverrides? overrides = null)
+        {
+            Stopwatch stage = Stopwatch.StartNew();
+            string retrievalQuestion = await RewriteQuestionAsync(tenantId, subject, question, token).ConfigureAwait(false);
+            if (!ReferenceEquals(retrievalQuestion, question)) PneumaMetrics.RecordRetrievalStage("rewrite", stage.Elapsed.TotalSeconds);
+
+            List<GraphNode> sources = await RetrieveSourcesAsync(tenantId, retrievalQuestion, max, subjectId, citedLinkScores, requestFilter, token, overrides).ConfigureAwait(false);
+            if (sources.Count == 0) return sources;
+
+            stage.Restart();
+            List<GraphNode> reranked = await RerankAsync(tenantId, subject, retrievalQuestion, sources, NodeText, token).ConfigureAwait(false);
+            if (!ReferenceEquals(reranked, sources)) PneumaMetrics.RecordRetrievalStage("rerank", stage.Elapsed.TotalSeconds);
+            return reranked;
+        }
+
+        /// <summary>
+        /// Load a subject by id (null for no subject), for callers that need it for both retrieval and runner
+        /// resolution.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="subjectId">Subject id, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The subject, or null.</returns>
+        public async Task<Subject?> ReadSubjectAsync(string tenantId, string? subjectId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(subjectId)) return null;
+            return await _Db.Subjects.ReadAsync(tenantId, subjectId!, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -341,13 +383,15 @@ namespace Pneuma.Server.Services
             return await CompleteTextAsync(runner, systemPrompt, userText, maxTokens, token).ConfigureAwait(false);
         }
 
-        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default)
+        public async Task<List<GraphNode>> RetrieveSourcesAsync(string tenantId, string question, int max, string? subjectId, IDictionary<string, double>? citedLinkScores, RetrievalFilter? requestFilter = null, CancellationToken token = default, RetrievalOverrides? overrides = null)
         {
+            RetrievalKnobs knobs = new RetrievalKnobs(_Retrieval, overrides);
+
             // Gather + fuse the lexical and vector channels (RRF) over a candidate pool wider than the final
             // `max`, so fusion and diversity selection have alternatives to choose among rather than being
             // limited to the top-`max` of each channel. Then select the passages to ground on.
-            int poolSize = Math.Clamp(max * 4, max, 200);
-            RetrievalPool pool = await GatherAsync(tenantId, question, poolSize, subjectId, RetrievalModeEnum.Hybrid, requestFilter, null, true, token).ConfigureAwait(false);
+            int poolSize = Math.Clamp(max * knobs.PoolMultiplier, max, 200);
+            RetrievalPool pool = await GatherAsync(tenantId, question, poolSize, subjectId, RetrievalModeEnum.Hybrid, requestFilter, null, true, knobs, token).ConfigureAwait(false);
             if (pool.OrderedIds.Count == 0) return new List<GraphNode>();
             Dictionary<string, int> positionByNode = pool.PositionByNode;
             IGraphRepository graph = pool.Graph!;
@@ -355,16 +399,26 @@ namespace Pneuma.Server.Services
             // Select up to `max` passages. With diversity enabled, use Maximal Marginal Relevance so
             // near-duplicate chunks do not crowd the grounding context — the answer sees diverse support rather
             // than the same point repeated; otherwise take the top `max` by fused score.
-            List<string> selectedIds = _Retrieval.DiversityEnabled
-                ? SelectWithMmr(pool, max, _Retrieval.DiversityLambda)
+            Stopwatch stage = Stopwatch.StartNew();
+            List<string> selectedIds = knobs.DiversityEnabled
+                ? SelectWithMmr(pool, max, knobs.DiversityLambda)
                 : (pool.OrderedIds.Count > max ? pool.OrderedIds.GetRange(0, max) : pool.OrderedIds);
+            PneumaMetrics.RecordRetrievalStage(knobs.DiversityEnabled ? "mmr" : "select", stage.Elapsed.TotalSeconds);
 
             List<GraphNode> primary = new List<GraphNode>(selectedIds.Count);
             Dictionary<string, double> scoreByNode = new Dictionary<string, double>(StringComparer.Ordinal);
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string id in selectedIds)
             {
-                primary.Add(pool.NodeById[id]);
+                GraphNode selected = pool.NodeById[id];
+                // Provenance for callers: the originating content link travels on the returned source as a
+                // linkId tag (graph nodes carry the asserting job and Source node, not the link).
+                if (pool.LinkByNode.TryGetValue(id, out string? sourceLink) && !String.IsNullOrEmpty(sourceLink))
+                {
+                    if (selected.Tags == null) selected.Tags = new Dictionary<string, string>(StringComparer.Ordinal);
+                    selected.Tags["linkId"] = sourceLink!;
+                }
+                primary.Add(selected);
                 // Reconstruction orders source-document groups by their best hit; use the fused RRF score so the
                 // most strongly-supported document leads.
                 scoreByNode[id] = pool.RrfByNode.TryGetValue(id, out double r) ? r : 0.0;
@@ -385,10 +439,11 @@ namespace Pneuma.Server.Services
             // The graph owns structure, relationships, and source/citation references: expand each retrieved
             // chunk to the entities it is connected to and to its Source node, adding that context (not more raw
             // text) to the grounding set. Enabled via NeighborExpansion settings.
-            if (_Retrieval.NeighborExpansionEnabled && sources.Count > 0)
+            if (knobs.NeighborExpansionEnabled && sources.Count > 0)
             {
-                int ceiling = max + _Retrieval.NeighborExpansionMaxNodes;
-                int hops = _Retrieval.NeighborExpansionMaxHops;
+                stage.Restart();
+                int ceiling = max + knobs.NeighborExpansionMaxNodes;
+                int hops = knobs.NeighborExpansionMaxHops;
                 try
                 {
                     List<GraphNode> seeds = new List<GraphNode>(sources);
@@ -428,6 +483,8 @@ namespace Pneuma.Server.Services
                 {
                     _Logging.Warn("[GroundedQueryService] neighbor expansion failed: " + exception.Message);
                 }
+
+                PneumaMetrics.RecordRetrievalStage("neighbor_expand", stage.Elapsed.TotalSeconds);
             }
 
             return sources;
@@ -447,13 +504,16 @@ namespace Pneuma.Server.Services
         /// <param name="requestFilter">Optional per-request facet filter (merged with the subject default).</param>
         /// <param name="collectionOverride">Optional explicit collection id; overrides the subject/default resolution.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="resolveNodes">False skips the per-hit graph read and returns lightweight nodes built from the hit.</param>
+        /// <param name="overrides">Optional per-request retrieval overrides (administrators only; validated by the caller).</param>
         /// <returns>The ranked hits, most relevant first.</returns>
-        public async Task<List<RetrievedChunk>> SearchAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter = null, string? collectionOverride = null, CancellationToken token = default, bool resolveNodes = true)
+        public async Task<List<RetrievedChunk>> SearchAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter = null, string? collectionOverride = null, CancellationToken token = default, bool resolveNodes = true, RetrievalOverrides? overrides = null)
         {
             List<RetrievedChunk> results = new List<RetrievedChunk>();
             if (String.IsNullOrWhiteSpace(question)) return results;
 
-            RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, resolveNodes, token).ConfigureAwait(false);
+            RetrievalKnobs knobs = new RetrievalKnobs(_Retrieval, overrides);
+            RetrievalPool pool = await GatherAsync(tenantId, question, max, subjectId, mode, requestFilter, collectionOverride, resolveNodes, knobs, token).ConfigureAwait(false);
 
             foreach (string id in pool.OrderedIds)
             {
@@ -466,11 +526,19 @@ namespace Pneuma.Server.Services
                 // but its fused value is tiny by construction (~1/(k+rank)) and meaningless as a displayed score,
                 // so the surfaced score stays the real retrieval-store relevance.
                 double score = pool.BestRawByNode.TryGetValue(id, out double s) ? s : 0.0;
+                double rrf = pool.RrfByNode.TryGetValue(id, out double fused) ? fused : 0.0;
                 results.Add(new RetrievedChunk
                 {
                     Node = node,
                     NodeId = id,
                     Score = score,
+                    FusedScore = pool.FusedMax > 0.0 ? Math.Round(rrf / pool.FusedMax, 6) : 0.0,
+                    VectorScore = pool.VectorScoreByNode.TryGetValue(id, out double vs) ? vs : (double?)null,
+                    TextScore = pool.TextScoreByNode.TryGetValue(id, out double ts) ? ts : (double?)null,
+                    VectorRank = pool.VectorRankByNode.TryGetValue(id, out int vr) ? vr : (int?)null,
+                    TextRank = pool.TextRankByNode.TryGetValue(id, out int tr) ? tr : (int?)null,
+                    ChunkKind = pool.ChunkKindByNode.TryGetValue(id, out string? kind) ? kind : null,
+                    Position = pool.PositionByNode.TryGetValue(id, out int position) ? position : 0,
                     Snippet = pool.SnippetByNode.TryGetValue(id, out string? sn) ? sn : node.Content,
                     LinkId = pool.LinkByNode.TryGetValue(id, out string? l) ? l : null,
                     DocumentId = pool.DocIdByNode.TryGetValue(id, out string? d) ? d : null
@@ -982,7 +1050,7 @@ namespace Pneuma.Server.Services
         /// an RRF-ordered id list. Both the grounded path and the search endpoint build on this so retrieval
         /// behaves identically across them.
         /// </summary>
-        private async Task<RetrievalPool> GatherAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter, string? collectionOverride, bool resolveNodes, CancellationToken token)
+        private async Task<RetrievalPool> GatherAsync(string tenantId, string question, int max, string? subjectId, RetrievalModeEnum mode, RetrievalFilter? requestFilter, string? collectionOverride, bool resolveNodes, RetrievalKnobs knobs, CancellationToken token)
         {
             RetrievalPool pool = new RetrievalPool();
 
@@ -1001,8 +1069,16 @@ namespace Pneuma.Server.Services
             pool.Graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(collectionId)) return pool;
 
+            // Without a subject there is no embedding model to embed the query with, and the vector channel used to
+            // be skipped silently (so tenant-wide "hybrid" was really full-text). Use the embedding model of the
+            // subjects that write to the collection being searched, when they agree on one.
             string? embeddingEndpointId = subject?.EmbeddingModel;
-            int rrfK = _Retrieval.RrfK;
+            if (String.IsNullOrEmpty(embeddingEndpointId) && mode != RetrievalModeEnum.FullText)
+            {
+                embeddingEndpointId = await ResolveCollectionEmbeddingModelAsync(tenantId, collectionId!, token).ConfigureAwait(false);
+            }
+
+            int rrfK = knobs.RrfK;
 
             // Facet filter: the subject's default retrieval filter merged with any per-request filter (union of
             // required, union of excluded — a request narrows, never widens, the subject default). Pushed down
@@ -1022,9 +1098,11 @@ namespace Pneuma.Server.Services
             // Lexical (full-text) channel — used unless the mode is Vector-only.
             if (mode != RetrievalModeEnum.Vector && _Retrieval.UseInvertedIndex)
             {
+                Stopwatch leg = Stopwatch.StartNew();
                 try
                 {
                     List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, question, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
+                    pool.FusedMax += knobs.LexicalWeight / (rrfK + 1.0);
                     int rank = 0;
                     HashSet<string> channelSeen = new HashSet<string>(StringComparer.Ordinal);
                     foreach (SearchHit hit in hits)
@@ -1053,26 +1131,44 @@ namespace Pneuma.Server.Services
                         if (channelSeen.Add(nodeId))
                         {
                             rank++;
-                            AccumulateRrf(pool.RrfByNode, nodeId, _Retrieval.LexicalWeight, rrfK, rank);
+                            AccumulateRrf(pool.RrfByNode, nodeId, knobs.LexicalWeight, rrfK, rank);
+                            pool.TextRankByNode[nodeId] = rank;
+                            pool.TextScoreByNode[nodeId] = hit.Score;
+                            if (!pool.ChunkKindByNode.ContainsKey(nodeId) && hit.Tags.TryGetValue("chunkKind", out string? textKind) && !String.IsNullOrEmpty(textKind)) pool.ChunkKindByNode[nodeId] = textKind!;
                         }
                         RecordBestRaw(pool.BestRawByNode, nodeId, hit.Score);
                     }
                 }
                 catch (Exception exception)
                 {
+                    PneumaMetrics.RecordRetrievalLegFailure("text");
+                    pool.DegradedLegs.Add("text");
                     _Logging.Warn("[GroundedQueryService] full-text retrieval failed: " + exception.Message);
                 }
+
+                PneumaMetrics.RecordRetrievalStage("text_leg", leg.Elapsed.TotalSeconds);
             }
 
             // Semantic (vector) channel — used unless the mode is FullText-only.
             if (mode != RetrievalModeEnum.FullText)
             {
+                Stopwatch leg = Stopwatch.StartNew();
                 try
                 {
                     List<float>? queryEmbedding = await EmbedQueryAsync(question, embeddingEndpointId, token).ConfigureAwait(false);
-                    if (queryEmbedding != null && queryEmbedding.Count > 0)
+                    PneumaMetrics.RecordRetrievalStage("embed", leg.Elapsed.TotalSeconds);
+                    leg.Restart();
+                    if (queryEmbedding == null || queryEmbedding.Count == 0)
+                    {
+                        // The query could not be embedded (no model resolved, or the model failed): the vector
+                        // channel is skipped and the result is lexical only. Counted so it is never silent.
+                        PneumaMetrics.RecordRetrievalLegFailure("vector");
+                        pool.DegradedLegs.Add("vector");
+                    }
+                    else
                     {
                         List<VectorSearchHit> vectorHits = await _Vectors.SearchAsync(tenantId, collectionId, queryEmbedding, max, _Retrieval.VectorMinimumScore, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
+                        pool.FusedMax += knobs.SemanticWeight / (rrfK + 1.0);
                         int rank = 0;
                         HashSet<string> channelSeen = new HashSet<string>(StringComparer.Ordinal);
                         foreach (VectorSearchHit hit in vectorHits)
@@ -1099,7 +1195,10 @@ namespace Pneuma.Server.Services
                             if (channelSeen.Add(hit.NodeId))
                             {
                                 rank++;
-                                AccumulateRrf(pool.RrfByNode, hit.NodeId, _Retrieval.SemanticWeight, rrfK, rank);
+                                AccumulateRrf(pool.RrfByNode, hit.NodeId, knobs.SemanticWeight, rrfK, rank);
+                                pool.VectorRankByNode[hit.NodeId] = rank;
+                                pool.VectorScoreByNode[hit.NodeId] = hit.Score;
+                                if (!String.IsNullOrEmpty(hit.ChunkKind)) pool.ChunkKindByNode[hit.NodeId] = hit.ChunkKind!;
                             }
                             RecordBestRaw(pool.BestRawByNode, hit.NodeId, hit.Score);
                         }
@@ -1107,8 +1206,12 @@ namespace Pneuma.Server.Services
                 }
                 catch (Exception exception)
                 {
+                    PneumaMetrics.RecordRetrievalLegFailure("vector");
+                    pool.DegradedLegs.Add("vector");
                     _Logging.Warn("[GroundedQueryService] vector retrieval failed: " + exception.Message);
                 }
+
+                PneumaMetrics.RecordRetrievalStage("vector_leg", leg.Elapsed.TotalSeconds);
             }
 
             // Order every retrieved node by its fused RRF score (tie-break by best raw channel score, then id).
@@ -1127,6 +1230,35 @@ namespace Pneuma.Server.Services
             });
             pool.OrderedIds = ordered;
             return pool;
+        }
+
+        /// <summary>
+        /// The embedding model of the subjects that ingest into a collection, when they all use the same one (a
+        /// collection's vectors must come from one model to be comparable). Null when no subject writes to the
+        /// collection or the subjects disagree.
+        /// </summary>
+        private async Task<string?> ResolveCollectionEmbeddingModelAsync(string tenantId, string collectionId, CancellationToken token)
+        {
+            List<Subject> subjects;
+            try
+            {
+                subjects = await _Db.Subjects.EnumerateAsync(tenantId, token).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _Logging.Warn("[GroundedQueryService] could not list subjects to resolve the embedding model: " + exception.Message);
+                return null;
+            }
+
+            string? model = null;
+            foreach (Subject candidate in subjects)
+            {
+                if (!String.Equals(candidate.Collection, collectionId, StringComparison.Ordinal) || String.IsNullOrWhiteSpace(candidate.EmbeddingModel)) continue;
+                if (model == null) model = candidate.EmbeddingModel;
+                else if (!String.Equals(model, candidate.EmbeddingModel, StringComparison.Ordinal)) return null;
+            }
+
+            return model;
         }
 
         /// <summary>
@@ -1344,6 +1476,27 @@ namespace Pneuma.Server.Services
 
             /// <summary>Retrieval-store document id for each node, when known.</summary>
             public Dictionary<string, string> DocIdByNode { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>Raw cosine similarity of each node's best-ranked vector-channel hit.</summary>
+            public Dictionary<string, double> VectorScoreByNode { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+
+            /// <summary>Raw TsRank of each node's best-ranked full-text-channel hit.</summary>
+            public Dictionary<string, double> TextScoreByNode { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+
+            /// <summary>1-based vector-channel rank of each node.</summary>
+            public Dictionary<string, int> VectorRankByNode { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            /// <summary>1-based full-text-channel rank of each node.</summary>
+            public Dictionary<string, int> TextRankByNode { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            /// <summary>Chunk kind (content or summary) of each node's best-ranked chunk, when tagged.</summary>
+            public Dictionary<string, string> ChunkKindByNode { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>The largest achievable fused score (ranked first by every channel that ran), for normalization.</summary>
+            public double FusedMax { get; set; } = 0.0;
+
+            /// <summary>Channels that failed and were skipped.</summary>
+            public List<string> DegradedLegs { get; } = new List<string>();
 
             /// <summary>Node ids ordered by fused RRF score, most relevant first.</summary>
             public List<string> OrderedIds { get; set; } = new List<string>();

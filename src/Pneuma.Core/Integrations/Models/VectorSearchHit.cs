@@ -29,6 +29,12 @@ namespace Pneuma.Core.Integrations.Models
         /// <summary>The originating content link's id (for citation back to the ingested source), when present.</summary>
         public string? LinkId { get; set; } = null;
 
+        /// <summary>Chunk kind ("content" or "summary") from the chunk's <c>chunkKind</c> tag, when present.</summary>
+        public string? ChunkKind { get; set; } = null;
+
+        /// <summary>Retrieval-store document key of the chunk.</summary>
+        public string? DocumentKey { get; set; } = null;
+
         #endregion
     }
 }

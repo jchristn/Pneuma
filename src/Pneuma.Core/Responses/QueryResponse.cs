@@ -24,5 +24,12 @@ namespace Pneuma.Core.Responses
 
         /// <summary>The wall-clock answer-generation time in milliseconds, or null when no model ran.</summary>
         public long? GenerationMs { get; set; } = null;
+
+        /// <summary>
+        /// True when the answer is a refusal because retrieval found no supporting passages (the answer text is
+        /// the fixed "not enough information" message). A model may still decline in its own words while this
+        /// stays false.
+        /// </summary>
+        public bool InsufficientSupport { get; set; } = false;
     }
 }

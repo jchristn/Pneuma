@@ -94,6 +94,7 @@ namespace Pneuma.Core.Ingestion.Stages
                 case "jobId":
                 case "sourceUrl":
                 case "documentType":
+                case "chunkKind":
                     return true;
                 default:
                     return key.StartsWith(RetrievalFilter.LabelTagPrefix, StringComparison.Ordinal);

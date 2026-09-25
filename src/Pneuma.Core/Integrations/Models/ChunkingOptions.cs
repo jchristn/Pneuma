@@ -19,7 +19,7 @@ namespace Pneuma.Core.Integrations.Models
         /// do not supply at this stage). The first entry is the default. Exposed so dashboards can offer exactly
         /// the supported values.
         /// </summary>
-        public static readonly IReadOnlyList<string> SupportedStrategies = new List<string> { "FixedTokenCount", "SentenceBased", "ParagraphBased" };
+        public static readonly IReadOnlyList<string> SupportedStrategies = new List<string> { "FixedTokenCount", "SentenceBased", "ParagraphBased", "Recursive" };
 
         /// <summary>
         /// Chunking strategy passed to the chunker's <c>ChunkingConfiguration.Strategy</c>. Coerced to one of
@@ -41,6 +41,13 @@ namespace Pneuma.Core.Integrations.Models
             get { return _MaxTokens; }
             set { _MaxTokens = Math.Clamp(value, 16, 8192); }
         }
+
+        /// <summary>
+        /// The embedding model the chunks are sized for (for example "nomic-embed-text"). The chunker resolves the
+        /// model's tokenizer family and input budget from it, so chunk sizes are counted in the tokens that model
+        /// actually uses. Null counts in cl100k_base.
+        /// </summary>
+        public string? ModelId { get; set; } = null;
 
         /// <summary>Overlap between adjacent chunks in tokens, sent as the chunker's <c>OverlapCount</c>. Default 32; clamped to [0, 4096].</summary>
         public int OverlapCount

@@ -17,6 +17,13 @@ namespace Test.Shared.Support
             _Bytes = Encoding.UTF8.GetBytes(content);
         }
 
+        /// <summary>Instantiate with raw bytes as the fetched content (for binary documents).</summary>
+        /// <param name="content">Bytes to return for any URL.</param>
+        public FakeContentFetcher(byte[] content)
+        {
+            _Bytes = content ?? new byte[0];
+        }
+
         /// <inheritdoc />
         public Task<byte[]> FetchAsync(string url, CancellationToken token = default)
         {

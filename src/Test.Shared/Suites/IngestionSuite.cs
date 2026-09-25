@@ -48,7 +48,9 @@ namespace Test.Shared.Suites
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
                             FakeRecallDbClient recall = new FakeRecallDbClient();
                             FakeLiteGraphClient graph = new FakeLiteGraphClient();
-                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Unknown"), recall, graph);
+                            // Binary content the detector cannot type. (Valid UTF-8 text reported as Unknown is ingested
+                            // as Text instead; see IngestionStages TypeDetection_UnknownText_FallsBackToText.)
+                            IngestionProcessor processor = BuildProcessor(db, new FakeDocumentAtomClient("Unknown"), recall, graph, new FakeContentFetcher(new byte[] { 0x00, 0x01, 0xFF, 0xFE, 0x89, 0x00 }));
 
                             Context context = await SeedJobAsync(db, recall, true, ct);
                             IngestionJob claimed = await db.IngestionJobs.ClaimNextQueuedAsync(ct) ?? throw new Exception("no job claimed");
@@ -313,7 +315,7 @@ namespace Test.Shared.Suites
                 });
         }
 
-        private static IngestionProcessor BuildProcessor(DatabaseDriverBase db, FakeDocumentAtomClient docAtom, FakeRecallDbClient recall, FakeLiteGraphClient graph)
+        private static IngestionProcessor BuildProcessor(DatabaseDriverBase db, FakeDocumentAtomClient docAtom, FakeRecallDbClient recall, FakeLiteGraphClient graph, FakeContentFetcher? fetcher = null)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -323,7 +325,7 @@ namespace Test.Shared.Suites
             Pneuma.Core.Observability.TelemetrySettings telemetrySettings = new Pneuma.Core.Observability.TelemetrySettings { Enabled = false };
             Pneuma.Core.Observability.TelemetryService telemetry = new Pneuma.Core.Observability.TelemetryService(telemetrySettings, logging);
             Pneuma.Core.Ingestion.Pipeline.ConcurrencyManager concurrency = new Pneuma.Core.Ingestion.Pipeline.ConcurrencyManager(new Pneuma.Core.Ingestion.Models.IngestionTuning());
-            return new Pneuma.Core.Ingestion.Pipeline.IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), new FakeContentFetcher(), cipher, settings, concurrency, logging, telemetry);
+            return new Pneuma.Core.Ingestion.Pipeline.IngestionProcessor(db, docAtom, new FakeSemanticProcessor(), new FakeGraphRepositoryFactory(graph), recall, blobs, new NullArtifactStore(), fetcher ?? new FakeContentFetcher(), cipher, settings, concurrency, logging, telemetry);
         }
 
         // Seed a tenant/subject/link/job. When createCollection is true, a collection is created in the

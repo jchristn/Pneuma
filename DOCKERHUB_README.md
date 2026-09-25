@@ -2,7 +2,7 @@
 
 **Pneuma** is a self-hostable **knowledge-graph data platform**. Point it at a body of source material — documents, web pages, and other artifacts about any kind of subject — and it ingests each one, extracts its semantic content, classifies it into an editable **ontology**, merges it into a **knowledge graph**, and indexes it for grounded, cited retrieval. On top of that graph it serves hybrid (lexical + semantic) search and question-answering that always cites its sources, with full provenance, rights, and multi-tenant access control — over a REST API and an in-process **Model Context Protocol (MCP)** server.
 
-This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that orchestrates ingestion, hosts the REST API and the in-process MCP endpoint, enforces multi-tenant RBAC with a full audit trail, and emits Prometheus metrics and OpenTelemetry/OTLP traces. It is designed to run as part of the Pneuma Docker Compose stack alongside LiteGraph, DocumentAtom, RecallDB, PostgreSQL (pgvector), Less3, Ollama, Prometheus, Grafana, and Tempo. Chunking, embedding, and summarization run in-process in the server (the `Pneuma.Chunking` library plus PolyPrompt) — there is no separate processing service.
+This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that orchestrates ingestion, hosts the REST API and the in-process MCP endpoint, enforces multi-tenant RBAC with a full audit trail, and emits Prometheus metrics and OpenTelemetry/OTLP traces. It is designed to run as part of the Pneuma Docker Compose stack alongside LiteGraph, DocumentAtom, RecallDB, PostgreSQL (pgvector), Less3, Ollama, Prometheus, Grafana, and Tempo. Chunking, embedding, and summarization run in-process in the server (the TextChunker library plus PolyPrompt) — there is no separate processing service.
 
 ![Pneuma](https://raw.githubusercontent.com/jchristn/pneuma/main/assets/logo.png)
 
@@ -17,7 +17,7 @@ This image runs the **Pneuma backend server**: a C# service on Watson 7.1 that o
 ```
 Subject link → ingestion job → worker pool:
   DocumentAtom (type detect + cell extract) → PolyPrompt (classify to your ontology)
-  → LiteGraph (merge subgraph + cell nodes) → in-process chunk/embed/summarize (Pneuma.Chunking + PolyPrompt)
+  → LiteGraph (merge subgraph + cell nodes) → in-process chunk/embed/summarize (TextChunker + PolyPrompt)
   → RecallDB (chunks + vectors)
 
 Ask a question → hybrid retrieval over RecallDB (+ optional graph-neighbor expansion over LiteGraph)

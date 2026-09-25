@@ -78,7 +78,8 @@ namespace Pneuma.Core.Ingestion.Stages
                     { "tenantId", job.TenantId },
                     { "subjectId", job.SubjectId },
                     { "jobId", job.Id },
-                    { "sourceUrl", job.SourceUrl }
+                    { "sourceUrl", job.SourceUrl },
+                    { "chunkKind", String.IsNullOrEmpty(chunk.Kind) ? "content" : chunk.Kind }
                 };
                 if (!String.IsNullOrEmpty(job.DocumentType))
                 {

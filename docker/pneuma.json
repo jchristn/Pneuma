@@ -99,7 +99,6 @@
     "neighborExpansionEnabled": true,
     "chatMaxToolIterations": 6,
     "neighborExpansionMaxNodes": 10,
-    "vectorTopK": 20,
     "vectorMinimumScore": 0
   },
   "modelRunner": {

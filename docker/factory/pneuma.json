@@ -96,7 +96,6 @@
     "UseInvertedIndex": true,
     "NeighborExpansionEnabled": true,
     "NeighborExpansionMaxNodes": 10,
-    "VectorTopK": 20,
     "VectorMinimumScore": 0.0,
     "ChatMaxToolIterations": 6
   },

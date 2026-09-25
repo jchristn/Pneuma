@@ -1,0 +1,117 @@
+# Pneuma benchmark infrastructure: an isolated Postgres (pgvector) + RecallDB + LiteGraph + DocumentAtom + Less3
+# stack on non-default ports, so a benchmark never touches the development stack (docker/compose.yaml) or a live
+# deployment. Pneuma itself runs from source against this stack (benchmarks/start-bench-server.*) so benchmarks
+# always measure the working tree. Ollama runs on the host (127.0.0.1:11434).
+#
+#   docker compose -f benchmarks/docker/compose.yaml up -d
+#   docker compose -f benchmarks/docker/compose.yaml down -v     # discard all benchmark data
+#
+# Service names match the development stack so the copied service configs (which address "pneuma-postgres")
+# work unchanged inside this project's own network.
+
+name: pneuma-bench
+
+services:
+
+  pneuma-postgres:
+    container_name: 'pneuma-bench-postgres'
+    image: 'jchristn77/pneuma-postgres:v0.1.0'
+    ports:
+      - '127.0.0.1:25432:5432'
+    environment:
+      POSTGRES_DB: 'pneuma'
+      POSTGRES_USER: 'pneuma'
+      POSTGRES_PASSWORD: 'pneuma'
+    command: ['postgres', '-c', 'shared_buffers=1GB', '-c', 'max_connections=300']
+    volumes:
+      - pneuma-bench-postgres:/var/lib/postgresql/data
+      - ../../docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 5432 -U pneuma -d pneuma']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 30s
+
+  recalldb-server:
+    container_name: 'pneuma-bench-recalldb'
+    # Same image as docker/compose.yaml, so benchmarks measure what ships.
+    image: 'jchristn77/recalldb-server:v0.2.1'
+    ports:
+      - '127.0.0.1:28600:8600'
+    environment:
+      RECALLDB_DB_HOST: 'pneuma-postgres'
+      RECALLDB_DB_PORT: '5432'
+      RECALLDB_DB_NAME: 'recalldb'
+      RECALLDB_DB_USER: 'pneuma'
+      RECALLDB_DB_PASS: 'pneuma'
+    volumes:
+      - ./recalldb.json:/app/recalldb.json:ro
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://localhost:8600/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 40s
+
+  litegraph:
+    container_name: 'pneuma-bench-litegraph'
+    image: 'jchristn77/litegraph:v9.0.0'
+    ports:
+      - '127.0.0.1:28701:8701'
+    volumes:
+      - pneuma-bench-litegraph:/app
+      - ./litegraph.json:/app/litegraph.json
+    environment:
+      LITEGRAPH_CREATE_DEFAULT_RECORDS: 'true'
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8701/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 40s
+
+  documentatom:
+    container_name: 'pneuma-bench-documentatom'
+    image: 'jchristn77/documentatom:v3.0.0'
+    ports:
+      - '127.0.0.1:28000:8000'
+    volumes:
+      - pneuma-bench-documentatom:/app
+      - ./documentatom.json:/app/documentatom.json
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 30s
+
+  less3:
+    container_name: 'pneuma-bench-less3'
+    image: 'jchristn77/less3:v4.0.0'
+    ports:
+      - '127.0.0.1:28100:8000'
+    volumes:
+      - ./less3-system.json:/app/system.json
+      - pneuma-bench-less3:/less3
+    depends_on:
+      pneuma-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/ || exit 1']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 40s
+
+volumes:
+  pneuma-bench-postgres:
+  pneuma-bench-litegraph:
+  pneuma-bench-documentatom:
+  pneuma-bench-less3:

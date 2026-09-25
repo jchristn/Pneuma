@@ -100,7 +100,7 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
             if (String.IsNullOrEmpty(rc.TenantId)) { await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false); return; }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
             if (String.IsNullOrEmpty(subjectId)) { await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "subjectId is required.").ConfigureAwait(false); return; }
             List<EvalFact> facts = await _Db.EvalFacts.EnumerateBySubjectAsync(rc.TenantId, subjectId, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, new { objects = facts }).ConfigureAwait(false);
@@ -137,7 +137,7 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
             if (String.IsNullOrEmpty(rc.TenantId)) { await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false); return; }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
             List<EvalRun> runs = await _Db.EvalRuns.EnumerateAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, new { objects = runs }).ConfigureAwait(false);
         }

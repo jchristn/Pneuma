@@ -90,6 +90,9 @@ namespace Test.Shared.Support
             settings.Telemetry.Enabled = false;
             settings.Logging.ConsoleLogging = false;
             settings.Logging.FileLogging = false;
+            // Seeded model endpoints point at a closed loopback port, so API tests never reach a model that happens
+            // to be running on the machine (a busy local Ollama made model-dependent tests slow and timing-flaky).
+            settings.Seed.OllamaBaseUrl = "http://127.0.0.1:9";
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;

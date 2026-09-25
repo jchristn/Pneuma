@@ -206,7 +206,7 @@ namespace Pneuma.Server.Routes
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
             string id = RouteHelper.Param(ctx, "id");
-            string? type = ctx.Request.Query.Elements?["type"];
+            string? type = RouteHelper.Query(ctx, "type");
             ModelEndpointValidationDto? result = await _Validation.ValidateAsync(id, type, ctx.Token).ConfigureAwait(false);
             if (result == null)
             {

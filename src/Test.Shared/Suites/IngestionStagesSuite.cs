@@ -100,15 +100,48 @@ namespace Test.Shared.Suites
                             if (ctx.Job.DocumentType != "Text") throw new Exception("document type not recorded");
                         }),
 
-                    new TestCaseDescriptor("IngestionStages", "TypeDetection_Unknown_HardFails", "An unknown document type is a non-retryable hard fail at TypeDetection",
+                    new TestCaseDescriptor("IngestionStages", "TypeDetection_Unknown_HardFails", "An unknown, non-text document type is a non-retryable hard fail at TypeDetection",
                         executeAsync: async ct =>
                         {
                             await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
                             FakeRecallDbClient recall = new FakeRecallDbClient();
                             StageContext ctx = await SeedContextAsync(db, recall, false, ct);
-                            ctx.SourceBytes = System.Text.Encoding.UTF8.GetBytes("hello");
+                            ctx.SourceBytes = new byte[] { 0x00, 0x01, 0xFF, 0xFE, 0x89, 0x00 };
                             StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient(), documentAtom: new FakeDocumentAtomClient("Unknown"));
                             await AssertThrowsAsync(() => new TypeDetectionStage(deps).ExecuteAsync(ctx, ct), hardFail: true, stage: IngestionStageEnum.TypeDetection);
+                        }),
+
+                    new TestCaseDescriptor("IngestionStages", "TypeDetection_UnknownText_FallsBackToText", "Valid UTF-8 text the detector reports as Unknown is ingested as Text instead of failing",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            StageContext ctx = await SeedContextAsync(db, recall, false, ct);
+                            ctx.SourceBytes = System.Text.Encoding.UTF8.GetBytes("# Architecture\n\u250c\u2500\u2510 server \u2502\n");
+                            StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient(), documentAtom: new FakeDocumentAtomClient("Unknown"));
+                            await new TypeDetectionStage(deps).ExecuteAsync(ctx, ct);
+                            if (ctx.Job.DocumentType != "Text") throw new Exception("valid UTF-8 text should fall back to Text, got " + ctx.Job.DocumentType);
+                        }),
+
+                    new TestCaseDescriptor("IngestionStages", "StageRunner_InnerCancellation_IsRequestTimeout", "A cancellation raised inside a stage (an HTTP client timeout) is reported as a request timeout, not a stage timeout",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            StageContext ctx = await SeedContextAsync(db, recall, false, ct);
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            StageRunner runner = new StageRunner(db, new IngestionJournal(db, logging), new ConcurrencyManager(new IngestionTuning()), new Pneuma.Core.Observability.TelemetryService(new Pneuma.Core.Observability.TelemetrySettings { Enabled = false }, logging));
+                            try
+                            {
+                                await runner.RunAsync(new InnerTimeoutStage(), ctx, ct);
+                                throw new Exception("the stage failure should propagate");
+                            }
+                            catch (TimeoutException e)
+                            {
+                                if (!e.Message.Contains("Classification", StringComparison.Ordinal) || !e.Message.Contains("request timeout", StringComparison.Ordinal))
+                                    throw new Exception("the timeout should name the stage and point at the request timeout, got: " + e.Message);
+                            }
                         }),
 
                     // ---- CellExtraction ----
@@ -276,9 +309,12 @@ namespace Test.Shared.Suites
                             ctx.Cells = new List<ExtractedCell> { new ExtractedCell { Type = "Text", Text = "a chunkable cell" } };
                             ctx.Merge = new MergeResult { CellNodeIds = new List<string> { "node1" } };
                             StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient());
+                            ctx.Summaries = new List<CellSummary> { new CellSummary { CellNodeId = "node1", Text = "a summary of the cell" } };
                             await new ChunkingStage(deps).ExecuteAsync(ctx, ct);
-                            if (ctx.Chunks.Count < 1) throw new Exception("no chunks produced");
+                            if (ctx.Chunks.Count < 2) throw new Exception("expected a content chunk and a summary chunk");
                             if (ctx.Chunks[0].CellNodeId != "node1") throw new Exception("chunk not stamped with its cell node id");
+                            if (ctx.Chunks[0].Kind != "content") throw new Exception("cell text chunk should be kind 'content'");
+                            if (ctx.Chunks[ctx.Chunks.Count - 1].Kind != "summary") throw new Exception("summary chunk should be kind 'summary'");
                         }),
 
                     new TestCaseDescriptor("IngestionStages", "Chunking_Error_IsTransient", "A chunking error propagates as an ordinary (retryable) exception",
@@ -329,6 +365,8 @@ namespace Test.Shared.Suites
                             StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient());
                             await new IndexingStage(deps).ExecuteAsync(ctx, ct);
                             if (recall.DocumentCount < 1) throw new Exception("no chunk document stored");
+                            Dictionary<string, string> tags = recall.AllDocumentTags()[0];
+                            if (!tags.TryGetValue("chunkKind", out string? kind) || kind != "content") throw new Exception("stored chunk should carry chunkKind=content");
                         }),
 
                     new TestCaseDescriptor("IngestionStages", "Indexing_NoCollection_HardFails", "Indexing with no target collection is a non-retryable hard fail",

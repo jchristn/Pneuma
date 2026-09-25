@@ -17,10 +17,38 @@ namespace Pneuma.Core.Responses
         public string NodeId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Relevance score. For a single-channel mode this is the raw channel score (cosine similarity or
-        /// TsRank); for hybrid it is the fused Reciprocal-Rank-Fusion score.
+        /// Relevance score: the best raw channel score the hit received (cosine similarity from the vector
+        /// channel, TsRank from the full-text channel). In hybrid mode results are ordered by
+        /// <see cref="FusedScore"/>, not by this value; the two channels' raw scores are not on one scale.
         /// </summary>
         public double Score { get; set; } = 0;
+
+        /// <summary>
+        /// Fused Reciprocal-Rank-Fusion score normalized to 0..1, where 1 means ranked first by every channel that
+        /// ran. Comparable across queries; results are ordered by it.
+        /// </summary>
+        public double FusedScore { get; set; } = 0;
+
+        /// <summary>Raw cosine similarity from the vector channel, or null when that channel did not return the hit.</summary>
+        public double? VectorScore { get; set; } = null;
+
+        /// <summary>Raw TsRank from the full-text channel, or null when that channel did not return the hit.</summary>
+        public double? TextScore { get; set; } = null;
+
+        /// <summary>1-based rank in the vector channel, or null.</summary>
+        public int? VectorRank { get; set; } = null;
+
+        /// <summary>1-based rank in the full-text channel, or null.</summary>
+        public int? TextRank { get; set; } = null;
+
+        /// <summary>
+        /// Whether the best-matching chunk is document content ("content") or an LLM cell summary ("summary"), when
+        /// the chunk carries a <c>chunkKind</c> tag (chunks indexed before the tag existed report null).
+        /// </summary>
+        public string? ChunkKind { get; set; } = null;
+
+        /// <summary>Stored position of the chunk within its source document.</summary>
+        public int Position { get; set; } = 0;
 
         /// <summary>A text snippet for display, when available.</summary>
         public string? Snippet { get; set; } = null;

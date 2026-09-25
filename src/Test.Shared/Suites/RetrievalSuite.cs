@@ -197,6 +197,89 @@ namespace Test.Shared.Suites
                             // A subject with no summaries reports insufficient support.
                             GroundedAnswer none = await gq.AnswerGlobalAsync("ten_x", "sub_missing", "x", 5, ct);
                             if (!none.InsufficientSupport) throw new Exception("global query with no summaries should report insufficient support");
+                        }),
+
+                    new TestCaseDescriptor("Retrieval", "Hybrid_FusedScoreAndLegEvidence", "Hybrid hits carry a normalized fused score and each channel's own score and rank",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            RecallCollection col = await recall.CreateCollectionAsync("ten_x", new RecallCollection { Name = "kb", Dimensionality = 2 }, ct);
+                            // The fake embeds every query as [0.1, 0.2]: nodeB is the nearest vector, nodeA the only
+                            // keyword match. nodeA is text rank 1 and vector rank 2; nodeB is vector rank 1 only.
+                            await StoreAsync(recall, col.Id, new[]
+                            {
+                                Doc("k1", "lnk_a", "nodeA", "alpha apple pie", 1f, 0f),
+                                Doc("k2", "lnk_b", "nodeB", "beta banana bread", 0.1f, 0.2f)
+                            }, ct);
+                            GroundedQueryService svc = BuildService(db, recall, new RetrievalSettings { DefaultCollectionId = col.Id });
+
+                            List<RetrievedChunk> hybrid = await svc.SearchAsync("ten_x", "apple", 10, null, RetrievalModeEnum.Hybrid, null, null, ct);
+                            RetrievedChunk a = hybrid.Find(h => h.NodeId == "nodeA")!;
+                            RetrievedChunk b = hybrid.Find(h => h.NodeId == "nodeB")!;
+                            if (hybrid[0].NodeId != "nodeA") throw new Exception("nodeA (both channels) should lead, got " + Describe(hybrid));
+                            if (a.TextRank != 1 || a.VectorRank != 2 || a.TextScore == null || a.VectorScore == null) throw new Exception("nodeA should carry text rank 1, vector rank 2, and both raw scores");
+                            if (b.TextRank != null || b.TextScore != null || b.VectorRank != 1) throw new Exception("nodeB should carry only vector evidence (rank 1)");
+                            if (a.FusedScore <= b.FusedScore || a.FusedScore > 1.0 || b.FusedScore <= 0.0) throw new Exception("fused scores should be normalized to (0, 1] and ordered; got " + a.FusedScore + " / " + b.FusedScore);
+                            // nodeB was first in one of two equally weighted channels: exactly half the maximum.
+                            if (Math.Abs(b.FusedScore - 0.5) > 1e-6) throw new Exception("a hit ranked first by one of two channels should score 0.5, got " + b.FusedScore);
+                        }),
+
+                    new TestCaseDescriptor("Retrieval", "Overrides_ChangeFusionWeights", "Per-request overrides change fusion without touching the configured settings",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            RecallCollection col = await recall.CreateCollectionAsync("ten_x", new RecallCollection { Name = "kb", Dimensionality = 2 }, ct);
+                            await StoreAsync(recall, col.Id, new[]
+                            {
+                                Doc("k1", "lnk_a", "nodeA", "alpha apple pie", 1f, 0f),
+                                Doc("k2", "lnk_b", "nodeB", "beta banana bread", 0.1f, 0.2f)
+                            }, ct);
+                            RetrievalSettings settings = new RetrievalSettings { DefaultCollectionId = col.Id };
+                            GroundedQueryService svc = BuildService(db, recall, settings);
+
+                            // With the lexical channel weighted to zero, the vector channel alone decides: nodeB leads.
+                            Pneuma.Core.Requests.RetrievalOverrides overrides = new Pneuma.Core.Requests.RetrievalOverrides { LexicalWeight = 0.0 };
+                            List<RetrievedChunk> vectorLed = await svc.SearchAsync("ten_x", "apple", 10, null, RetrievalModeEnum.Hybrid, null, null, ct, true, overrides);
+                            if (vectorLed[0].NodeId != "nodeB") throw new Exception("with lexicalWeight 0 the vector-nearest node should lead, got " + Describe(vectorLed));
+                            if (settings.LexicalWeight != 1.0) throw new Exception("overrides must not change the configured settings");
+
+                            List<RetrievedChunk> defaults = await svc.SearchAsync("ten_x", "apple", 10, null, RetrievalModeEnum.Hybrid, null, null, ct);
+                            if (defaults[0].NodeId != "nodeA") throw new Exception("without overrides the default fusion should apply, got " + Describe(defaults));
+                        }),
+
+                    new TestCaseDescriptor("Retrieval", "Sources_CarryLinkId", "Grounding sources carry their originating link id as a linkId tag",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            RecallCollection col = await recall.CreateCollectionAsync("ten_x", new RecallCollection { Name = "kb", Dimensionality = 2 }, ct);
+                            await StoreAsync(recall, col.Id, new[]
+                            {
+                                Doc("k1", "lnk_a", "nodeA", "alpha apple pie", 1f, 0f),
+                                Doc("k2", "lnk_b", "nodeB", "beta banana bread", 0.1f, 0.2f)
+                            }, ct);
+                            GroundedQueryService svc = BuildService(db, recall, new RetrievalSettings { DefaultCollectionId = col.Id, NeighborExpansionEnabled = false });
+                            List<GraphNode> sources = await svc.RetrieveSourcesAsync("ten_x", "apple", 5, null, null, null, ct);
+                            if (sources.Count != 2) throw new Exception("expected both passages as sources, got " + sources.Count);
+                            foreach (GraphNode source in sources)
+                            {
+                                string expected = source.Id == "nodeA" ? "lnk_a" : "lnk_b";
+                                if (source.Tags == null || !source.Tags.TryGetValue("linkId", out string? linkId) || linkId != expected)
+                                    throw new Exception("source " + source.Id + " should carry linkId " + expected);
+                            }
+                        }),
+
+                    new TestCaseDescriptor("Retrieval", "TextSniffer_RecognizesText", "Valid UTF-8 text (including box-drawing characters) is text; binary and invalid UTF-8 are not",
+                        executeAsync: ct =>
+                        {
+                            byte[] boxes = System.Text.Encoding.UTF8.GetBytes("## Architecture\n\u250c\u2500\u2500\u2510\n\u2502 Pneuma \u2502\n\u2514\u2500\u2500\u2518\n");
+                            if (!Pneuma.Core.Helpers.TextSniffer.IsLikelyText(boxes)) throw new Exception("markdown with box-drawing characters should be text");
+                            if (Pneuma.Core.Helpers.TextSniffer.IsLikelyText(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00 })) throw new Exception("a PNG header is not text");
+                            if (Pneuma.Core.Helpers.TextSniffer.IsLikelyText(new byte[] { 0x61, 0xC3, 0x28, 0x62 })) throw new Exception("invalid UTF-8 is not text");
+                            if (Pneuma.Core.Helpers.TextSniffer.IsLikelyText(new byte[0])) throw new Exception("empty content is not text");
+                            return Task.CompletedTask;
                         })
                 });
         }

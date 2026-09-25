@@ -75,7 +75,7 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
 
-            string? tenantId = rc.IsAdmin ? (ctx.Request.Query.Elements?["tenantId"]) : rc.TenantId;
+            string? tenantId = rc.IsAdmin ? (RouteHelper.Query(ctx, "tenantId")) : rc.TenantId;
             List<AuditRecord> records = await _Db.Audit.EnumerateAsync(tenantId, 10000, ctx.Token).ConfigureAwait(false);
             EnumerationResult<AuditRecord> result = EnumerationHelper.Paginate(records, RouteHelper.ReadEnumerationQuery(ctx), a => a.CreatedUtc, a => a.UrlPath);
             await RouteHelper.SendJsonAsync(ctx, 200, result).ConfigureAwait(false);

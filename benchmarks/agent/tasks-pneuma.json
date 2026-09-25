@@ -1,0 +1,30 @@
+{
+  "name": "pneuma-agent",
+  "dataset": "../datasets/pneuma-live.json",
+  "tasks": [
+    { "id": "t01", "type": "recall", "prompt": "Do I need the .NET SDK or Node installed to run Pneuma? Answer yes or no and say what is needed instead.", "expect": [ "\\bno\\b", "docker" ], "forbid": [] },
+    { "id": "t02", "type": "recall", "prompt": "How can a client learn how many records a Pneuma list endpoint holds without downloading them all?", "expect": [ "maxResults=1|maxResults\\s*=\\s*1", "totalRecords" ], "forbid": [] },
+    { "id": "t03", "type": "recall", "prompt": "Can the secret key of a Pneuma API credential be read again after it is created?", "expect": [ "\\bonce\\b|\\bonly\\b|\\bno\\b|cannot|can't|not" ], "forbid": [] },
+    { "id": "t04", "type": "recall", "prompt": "In Pneuma, what happens if I save a subject's prompt override with empty content?", "expect": [ "clear|remov", "global" ], "forbid": [] },
+    { "id": "t05", "type": "recall", "prompt": "When Pneuma reingests a link, what does it clear first so the unchanged-content skip cannot short-circuit the run?", "expect": [ "hash" ], "forbid": [] },
+    { "id": "t06", "type": "recall", "prompt": "Which Pneuma route runs an immediate health probe against one model endpoint?", "expect": [ "health/check" ], "forbid": [] },
+    { "id": "t07", "type": "recall", "prompt": "Can a Pneuma collection be renamed or updated after it is created?", "expect": [ "\\bno\\b|cannot|can't|not|only" ], "forbid": [] },
+    { "id": "t08", "type": "recall", "prompt": "What should a Pneuma chat client do with its message history when the chat stream's complete event reports that the conversation was compacted?", "expect": [ "replace", "compactedSummary|summary" ], "forbid": [] },
+    { "id": "t09", "type": "recall", "prompt": "Is `var` allowed in Pneuma's backend C# code?", "expect": [ "\\bno\\b|not allowed|banned|forbidden|must not|don't" ], "forbid": [] },
+    { "id": "t10", "type": "recall", "prompt": "What must Pneuma library code use instead of Console.WriteLine for output?", "expect": [ "SyslogLogging|syslog" ], "forbid": [] },
+    { "id": "t11", "type": "recall", "prompt": "Which charting library do the Pneuma dashboards use?", "expect": [ "hand-rolled|handrolled|no charting|svg" ], "forbid": [] },
+    { "id": "t12", "type": "lexical", "prompt": "What does the Pneuma metric pneuma_ingestion_stage_duration_seconds measure, and what label does it carry?", "expect": [ "stage" , "duration|histogram|seconds" ], "forbid": [] },
+    { "id": "t13", "type": "lexical", "prompt": "What does GET /v1.0/jobs/live return in Pneuma? Name its three lists.", "expect": [ "running", "waitingForSlot|waiting", "queued" ], "forbid": [] },
+    { "id": "t14", "type": "lexical", "prompt": "What service listens on port 11434 in Pneuma's Docker Compose stack?", "expect": [ "ollama" ], "forbid": [] },
+    { "id": "t15", "type": "lexical", "prompt": "What values can a Pneuma subject's deletionStatus take?", "expect": [ "Pending", "Deleting", "Failed" ], "forbid": [] },
+    { "id": "t16", "type": "lexical", "prompt": "What does Pneuma's NeighborExpansionMaxHops setting control, and what is its default?", "expect": [ "\\b1\\b|one|single" , "hop|neighbor" ], "forbid": [] },
+    { "id": "t17", "type": "detail", "prompt": "Before Pneuma had per-subject chunking settings, what chunk window and overlap did it use for every document?", "expect": [ "256", "32" ], "forbid": [] },
+    { "id": "t18", "type": "detail", "prompt": "How many S3 buckets hold Pneuma pipeline artifacts, and what are they for?", "expect": [ "five|\\b5\\b", "atoms", "subgraph" ], "forbid": [] },
+    { "id": "t19", "type": "detail", "prompt": "Which HTTP library does Pneuma's Python SDK use?", "expect": [ "httpx" ], "forbid": [] },
+    { "id": "t20", "type": "detail", "prompt": "Which Grafana version is Pneuma's compose stack pinned to?", "expect": [ "13\\.0\\.2" ], "forbid": [] },
+    { "id": "t21", "type": "negative", "prompt": "Which password hashing algorithm does Pneuma use for user account passwords? If the documentation does not say, say so.", "expect": [ "not (say|state|specif|mention|document|contain|cover|find)|doesn't|does not|no information|couldn't find|could not find|unable to find|isn't|is not" ], "forbid": [ "\\bbcrypt\\b(?!.*not)", "\\bargon2\\b(?!.*not)" ] },
+    { "id": "t22", "type": "negative", "prompt": "Is there an official Helm chart for deploying Pneuma to Kubernetes? If the documentation does not say, say so.", "expect": [ "not (say|state|specif|mention|document|contain|cover|find)|doesn't|does not|no information|no helm|couldn't find|could not find|unable to find|isn't|is not" ], "forbid": [] },
+    { "id": "t23", "type": "negative", "prompt": "Can Pneuma call a webhook when an ingestion job finishes? If the documentation does not say, say so.", "expect": [ "not (say|state|specif|mention|document|contain|cover|find)|doesn't|does not|no information|no webhook|couldn't find|could not find|unable to find|isn't|is not" ], "forbid": [] },
+    { "id": "t24", "type": "negative", "prompt": "What OCR engine does Pneuma use for scanned PDFs? If the documentation does not say, say so.", "expect": [ "not (say|state|specif|mention|document|contain|cover|find)|doesn't|does not|no information|couldn't find|could not find|unable to find|isn't|is not" ], "forbid": [ "tesseract(?!.*not)" ] }
+  ]
+}

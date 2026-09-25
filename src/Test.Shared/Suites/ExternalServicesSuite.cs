@@ -493,6 +493,44 @@ namespace Test.Shared.Suites
                             if (tenantB.Count != 0) throw new Exception("tenant B must not see tenant A's collections");
                             if (await recall.CollectionExistsAsync("ten_b", created.Id, ct)) throw new Exception("tenant B must not resolve tenant A's collection by id");
                             if (!await recall.CollectionExistsAsync("ten_a", created.Id, ct)) throw new Exception("tenant A should resolve its own collection by id");
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "Embedding_RetriesRateLimit", "Embedding retries a rate-limited (429) endpoint with backoff instead of failing the stage",
+                        executeAsync: async ct =>
+                        {
+                            await using Pneuma.Core.Database.DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            using StubEmbeddingEndpoint endpoint = new StubEmbeddingEndpoint(new float[] { 0.1f, 0.2f }, 2);
+                            Pneuma.Core.Models.ModelRunner runner = await db.ModelRunners.CreateAsync(new Pneuma.Core.Models.ModelRunner
+                            {
+                                Name = "stub-embed",
+                                Provider = ModelRunnerProviderEnum.Ollama,
+                                BaseUrl = endpoint.BaseUrl,
+                                ApiType = "Ollama",
+                                Capabilities = new List<ModelCapabilityEnum> { ModelCapabilityEnum.Embedding },
+                                DefaultEmbeddingModel = "stub",
+                                Active = true,
+                                HealthCheckEnabled = false
+                            }, ct);
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            NativeSemanticProcessor processor = new NativeSemanticProcessor(db, new Pneuma.Core.Security.Aes256Cipher("test-signing-key"), logging);
+                            List<List<float>> vectors = await processor.EmbedAsync(new List<string> { "hello" }, runner.Id, ct);
+                            if (vectors.Count != 1 || vectors[0].Count != 2) throw new Exception("embedding should succeed after two 429 responses");
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "ModelClient_TimeoutFloor", "Model clients get a per-call timeout of at least 30 minutes, so slow local completions are bounded by the caller's token, not PolyPrompt's 120 s default",
+                        executeAsync: ct =>
+                        {
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            Pneuma.Core.Models.ModelRunner seededDefault = new Pneuma.Core.Models.ModelRunner { Name = "gemma", Provider = ModelRunnerProviderEnum.Ollama, BaseUrl = "http://127.0.0.1:11434", DefaultModel = "gemma3:4b", MaximumTimeoutMs = 60000 };
+                            PolyPrompt.Clients.CompletionClientBase client = Pneuma.Core.Integrations.ModelClientFactory.Create(seededDefault, null, logging);
+                            if (client.TimeoutMs < 30 * 60 * 1000) throw new Exception("per-call timeout should be at least 30 minutes, got " + client.TimeoutMs + " ms");
+
+                            Pneuma.Core.Models.ModelRunner patient = new Pneuma.Core.Models.ModelRunner { Name = "slow", Provider = ModelRunnerProviderEnum.Ollama, BaseUrl = "http://127.0.0.1:11434", DefaultModel = "big", MaximumTimeoutMs = 7200000 };
+                            PolyPrompt.Clients.CompletionClientBase longer = Pneuma.Core.Integrations.ModelClientFactory.Create(patient, null, logging);
+                            if (longer.TimeoutMs != 7200000) throw new Exception("a longer configured endpoint timeout should be kept, got " + longer.TimeoutMs + " ms");
+                            return Task.CompletedTask;
                         })
                 });
         }

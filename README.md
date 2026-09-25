@@ -60,7 +60,7 @@ Pneuma ships as a fully orchestrated **Docker Compose** stack: one command bring
 
 ## Features
 
-- **Ingestion pipeline** — Submit a document or URL and Pneuma runs it through an explicit **Categorize** phase (fetch → type-detect → extract semantic cells → classify into the ontology) and a **Hydrate** phase (merge into the graph, chunk, embed, and index), with per-stage live logs, prompt-provenance capture for reproducibility, and best-effort artifact storage (source, atoms, chunks, vectors, subgraph) in S3. Chunking (in the **`Pneuma.Chunking`** library), embedding, and summarization all run in-process — no external processing service.
+- **Ingestion pipeline** — Submit a document or URL and Pneuma runs it through an explicit **Categorize** phase (fetch → type-detect → extract semantic cells → classify into the ontology) and a **Hydrate** phase (merge into the graph, chunk, embed, and index), with per-stage live logs, prompt-provenance capture for reproducibility, and best-effort artifact storage (source, atoms, chunks, vectors, subgraph) in S3. Chunking (the **TextChunker** library), embedding, and summarization all run in-process — no external processing service.
 - **Editable, natural-language ontology** — The ontology that drives classification is a **prompt you can rewrite** — reshape the graph's node and edge types (Subject, Person, Organization, Work, Collection, Event, Place, Topic, …) without touching code. The graph merge accepts whatever types your ontology defines.
 - **Knowledge graph** — Every source becomes provenance-anchored nodes and edges in **LiteGraph**, with entity resolution (canonical-name dedup), per-tenant isolation, and a node explorer for contents, links, adjacent nodes, relationships, rights, and authority.
 - **Hybrid retrieval & grounded answers** — Blends lexical (full-text) and semantic (vector) search over **RecallDB** (Postgres + pgvector) with optional **graph-neighbor expansion**, optional **prompt rewrite** and **LLM re-ranking**, and returns a cited answer or an explicit refusal. One shared service backs both the REST and MCP answer paths.
@@ -149,7 +149,7 @@ Subject submits a link  →  queued ingestion job  →  worker pool
   2. DocumentAtom   semantic cell extraction
   3. PolyPrompt     classify cells → candidate subgraph (your ontology)
   4. LiteGraph      merge subgraph → Cell + entity nodes, record node/edge IDs
-  5. Pneuma         summarize + chunk (Pneuma.Chunking) + embed, all in-process
+  5. Pneuma         summarize + chunk (TextChunker) + embed, all in-process
   6. RecallDB       store chunk text + vectors, each linked back to its graph node
 ```
 
@@ -248,7 +248,7 @@ Observability: Prometheus (9090) · Tempo (3200) · Grafana (3000)
 | Control-plane DB | **PostgreSQL** (SQLite / MySQL / SQL Server also supported via a provider-neutral data layer) |
 | Knowledge graph | **LiteGraph** |
 | Type detection / cell extraction | **DocumentAtom** |
-| Chunking / embedding / summarization | In-process — **`Pneuma.Chunking`** (cl100k_base + BERT tokenizers) + **PolyPrompt** |
+| Chunking / embedding / summarization | In-process — **TextChunker** (model-aware token counting: WordPiece or cl100k_base) + **PolyPrompt** |
 | Retrieval store (vector + full-text) | **RecallDB** (Postgres + pgvector) |
 | LLM access | **PolyPrompt** (OpenAI, OpenAI-compatible, Gemini, Ollama, Azure OpenAI, Anthropic, Bedrock, Voyage AI, Vertex AI) |
 | Object storage | **Less3** (S3-compatible) via **Blobject** |

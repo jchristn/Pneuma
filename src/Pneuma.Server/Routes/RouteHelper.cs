@@ -44,6 +44,21 @@ namespace Pneuma.Server.Routes
         }
 
         /// <summary>
+        /// Read a query-string parameter, URL-decoded. The web server hands query values over still encoded, so a
+        /// client that sends <c>q=two%20words</c> (encodeURIComponent, most HTTP libraries) or <c>q=two+words</c>
+        /// (URLSearchParams, HTML forms) must be decoded here or the route sees the literal escape sequences.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <param name="name">Parameter name.</param>
+        /// <returns>The decoded value, or null when absent.</returns>
+        public static string? Query(HttpContextBase ctx, string name)
+        {
+            string? raw = ctx.Request.Query.Elements?[name];
+            if (raw == null) return null;
+            return System.Net.WebUtility.UrlDecode(raw);
+        }
+
+        /// <summary>
         /// Parse an <see cref="EnumerationQuery"/> from the request query string
         /// (maxResults, skip, order = asc|desc, search).
         /// </summary>
@@ -69,7 +84,7 @@ namespace Pneuma.Server.Routes
             }
 
             string? search = q?["search"];
-            if (!String.IsNullOrWhiteSpace(search)) query.Search = search;
+            if (!String.IsNullOrWhiteSpace(search)) query.Search = System.Net.WebUtility.UrlDecode(search);
 
             return query;
         }

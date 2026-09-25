@@ -3,14 +3,21 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using Pneuma.Chunking.Chunking;
-    using Pneuma.Chunking.Models;
-    using Pneuma.Chunking.Tokenization;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Pneuma.Core.Database;
+    using Pneuma.Core.Integrations.Implementations;
+    using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Security;
+    using SyslogLogging;
+    using Test.Shared.Support;
+    using TextChunker.Tokenization;
     using Touchstone.Core;
 
     /// <summary>
-    /// Self-consistency tests for the ported Pneuma.Chunking library (chunking + tokenization).
-    /// These are NOT full golden-file parity tests; they verify internal invariants only.
+    /// Chunking through Pneuma's seam (<see cref="NativeSemanticProcessor.ChunkAsync"/>, backed by the TextChunker
+    /// library): token limits, determinism, word preservation, no redundant tail chunks under overlap, surrogate-safe
+    /// boundaries, and model-aware token counting.
     /// </summary>
     public static class ChunkingSuite
     {
@@ -28,125 +35,126 @@ namespace Test.Shared.Suites
         {
             return new TestSuiteDescriptor(
                 suiteId: "Chunking",
-                displayName: "Chunking and Tokenization",
+                displayName: "Chunking (TextChunker behind NativeSemanticProcessor)",
                 cases: new List<TestCaseDescriptor>
                 {
-                    new TestCaseDescriptor("Chunking", "FixedTokenCount_RespectsTokenLimit", "FixedTokenCount chunking of a multi-paragraph sample yields chunks each within the token limit",
-                        executeAsync: ct =>
+                    new TestCaseDescriptor("Chunking", "FixedTokenCount_RespectsTokenLimit", "FixedTokenCount chunking yields chunks within the token limit (cl100k_base when no model is named)",
+                        executeAsync: async ct =>
                         {
-                            ITokenizerAdapter tokenizer = new SharpTokenTokenizerAdapter("cl100k_base");
-                            int tokenLimit = 32;
-                            ChunkingConfiguration config = new ChunkingConfiguration();
-                            config.Strategy = Pneuma.Chunking.Enums.ChunkStrategyEnum.FixedTokenCount;
-
-                            List<string> chunks = FixedTokenChunker.Chunk(_MultiParagraphSample, config, tokenizer, tokenLimit);
-                            if (chunks.Count == 0) throw new Exception("expected at least one chunk");
-                            foreach (string chunk in chunks)
+                            List<SemanticChunk> chunks = await ChunkAsync(_MultiParagraphSample, new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 32, OverlapCount = 0 }, ct);
+                            if (chunks.Count < 2) throw new Exception("expected the sample to span several chunks, got " + chunks.Count);
+                            SharpTokenTokenizerAdapter tokenizer = new SharpTokenTokenizerAdapter("cl100k_base");
+                            foreach (SemanticChunk chunk in chunks)
                             {
-                                int count = tokenizer.CountTokens(chunk);
-                                if (count <= 0) throw new Exception("chunk had zero tokens");
-                                if (count > tokenLimit) throw new Exception("chunk exceeded token limit: " + count + " > " + tokenLimit);
+                                int count = tokenizer.CountTokens(chunk.Text);
+                                if (count <= 0 || count > 32) throw new Exception("chunk had " + count + " tokens; limit 32");
                             }
-
-                            return System.Threading.Tasks.Task.CompletedTask;
                         }),
 
                     new TestCaseDescriptor("Chunking", "Chunking_IsDeterministic", "Chunking the same input twice yields identical output",
-                        executeAsync: ct =>
+                        executeAsync: async ct =>
                         {
-                            ITokenizerAdapter tokenizer = new SharpTokenTokenizerAdapter("cl100k_base");
-                            int tokenLimit = 40;
-                            ChunkingConfiguration config = new ChunkingConfiguration();
+                            ChunkingOptions options = new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 40, OverlapCount = 8 };
+                            List<SemanticChunk> first = await ChunkAsync(_MultiParagraphSample, options, ct);
+                            List<SemanticChunk> second = await ChunkAsync(_MultiParagraphSample, options, ct);
+                            if (!first.Select(c => c.Text).SequenceEqual(second.Select(c => c.Text))) throw new Exception("chunking is not deterministic");
+                        }),
 
-                            List<string> first = FixedTokenChunker.Chunk(_MultiParagraphSample, config, tokenizer, tokenLimit);
-                            List<string> second = FixedTokenChunker.Chunk(_MultiParagraphSample, config, tokenizer, tokenLimit);
-
-                            if (first.Count != second.Count) throw new Exception("chunk count differed between runs");
-                            for (int i = 0; i < first.Count; i++)
+                    new TestCaseDescriptor("Chunking", "Strategies_ReconstructAllWords", "SentenceBased, ParagraphBased, and Recursive keep every source word",
+                        executeAsync: async ct =>
+                        {
+                            HashSet<string> sourceWords = Words(_MultiParagraphSample);
+                            foreach (string strategy in new[] { "SentenceBased", "ParagraphBased", "Recursive" })
                             {
-                                if (!String.Equals(first[i], second[i], StringComparison.Ordinal))
-                                    throw new Exception("chunk " + i + " differed between runs");
+                                List<SemanticChunk> chunks = await ChunkAsync(_MultiParagraphSample, new ChunkingOptions { Strategy = strategy, MaxTokens = 40, OverlapCount = 0 }, ct);
+                                if (chunks.Count == 0 || chunks.Any(c => String.IsNullOrWhiteSpace(c.Text))) throw new Exception(strategy + " produced empty output");
+                                HashSet<string> chunkWords = Words(String.Join(" ", chunks.Select(c => c.Text)));
+                                List<string> missing = sourceWords.Where(w => !chunkWords.Contains(w)).ToList();
+                                if (missing.Count > 0) throw new Exception(strategy + " dropped words: " + String.Join(", ", missing));
                             }
-
-                            return System.Threading.Tasks.Task.CompletedTask;
                         }),
 
-                    new TestCaseDescriptor("Chunking", "SentenceAndParagraph_ReconstructAllWords", "SentenceBased and ParagraphBased produce non-empty chunks that reconstruct all source words",
-                        executeAsync: ct =>
+                    new TestCaseDescriptor("Chunking", "Overlap_NoRedundantTailChunks", "Fixed-token chunking with overlap never emits a chunk wholly contained in the one before it",
+                        executeAsync: async ct =>
                         {
-                            ITokenizerAdapter tokenizer = new SharpTokenTokenizerAdapter("cl100k_base");
-                            int tokenLimit = 64;
-                            ChunkingConfiguration config = new ChunkingConfiguration();
-
-                            List<string> sourceWords = SplitWords(_MultiParagraphSample);
-
-                            List<string> sentenceChunks = SentenceChunker.Chunk(_MultiParagraphSample, config, tokenizer, tokenLimit);
-                            AssertReconstructsWords(sentenceChunks, sourceWords, "SentenceBased");
-
-                            List<string> paragraphChunks = ParagraphChunker.Chunk(_MultiParagraphSample, config, tokenizer, tokenLimit);
-                            AssertReconstructsWords(paragraphChunks, sourceWords, "ParagraphBased");
-
-                            return System.Threading.Tasks.Task.CompletedTask;
+                            string text = String.Join(" ", Enumerable.Range(1, 400).Select(i => "word" + i));
+                            List<SemanticChunk> chunks = await ChunkAsync(text, new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 64, OverlapCount = 32 }, ct);
+                            for (int i = 1; i < chunks.Count; i++)
+                            {
+                                if (chunks[i - 1].Text.Contains(chunks[i].Text, StringComparison.Ordinal)) throw new Exception("chunk " + i + " repeats the end of chunk " + (i - 1) + ": '" + chunks[i].Text + "'");
+                            }
+                            if (!chunks[chunks.Count - 1].Text.Contains("word400", StringComparison.Ordinal)) throw new Exception("the last word must be in the last chunk");
                         }),
 
-                    new TestCaseDescriptor("Chunking", "SharpTokenAdapter_RoundTrips", "The SharpToken adapter round-trips Encode/Decode and CountTokens matches Encode().Count",
-                        executeAsync: ct =>
+                    new TestCaseDescriptor("Chunking", "Emoji_SurrogatePairsStayWhole", "Chunk boundaries never split a surrogate pair: no U+FFFD, no lone surrogate, every emoji kept",
+                        executeAsync: async ct =>
                         {
-                            ITokenizerAdapter tokenizer = new SharpTokenTokenizerAdapter("cl100k_base");
-                            string text = "Round-trip verification of the cl100k_base tokenizer, with symbols: 15.2% and 1 - 3 days.";
-
-                            IReadOnlyList<int> encoded = tokenizer.Encode(text);
-                            if (encoded.Count == 0) throw new Exception("expected non-empty encoding");
-                            if (tokenizer.CountTokens(text) != encoded.Count) throw new Exception("CountTokens did not match Encode().Count");
-
-                            string decoded = tokenizer.Decode(encoded);
-                            if (!String.Equals(decoded, text, StringComparison.Ordinal)) throw new Exception("Encode/Decode did not round-trip");
-
-                            return System.Threading.Tasks.Task.CompletedTask;
+                            string text = String.Concat(Enumerable.Range(0, 120).Select(i => "Status " + i + " \U0001F680\U0001F389 ok. "));
+                            foreach (string model in new[] { null, "all-minilm" })
+                            {
+                                List<SemanticChunk> chunks = await ChunkAsync(text, new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 16, OverlapCount = 0, ModelId = model }, ct);
+                                string joined = String.Concat(chunks.Select(c => c.Text));
+                                if (joined.Contains('�')) throw new Exception("chunks contain U+FFFD (model " + (model ?? "cl100k") + ")");
+                                for (int i = 0; i < joined.Length; i++)
+                                {
+                                    bool high = Char.IsHighSurrogate(joined[i]);
+                                    if (high && (i + 1 >= joined.Length || !Char.IsLowSurrogate(joined[i + 1]))) throw new Exception("lone high surrogate at " + i);
+                                    if (Char.IsLowSurrogate(joined[i]) && (i == 0 || !Char.IsHighSurrogate(joined[i - 1]))) throw new Exception("lone low surrogate at " + i);
+                                }
+                                int rockets = CountOf(joined, "\U0001F680");
+                                if (rockets < 120) throw new Exception("emoji lost: " + rockets + " of 120 (model " + (model ?? "cl100k") + ")");
+                            }
                         }),
 
-                    new TestCaseDescriptor("Chunking", "BertAdapter_LoadsVocabAndTokenizes", "The BERT adapter loads its embedded vocab and tokenizes a sample without error",
-                        executeAsync: ct =>
+                    new TestCaseDescriptor("Chunking", "ModelId_CountsInModelTokens", "Naming a BERT-family embedding model sizes chunks in its WordPiece tokens",
+                        executeAsync: async ct =>
                         {
-                            ITokenizerAdapter tokenizer = new BertWordPieceTokenizerAdapter();
-                            string text = "BERT WordPiece tokenization of a simple sample sentence.";
-
-                            int count = tokenizer.CountTokens(text);
-                            if (count <= 0) throw new Exception("expected a positive token count from the BERT adapter");
-
-                            IReadOnlyList<int> encoded = tokenizer.Encode(text);
-                            if (encoded.Count == 0) throw new Exception("expected non-empty BERT encoding");
-
-                            string slice = tokenizer.SliceByTokenRange(text, 0, Math.Min(4, count));
-                            if (String.IsNullOrEmpty(slice)) throw new Exception("expected a non-empty token slice from the BERT adapter");
-
-                            return System.Threading.Tasks.Task.CompletedTask;
+                            List<SemanticChunk> chunks = await ChunkAsync(_MultiParagraphSample, new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 24, OverlapCount = 0, ModelId = "nomic-embed-text" }, ct);
+                            if (chunks.Count < 2) throw new Exception("expected several chunks");
+                            BertWordPieceTokenizerAdapter wordPiece = new BertWordPieceTokenizerAdapter();
+                            foreach (SemanticChunk chunk in chunks)
+                            {
+                                int count = wordPiece.CountTokens(chunk.Text);
+                                if (count > 24) throw new Exception("chunk has " + count + " WordPiece tokens; limit 24");
+                            }
                         })
                 });
         }
 
-        private static List<string> SplitWords(string text)
+        private static async Task<List<SemanticChunk>> ChunkAsync(string text, ChunkingOptions options, CancellationToken ct)
         {
-            return text
-                .Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-                .ToList();
+            await using (DatabaseDriverBase db = await TestDatabase.CreateAsync(ct))
+            {
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                NativeSemanticProcessor processor = new NativeSemanticProcessor(db, new Aes256Cipher("test-signing-key"), logging);
+                return await processor.ChunkAsync(text, options, ct);
+            }
         }
 
-        private static void AssertReconstructsWords(List<string> chunks, List<string> sourceWords, string strategyName)
+        private static HashSet<string> Words(string text)
         {
-            if (chunks.Count == 0) throw new Exception(strategyName + " produced no chunks");
-            foreach (string chunk in chunks)
+            HashSet<string> words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string raw in text.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                if (String.IsNullOrWhiteSpace(chunk)) throw new Exception(strategyName + " produced an empty chunk");
+                string word = new string(raw.Where(Char.IsLetterOrDigit).ToArray());
+                if (word.Length > 0) words.Add(word);
             }
 
-            List<string> chunkWords = SplitWords(String.Join(" ", chunks));
-            HashSet<string> chunkWordSet = new HashSet<string>(chunkWords, StringComparer.Ordinal);
-            foreach (string word in sourceWords)
+            return words;
+        }
+
+        private static int CountOf(string text, string value)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
             {
-                if (!chunkWordSet.Contains(word))
-                    throw new Exception(strategyName + " chunks did not reconstruct source word: '" + word + "'");
+                count++;
+                index += value.Length;
             }
+
+            return count;
         }
     }
 }

@@ -76,7 +76,7 @@ namespace Pneuma.Server.Routes
         {
             if (rc.IsAdmin)
             {
-                string? q = ctx.Request.Query.Elements?["tenantId"];
+                string? q = RouteHelper.Query(ctx, "tenantId");
                 if (!String.IsNullOrEmpty(q)) return q;
             }
             return rc.TenantId ?? String.Empty;

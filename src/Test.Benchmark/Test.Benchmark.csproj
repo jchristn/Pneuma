@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Black-box benchmark harness for Pneuma. It talks to Pneuma only over REST (and MCP for the agent benchmark),
+    exactly as a client does, and deliberately has NO project reference to Pneuma.Core or Pneuma.Server so the same
+    commands can measure a local working tree or any deployment. See benchmarks/README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- A distinct process name, so tools that clean up the Isis harness (Test.Benchmark.exe) never stop this one. -->
+    <AssemblyName>Pneuma.Benchmark</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Version>0.1.0</Version>
+    <Authors>Joel Christner</Authors>
+    <Product>Pneuma</Product>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Watson hosts the in-process corpus server (serves benchmark documents to Pneuma's URL ingestion) and the stub model server. -->
+    <PackageReference Include="Watson" Version="7.2.0" />
+  </ItemGroup>
+
+</Project>

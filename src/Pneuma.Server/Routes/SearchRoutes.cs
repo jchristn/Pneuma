@@ -85,7 +85,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            string? query = ctx.Request.Query.Elements?["q"];
+            string? query = RouteHelper.Query(ctx, "q");
             if (String.IsNullOrWhiteSpace(query))
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A query (q) is required.").ConfigureAwait(false);
@@ -93,20 +93,35 @@ namespace Pneuma.Server.Routes
             }
 
             int max = 20;
-            string? maxText = ctx.Request.Query.Elements?["max"];
+            string? maxText = RouteHelper.Query(ctx, "max");
             if (!String.IsNullOrEmpty(maxText) && Int32.TryParse(maxText, out int parsed)) max = Math.Clamp(parsed, 1, 100);
 
             RetrievalModeEnum mode = ParseMode(ctx);
             string tenantId = rc.TenantId ?? String.Empty;
             RetrievalFilter? requestFilter = ParseFilter(ctx);
-            string? collectionOverride = ctx.Request.Query.Elements?["collection"];
+            string? collectionOverride = RouteHelper.Query(ctx, "collection");
 
-            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, max, null, mode, requestFilter, collectionOverride, ctx.Token).ConfigureAwait(false);
+            RetrievalOverrides? overrides = ParseOverrides(ctx, rc);
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, max, null, mode, requestFilter, collectionOverride, ctx.Token, true, overrides).ConfigureAwait(false);
 
             SearchResponse response = new SearchResponse { Query = query!, Mode = mode.ToString() };
             foreach (RetrievedChunk hit in hits)
             {
-                response.Results.Add(new SearchNodeResult { Node = hit.Node, Score = hit.Score, Snippet = hit.Snippet });
+                response.Results.Add(new SearchNodeResult
+                {
+                    Node = hit.Node,
+                    Score = hit.Score,
+                    Snippet = hit.Snippet,
+                    LinkId = hit.LinkId,
+                    DocumentId = hit.DocumentId,
+                    FusedScore = hit.FusedScore,
+                    VectorScore = hit.VectorScore,
+                    TextScore = hit.TextScore,
+                    VectorRank = hit.VectorRank,
+                    TextRank = hit.TextRank,
+                    ChunkKind = hit.ChunkKind,
+                    Position = hit.Position
+                });
             }
             await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
         }
@@ -130,7 +145,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            string? query = ctx.Request.Query.Elements?["q"];
+            string? query = RouteHelper.Query(ctx, "q");
             if (String.IsNullOrWhiteSpace(query))
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A query (q) is required.").ConfigureAwait(false);
@@ -138,27 +153,34 @@ namespace Pneuma.Server.Routes
             }
 
             int maxResults = 20;
-            string? maxText = ctx.Request.Query.Elements?["maxResults"];
+            string? maxText = RouteHelper.Query(ctx, "maxResults");
             if (!String.IsNullOrEmpty(maxText) && Int32.TryParse(maxText, out int parsedMax)) maxResults = Math.Clamp(parsedMax, 1, 100);
             int skip = 0;
-            string? skipText = ctx.Request.Query.Elements?["skip"];
+            string? skipText = RouteHelper.Query(ctx, "skip");
             if (!String.IsNullOrEmpty(skipText) && Int32.TryParse(skipText, out int parsedSkip)) skip = Math.Max(0, parsedSkip);
 
             RetrievalModeEnum mode = ParseMode(ctx);
             RetrievalFilter? requestFilter = ParseFilter(ctx);
-            string? collectionOverride = ctx.Request.Query.Elements?["collection"];
+            string? collectionOverride = RouteHelper.Query(ctx, "collection");
 
             // Gather a generous pool of hits (the subject default filter is merged in by the service) and roll
             // them up per source link. A source link is many chunk documents; each hit carries its link id.
             // resolveNodes:false — this view only needs each hit's link/snippet/score/document id (all carried on
             // the RecallDB hit), so we skip the per-hit LiteGraph node round-trip that otherwise dominated latency.
-            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, _Query.SearchPoolSize, subjectId, mode, requestFilter, collectionOverride, ctx.Token, false).ConfigureAwait(false);
+            RetrievalOverrides? overrides = ParseOverrides(ctx, rc);
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query!, _Query.SearchPoolSize, subjectId, mode, requestFilter, collectionOverride, ctx.Token, false, overrides).ConfigureAwait(false);
+
+            // granularity=chunk returns the ranked hits themselves (one per retrieved passage) instead of rolling
+            // them up per source document, for passage-level evaluation.
+            bool chunkLevel = String.Equals(RouteHelper.Query(ctx, "granularity"), "chunk", StringComparison.OrdinalIgnoreCase);
 
             List<string> order = new List<string>();
             Dictionary<string, SearchGroup> groups = new Dictionary<string, SearchGroup>(StringComparer.Ordinal);
             foreach (RetrievedChunk hit in hits)
             {
-                string key = !String.IsNullOrEmpty(hit.LinkId) ? "link:" + hit.LinkId : "doc:" + (hit.DocumentId ?? hit.NodeId);
+                string key = chunkLevel
+                    ? "hit:" + hit.NodeId
+                    : (!String.IsNullOrEmpty(hit.LinkId) ? "link:" + hit.LinkId : "doc:" + (hit.DocumentId ?? hit.NodeId));
                 if (!groups.TryGetValue(key, out SearchGroup? group))
                 {
                     group = new SearchGroup { LinkId = hit.LinkId, Best = hit, MatchCount = 0 };
@@ -166,12 +188,14 @@ namespace Pneuma.Server.Routes
                     order.Add(key);
                 }
                 group.MatchCount++;
-                if (hit.Score > group.Best.Score) group.Best = hit;
+                // The hits arrive in fused (RRF) order, so the first hit of a document is its best one. Keep it:
+                // comparing raw scores would mix cosine similarity and TsRank, which are not on one scale.
             }
 
+            // Documents keep the fused order of their best hit. (Sorting by the raw Score, as before, ranked
+            // hybrid results by whichever channel produced the larger number, not by the fused ranking.)
             List<SearchGroup> ranked = new List<SearchGroup>();
             foreach (string key in order) ranked.Add(groups[key]);
-            ranked.Sort((a, b) => b.Best.Score.CompareTo(a.Best.Score));
 
             int total = ranked.Count;
             List<SearchGroup> pageGroups = new List<SearchGroup>();
@@ -195,7 +219,14 @@ namespace Pneuma.Server.Routes
                     MatchCount = group.MatchCount,
                     Snippet = group.Best.Snippet,
                     LinkId = group.LinkId,
-                    NodeId = group.Best.NodeId
+                    NodeId = group.Best.NodeId,
+                    FusedScore = group.Best.FusedScore,
+                    VectorScore = group.Best.VectorScore,
+                    TextScore = group.Best.TextScore,
+                    VectorRank = group.Best.VectorRank,
+                    TextRank = group.Best.TextRank,
+                    ChunkKind = group.Best.ChunkKind,
+                    Position = group.Best.Position
                 };
                 if (!String.IsNullOrEmpty(group.LinkId) && linkById.TryGetValue(group.LinkId!, out SubjectLink? link))
                 {
@@ -243,7 +274,7 @@ namespace Pneuma.Server.Routes
         /// <returns>The requested retrieval mode; hybrid by default.</returns>
         private static RetrievalModeEnum ParseMode(HttpContextBase ctx)
         {
-            string? raw = ctx.Request.Query.Elements?["mode"];
+            string? raw = RouteHelper.Query(ctx, "mode");
             if (String.IsNullOrWhiteSpace(raw)) return RetrievalModeEnum.Hybrid;
             switch (raw!.Trim().ToLowerInvariant())
             {
@@ -263,6 +294,49 @@ namespace Pneuma.Server.Routes
         }
 
         /// <summary>
+        /// Parse per-request retrieval overrides from query parameters named like the fields of
+        /// <see cref="RetrievalOverrides"/> (rrfK, lexicalWeight, semanticWeight, diversityEnabled,
+        /// diversityLambda, poolMultiplier, neighborExpansionEnabled, neighborExpansionMaxHops,
+        /// neighborExpansionMaxNodes). Honored only for system and tenant administrators, so ordinary callers
+        /// cannot change retrieval cost or behavior.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <param name="rc">Request context.</param>
+        /// <returns>The overrides, or null when none apply.</returns>
+        private static RetrievalOverrides? ParseOverrides(HttpContextBase ctx, RequestContext rc)
+        {
+            if (!rc.IsAdmin && !rc.IsTenantAdmin) return null;
+            RetrievalOverrides overrides = new RetrievalOverrides
+            {
+                RrfK = ParseInt(RouteHelper.Query(ctx, "rrfK")),
+                LexicalWeight = ParseDouble(RouteHelper.Query(ctx, "lexicalWeight")),
+                SemanticWeight = ParseDouble(RouteHelper.Query(ctx, "semanticWeight")),
+                DiversityEnabled = ParseBool(RouteHelper.Query(ctx, "diversityEnabled")),
+                DiversityLambda = ParseDouble(RouteHelper.Query(ctx, "diversityLambda")),
+                PoolMultiplier = ParseInt(RouteHelper.Query(ctx, "poolMultiplier")),
+                NeighborExpansionEnabled = ParseBool(RouteHelper.Query(ctx, "neighborExpansionEnabled")),
+                NeighborExpansionMaxHops = ParseInt(RouteHelper.Query(ctx, "neighborExpansionMaxHops")),
+                NeighborExpansionMaxNodes = ParseInt(RouteHelper.Query(ctx, "neighborExpansionMaxNodes"))
+            };
+            return overrides.IsEmpty() ? null : overrides;
+        }
+
+        private static int? ParseInt(string? raw)
+        {
+            return !String.IsNullOrWhiteSpace(raw) && Int32.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int value) ? value : (int?)null;
+        }
+
+        private static double? ParseDouble(string? raw)
+        {
+            return !String.IsNullOrWhiteSpace(raw) && Double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double value) ? value : (double?)null;
+        }
+
+        private static bool? ParseBool(string? raw)
+        {
+            return !String.IsNullOrWhiteSpace(raw) && Boolean.TryParse(raw, out bool value) ? value : (bool?)null;
+        }
+
+        /// <summary>
         /// Parse the optional per-request facet filter from the <c>filter</c> query parameter (URL-encoded
         /// <see cref="RetrievalFilter"/> JSON). Returns null when absent or unparseable.
         /// </summary>
@@ -270,7 +344,7 @@ namespace Pneuma.Server.Routes
         /// <returns>The parsed filter, or null.</returns>
         private static RetrievalFilter? ParseFilter(HttpContextBase ctx)
         {
-            string? raw = ctx.Request.Query.Elements?["filter"];
+            string? raw = RouteHelper.Query(ctx, "filter");
             if (String.IsNullOrWhiteSpace(raw)) return null;
             try
             {

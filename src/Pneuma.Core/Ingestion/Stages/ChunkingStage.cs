@@ -85,6 +85,7 @@ namespace Pneuma.Core.Ingestion.Stages
                     {
                         if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
                         chunk.CellNodeId = summary.CellNodeId;
+                        chunk.Kind = "summary";
                         all.Add(chunk);
                     }
                 }
@@ -106,6 +107,16 @@ namespace Pneuma.Core.Ingestion.Stages
             if (!String.IsNullOrWhiteSpace(subject.ChunkStrategy)) options.Strategy = subject.ChunkStrategy!;
             options.MaxTokens = subject.ChunkMaxTokens;
             options.OverlapCount = subject.ChunkOverlapTokens;
+
+            // Size chunks in the embedding model's own tokens (e.g. WordPiece for nomic-embed-text), so a chunk the
+            // chunker counts as within budget is also within budget for the model that embeds it.
+            if (!String.IsNullOrWhiteSpace(subject.EmbeddingModel))
+            {
+                ModelRunner? runner = await _Deps.Db.ModelRunners.ReadAsync(subject.EmbeddingModel!, token).ConfigureAwait(false);
+                string? model = runner == null ? null : (String.IsNullOrWhiteSpace(runner.DefaultEmbeddingModel) ? runner.DefaultModel : runner.DefaultEmbeddingModel);
+                if (!String.IsNullOrWhiteSpace(model)) options.ModelId = model;
+            }
+
             return options;
         }
 

@@ -42,6 +42,10 @@ stay bounded.
 ### Retrieval & Answer
 - `pneuma_chat_answers_total{outcome}` — answered chat/query turns by outcome.
 - `pneuma_chat_answer_duration_seconds{outcome}` — total answer-latency histogram.
+- `pneuma_retrieval_stage_duration_seconds{stage}` — search and grounded-answer stage latency: `text_leg`, `embed`,
+  `vector_leg`, `mmr` (or `select`), `neighbor_expand`, `rewrite`, `rerank`, `generate`.
+- `pneuma_retrieval_leg_failures_total{leg}` — retrieval channels (`text`, `vector`) that failed or could not run
+  and were skipped, leaving a one-channel result.
 - `pneuma_chat_stage_duration_seconds{stage}` — per-stage answer-pipeline latency histogram, one series per
   coarse stage: `prompt_rewrite`, `compaction`, `tool`, `final_inference` (the same stages persisted per turn
   in `performanceJson` and surfaced in the dashboard History detail and Analytics views).

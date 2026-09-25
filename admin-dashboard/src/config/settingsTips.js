@@ -94,7 +94,6 @@ const TIP_BY_PATH = {
   'retrieval.communityMinSize': 'Minimum node count for a detected graph community to be summarized and used in answers.',
   'retrieval.communitySummaryMaxMembers': 'Maximum member nodes included when summarizing a community.',
   'retrieval.communityDetectionMaxIterations': 'Iteration cap for the community-detection algorithm.',
-  'retrieval.vectorTopK': 'How many nearest vectors to fetch per query. Higher recall, but more to rank.',
   'retrieval.vectorMinimumScore': 'Discard vector hits below this cosine similarity (0–1). Raise to keep only strong matches.',
   'retrieval.rrfK': 'Reciprocal-rank-fusion constant that blends lexical and vector rankings. Higher = flatter blend.',
   'retrieval.lexicalWeight': 'Weight given to full-text (lexical) scores when fusing them with vector scores.',

@@ -20,5 +20,11 @@ namespace Pneuma.Core.Integrations.Models
         /// resolves back to its originating cell in the knowledge graph.
         /// </summary>
         public string? CellNodeId { get; set; } = null;
+
+        /// <summary>
+        /// What the chunk was cut from: "content" (the cell's own text) or "summary" (the cell's LLM summary).
+        /// Stamped on the stored chunk as the <c>chunkKind</c> tag so retrieval can tell the two apart.
+        /// </summary>
+        public string Kind { get; set; } = "content";
     }
 }

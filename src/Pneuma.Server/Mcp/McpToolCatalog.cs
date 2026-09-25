@@ -211,7 +211,7 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_search",
-                    description = "Full-text search the ingested corpus, returning a bounded, ranked set of graph-node summaries (id, name, type, score). This is a top-N query, not a full enumeration; raise 'max' to widen it. Pass an optional metadataFilter to scope retrieval to specific labels/tags (discover valid values with pneuma_distinct_labels / pneuma_distinct_tags).",
+                    description = "Search the ingested corpus with hybrid retrieval (keyword + semantic, fused), returning a bounded, ranked set of graph-node summaries (id, name, type, score 0..1, snippet). Paraphrased questions work; set mode to 'text' for exact identifiers or 'vector' for meaning only. This is a top-N query, not a full enumeration; raise 'max' to widen it. Pass an optional metadataFilter to scope retrieval to specific labels/tags (discover valid values with pneuma_distinct_labels / pneuma_distinct_tags).",
                     inputSchema = new
                     {
                         type = "object",
@@ -219,6 +219,7 @@ namespace Pneuma.Server.Mcp
                         {
                             query = new { type = "string", description = "Search query text." },
                             max = new { type = "integer", description = "Maximum hits (clamped 1..100)." },
+                            mode = new { type = "string", description = "hybrid (default), text, or vector." },
                             metadataFilter = MetadataFilterSchema()
                         },
                         required = new[] { "query" }

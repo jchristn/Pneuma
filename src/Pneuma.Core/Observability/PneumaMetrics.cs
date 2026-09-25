@@ -39,6 +39,8 @@ namespace Pneuma.Core.Observability
         private static readonly ConcurrentDictionary<string, long> _ChatAnswers = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatAnswerDuration = new ConcurrentDictionary<string, HistogramSeries>();
         private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, HistogramSeries> _RetrievalStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, long> _RetrievalLegFailures = new ConcurrentDictionary<string, long>();
 
         private static long _Requests2xx = 0;
         private static long _Requests4xx = 0;
@@ -126,6 +128,27 @@ namespace Pneuma.Core.Observability
             _ChatStageDuration.GetOrAdd("stage=\"" + Escape(safeStage) + "\"", CreateHistogram).Observe(seconds);
         }
 
+        /// <summary>
+        /// Record the duration of one retrieval / grounded-answer stage (for example text_leg, embed, vector_leg,
+        /// fusion, mmr, neighbor_expand, rewrite, rerank, generate) on the search and query paths.
+        /// </summary>
+        /// <param name="stage">Stage name.</param>
+        /// <param name="seconds">Duration in seconds.</param>
+        public static void RecordRetrievalStage(string stage, double seconds)
+        {
+            string safeStage = String.IsNullOrEmpty(stage) ? "unknown" : stage;
+            _RetrievalStageDuration.GetOrAdd("stage=\"" + Escape(safeStage) + "\"", CreateHistogram).Observe(seconds);
+        }
+
+        /// <summary>
+        /// Count a retrieval leg that failed and was skipped (the request degraded to the remaining leg).
+        /// </summary>
+        /// <param name="leg">text or vector.</param>
+        public static void RecordRetrievalLegFailure(string leg)
+        {
+            Increment(_RetrievalLegFailures, "leg=\"" + Escape(String.IsNullOrEmpty(leg) ? "unknown" : leg) + "\"");
+        }
+
         /// <summary>Record an authorization decision.</summary>
         /// <param name="result">Decision result: permit or deny.</param>
         public static void RecordAuthzDecision(string result)
@@ -178,6 +201,8 @@ namespace Pneuma.Core.Observability
             AppendCounterFamily(sb, "pneuma_chat_answers_total", "Chat/answer turns by outcome", _ChatAnswers);
             AppendHistogramFamily(sb, "pneuma_chat_answer_duration_seconds", "Chat answer total duration in seconds, by outcome", _ChatAnswerDuration);
             AppendHistogramFamily(sb, "pneuma_chat_stage_duration_seconds", "Chat answer-pipeline stage duration in seconds, by stage", _ChatStageDuration);
+            AppendHistogramFamily(sb, "pneuma_retrieval_stage_duration_seconds", "Search and grounded-answer stage duration in seconds, by stage", _RetrievalStageDuration);
+            AppendCounterFamily(sb, "pneuma_retrieval_leg_failures_total", "Retrieval legs that failed and were skipped, by leg", _RetrievalLegFailures);
             AppendSimpleCounter(sb, "pneuma_authz_denied_total", "Authorization denials", Interlocked.Read(ref _AuthzDenied));
 
             return sb.ToString();

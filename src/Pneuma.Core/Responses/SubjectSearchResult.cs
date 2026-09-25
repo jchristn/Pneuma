@@ -33,5 +33,29 @@ namespace Pneuma.Core.Responses
 
         /// <summary>LiteGraph node id associated with the document, when present.</summary>
         public string? NodeId { get; set; } = null;
+
+        /// <summary>
+        /// Fused Reciprocal-Rank-Fusion score normalized to 0..1 (1 = ranked first by every channel that ran).
+        /// Results are ordered by it, and unlike <see cref="Score"/> it is comparable across queries.
+        /// </summary>
+        public double FusedScore { get; set; } = 0;
+
+        /// <summary>Raw cosine similarity from the vector channel, or null when that channel did not return the hit.</summary>
+        public double? VectorScore { get; set; } = null;
+
+        /// <summary>Raw TsRank from the full-text channel, or null when that channel did not return the hit.</summary>
+        public double? TextScore { get; set; } = null;
+
+        /// <summary>1-based rank in the vector channel, or null.</summary>
+        public int? VectorRank { get; set; } = null;
+
+        /// <summary>1-based rank in the full-text channel, or null.</summary>
+        public int? TextRank { get; set; } = null;
+
+        /// <summary>"content" or "summary" (an LLM cell summary), when the chunk is tagged; null for older chunks.</summary>
+        public string? ChunkKind { get; set; } = null;
+
+        /// <summary>Stored position of the chunk within its source document.</summary>
+        public int Position { get; set; } = 0;
     }
 }

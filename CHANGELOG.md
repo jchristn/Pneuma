@@ -7,6 +7,64 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Benchmark suite** (`benchmarks/`, `src/Test.Benchmark`). A black-box harness modeled on the Isis suite:
+  retrieval ranking per search mode against a built-in reference RAG (BM25, dense, RRF), grounded and agentic
+  answering with an LLM judge, ingest fidelity, thematic (global) answers, Claude Code over MCP, closed-loop load,
+  and a bootstrap-backed regression `compare`. Datasets: `pneuma-live` (Pneuma's own docs), `meridian` (synthetic,
+  entity-rich), Isis's `atlas`, plus BEIR SciFact/NFCorpus and MultiHop-RAG converters. See `BENCHMARKING.md`,
+  `benchmarks/README.md`, and `benchmarks/RESULTS.md`.
+- **Retrieval evidence on search hits.** `/v1.0/search` and `/v1.0/subjects/{id}/search` hits carry `fusedScore`
+  (RRF normalized to 0..1, comparable across queries), `vectorScore`, `textScore`, `vectorRank`, `textRank`,
+  `chunkKind`, and `position`; tenant search hits also carry `linkId` and `documentId`. Grounded-answer sources carry
+  their originating link as a `linkId` tag, and `QueryResponse` serializes `insufficientSupport`.
+- **`granularity=chunk`** on subject search returns ranked passages instead of one best hit per document.
+- **Per-request retrieval overrides** for administrators (`overrides` on `/v1.0/query` and `/v1.0/query/stream`,
+  same-named query parameters on the search routes): `rrfK`, `lexicalWeight`, `semanticWeight`, `diversityEnabled`,
+  `diversityLambda`, `poolMultiplier`, `neighborExpansionEnabled`, `neighborExpansionMaxHops`,
+  `neighborExpansionMaxNodes`.
+- **Retrieval metrics.** `pneuma_retrieval_stage_duration_seconds{stage}` (text_leg, embed, vector_leg, mmr, select,
+  neighbor_expand, rewrite, rerank, generate) and `pneuma_retrieval_leg_failures_total{leg}`, so a search that
+  silently degraded to one channel is visible.
+- **`chunkKind` chunk tag** (`content` or `summary`) on newly indexed chunks.
+
+### Fixed
+- **Hybrid subject search now follows the fused ranking.** Documents were re-sorted by their best raw channel score,
+  mixing cosine similarity (about 0.3 to 0.9) with TsRank (usually under 0.1), so hybrid results were effectively the
+  vector ranking. Benchmarks showed hybrid equal to vector-only on every dataset.
+- **Query-string values are URL-decoded.** Routes read query parameters still percent-encoded, so `q=two%20words`
+  searched for the literal `two%20words`, `+` separators reached the embedding model verbatim, and a URL-encoded
+  search `filter` failed to parse and was silently ignored.
+- **Slow local completions are no longer cut off at 120 s.** PolyPrompt's own per-request timeout (120 s by default)
+  still applied after the endpoint cap was removed, cancelling ontology classification on modest hardware. Model
+  clients now get at least 30 minutes (or the endpoint's longer `MaximumTimeoutMs`), bounded by the caller's token.
+- **A request timeout inside an ingestion stage is reported as such.** Any cancellation was reported as
+  "Stage timed out after 1800 seconds"; a cancellation that came from inside the stage now names the request timeout.
+- **Embedding retries a rate-limited or briefly unavailable model endpoint.** A 429 ("at capacity") or 5xx from
+  the embedding endpoint is retried with exponential backoff (1 to 16 s) instead of failing the ingestion stage on the
+  first response; hosted and shared model gateways answer 429 routinely under load.
+- **Valid UTF-8 text that the type detector calls Unknown is ingested as Text** (for example markdown with
+  box-drawing characters) instead of failing the job.
+- **`/v1.0/query/stream` answers from the same sources as `/v1.0/query`**: it now applies the subject's prompt
+  rewrite and reranker and uses the subject's answering model.
+- `RerankerTypeEnum` and `RetrievalModeEnum` serialize as strings, like every other enum.
+
+### Changed
+- **Chunking now uses the TextChunker 0.3.1 library** in place of the in-house `Pneuma.Chunking` port. Chunks are
+  sized in the subject's embedding model's own tokens (WordPiece for `nomic-embed-text`, `all-minilm`, and other
+  BERT-family models; cl100k_base otherwise), slices never split a multi-byte character, fixed-token chunking with
+  overlap no longer emits redundant tail chunks, and small trailing fragments are merged. A `Recursive` strategy is
+  available per subject. Chunk boundaries change: existing subjects keep their chunks until re-ingested.
+
+### Removed
+- The unused `Retrieval.VectorTopK` setting.
+- The `Pneuma.Chunking` library and its Partio golden-parity suite (superseded by TextChunker).
+
+### Changed
+- NuGet updates: Watson 7.2.0, AWSSDK.S3 4.0.103.4, Blobject.Core 5.1.0, Microsoft.Data.SqlClient 7.1.0,
+  Microsoft.Data.Sqlite 10.0.12, Microsoft.Playwright 1.63.0, RestWrapper 3.3.0, SyslogLogging 2.2.2, and test
+  tooling (Microsoft.NET.Test.Sdk 18.10.1, NUnit.Analyzers 4.15.0, NUnit3TestAdapter 6.3.0).
+
+### Added
 - **Ingestion Live view.** A real-time pipeline view (admin dashboard) and endpoint
   `GET /v1.0/jobs/live` → `IngestionLiveSnapshot` `{ running, waitingForSlot, queued }`. Each entry
   carries the document (`sourceUrl`), the current step (`stage`), and `stateSinceUtc` so the view

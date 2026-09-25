@@ -1,0 +1,163 @@
+{
+  "createdUtc": "2026-09-24T00:00:00Z",
+  "rest": {
+    "hostname": "127.0.0.1",
+    "port": 28080,
+    "ssl": false
+  },
+  "cors": {
+    "allowOrigins": "*",
+    "allowMethods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+    "allowHeaders": "Content-Type, Authorization, X-Api-Key, x-token, x-tenant-guid, x-email, x-password, x-access-key, x-secret-key",
+    "exposeHeaders": "*",
+    "maxAgeSeconds": 86400
+  },
+  "logging": {
+    "consoleLogging": true,
+    "fileLogging": true,
+    "logDirectory": "logs",
+    "logFilename": "pneuma-bench.log",
+    "minimumSeverity": 2,
+    "logHttpRequests": false
+  },
+  "database": {
+    "type": "Postgresql",
+    "filename": "pneuma.db",
+    "hostname": "127.0.0.1",
+    "port": 25432,
+    "databaseName": "pneuma",
+    "username": "pneuma",
+    "password": "pneuma",
+    "maxConnections": 64,
+    "commandTimeoutSeconds": 60
+  },
+  "auth": {
+    "issuer": "pneuma",
+    "tokenSigningKey": "pneuma-benchmark-signing-key-not-for-production-0001",
+    "tokenLifetimeMinutes": 240,
+    "adminApiKeys": [
+      "pneumaadmin"
+    ]
+  },
+  "requestHistory": {
+    "enabled": true,
+    "maxRequestBodyBytes": 65536,
+    "maxResponseBodyBytes": 65536,
+    "retentionDays": 7,
+    "pruneIntervalMinutes": 60
+  },
+  "ingestion": {
+    "maxConcurrentTasks": 8,
+    "pollIntervalMs": 1000,
+    "maxAttempts": 6,
+    "retryBackoffBaseMs": 5000,
+    "retryBackoffMaxMs": 60000,
+    "embeddingCacheSize": 50000,
+    "stageTimeoutSeconds": 1800,
+    "summarizationMinCellLength": 128,
+    "summarizationConcurrency": 4,
+    "classificationBatchSize": 25,
+    "classificationBatchOverlap": 3,
+    "classificationBatchConcurrency": 4,
+    "useHeadlessBrowser": false,
+    "browserNavigationTimeoutMs": 60000,
+    "userAgent": "Pneuma-Benchmark/0.1",
+    "stageConcurrency": {
+      "contentRetrieval": 4,
+      "typeDetection": 8,
+      "cellExtraction": 8,
+      "classification": 2,
+      "graphMerge": 8,
+      "summarization": 4,
+      "chunking": 8,
+      "embedding": 1,
+      "indexing": 8
+    }
+  },
+  "integrations": {
+    "documentAtom": {
+      "endpoint": "http://127.0.0.1:28000/"
+    },
+    "recallDb": {
+      "endpoint": "http://127.0.0.1:28600/",
+      "bearerToken": "recalldbadmin",
+      "tenantId": "pneuma",
+      "tenantName": "Pneuma",
+      "defaultCollectionName": "default",
+      "defaultCollectionDimensionality": 768
+    },
+    "liteGraph": {
+      "endpoint": "http://127.0.0.1:28701/",
+      "bearerToken": "litegraphadmin",
+      "tenantGuid": "00000000-0000-0000-0000-000000000000"
+    },
+    "blob": {
+      "provider": "Disk",
+      "directory": "blobs-bench"
+    },
+    "resilience": {
+      "timeoutMilliseconds": 100000,
+      "maxConcurrentRequests": 8,
+      "retryCount": 2,
+      "retryDelayMilliseconds": 500
+    }
+  },
+  "retrieval": {
+    "useInvertedIndex": true,
+    "neighborExpansionEnabled": true,
+    "chatMaxToolIterations": 6,
+    "neighborExpansionMaxNodes": 10,
+    "neighborExpansionMaxHops": 1,
+    "communityMinSize": 3,
+    "communitySummaryMaxMembers": 50,
+    "communityDetectionMaxIterations": 100,
+    "vectorMinimumScore": 0,
+    "rrfK": 60,
+    "lexicalWeight": 1,
+    "semanticWeight": 1,
+    "diversityEnabled": true,
+    "diversityLambda": 0.7,
+    "searchPoolSize": 250
+  },
+  "modelRunner": {
+    "maxConcurrentRequests": 4,
+    "maxQueueDepth": 256
+  },
+  "s3": {
+    "enabled": true,
+    "endpoint": "http://127.0.0.1:28100",
+    "region": "us-west-1",
+    "accessKey": "default",
+    "secretKey": "default",
+    "forcePathStyle": true,
+    "buckets": {
+      "source": "pneuma-source",
+      "atoms": "pneuma-atoms",
+      "chunks": "pneuma-chunks",
+      "embeddings": "pneuma-embeddings",
+      "subgraph": "pneuma-subgraph"
+    }
+  },
+  "telemetry": {
+    "enabled": true,
+    "serviceName": "pneuma-bench",
+    "otlpEndpoint": "http://127.0.0.1:4317",
+    "otlpProtocol": "grpc",
+    "prometheusEnabled": true
+  },
+  "diagnostics": {
+    "runStartupProbes": true,
+    "failFastOnStartupProbe": false
+  },
+  "seed": {
+    "accountName": "Pneuma",
+    "tenantName": "System",
+    "adminEmail": "admin@pneuma",
+    "adminPassword": "password",
+    "adminFirstName": "Pneuma",
+    "adminLastName": "Benchmark",
+    "ollamaBaseUrl": "http://127.0.0.1:11434",
+    "openAiBaseUrl": "https://api.openai.com/v1",
+    "geminiBaseUrl": "https://generativelanguage.googleapis.com/v1beta"
+  }
+}

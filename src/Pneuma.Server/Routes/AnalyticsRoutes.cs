@@ -73,9 +73,9 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
                 return;
             }
-            string? subjectId = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectId = RouteHelper.Query(ctx, "subjectId");
             int days = 30;
-            string? daysRaw = ctx.Request.Query.Elements?["days"];
+            string? daysRaw = RouteHelper.Query(ctx, "days");
             if (!String.IsNullOrEmpty(daysRaw) && Int32.TryParse(daysRaw, out int parsed)) days = Math.Clamp(parsed, 1, 365);
             DateTime sinceUtc = DateTime.UtcNow.AddDays(-days);
             AnalyticsReport report = await _Analytics.BuildAsync(rc.TenantId, String.IsNullOrEmpty(subjectId) ? null : subjectId, sinceUtc, ctx.Token).ConfigureAwait(false);

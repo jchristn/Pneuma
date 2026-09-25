@@ -246,7 +246,7 @@ namespace Pneuma.Core.Database
             // "user's question about the subject" is unique to the new wording, re-healing older copies. The expected
             // prefix matches the old stored default so only unedited copies are healed.
             await HealPromptAsync(db, "user.answer", "You are answering a fan's question", DefaultUserAnswerPrompt, "user's question about the subject", token).ConfigureAwait(false);
-            await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, "internal object kinds", token).ConfigureAwait(false);
+            await HealPromptAsync(db, "assistant.system", "You are Pneuma's knowledge assistant.", DefaultAssistantSystemPrompt, "hybrid (keyword + semantic) search", token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -349,7 +349,7 @@ namespace Pneuma.Core.Database
             "You have access to the following read-only Pneuma tools via function calling. Request a tool by calling it with " +
             "JSON arguments that match its schema; you will receive the tool's JSON result and may then call more tools or " +
             "answer. Never invent tool names or results.\n" +
-            "- pneuma_search { query, max? } - full-text search the corpus; returns ranked node summaries (id, name, type, score). Start here for most questions.\n" +
+            "- pneuma_search { query, max?, mode? } - hybrid (keyword + semantic) search of the corpus; returns ranked node summaries (id, name, type, score, snippet). Start here for most questions.\n" +
             "- pneuma_get_node { id } - fetch one graph node's full content, labels, and tags.\n" +
             "- pneuma_get_neighbors { id } - fetch a node's adjacent nodes (id, name, type) to explore relationships.\n" +
             "- pneuma_enumerate_subjects { maxResults?, skip?, order?, search? } - list the subjects the corpus is about.\n" +

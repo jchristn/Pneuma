@@ -32,7 +32,6 @@ namespace Test.Shared
                     CollectionsSuite.Build(),
                     GraphTenancySuite.Build(),
                     ChunkingSuite.Build(),
-                    ChunkingParitySuite.Build(),
                     SubjectPromptSuite.Build(),
                     ConcurrencyOverridesSuite.Build()
                 };

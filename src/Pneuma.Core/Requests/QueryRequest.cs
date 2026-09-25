@@ -24,5 +24,11 @@ namespace Pneuma.Core.Requests
         /// excluded), so a request narrows — never widens — the subject default.
         /// </summary>
         public RetrievalFilter? MetadataFilter { get; set; } = null;
+
+        /// <summary>
+        /// Optional per-request retrieval overrides (fusion, diversity, pool size, neighbor expansion) for tuning
+        /// and benchmarking. Honored only for system and tenant administrators; ignored otherwise.
+        /// </summary>
+        public RetrievalOverrides? Overrides { get; set; } = null;
     }
 }

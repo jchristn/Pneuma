@@ -16,7 +16,6 @@ namespace Pneuma.Server.Settings
         private int _CommunityMinSize = 3;
         private int _CommunitySummaryMaxMembers = 50;
         private int _CommunityDetectionMaxIterations = 100;
-        private int _VectorTopK = 20;
         private double _VectorMinimumScore = 0.0;
         private int _ChatMaxToolIterations = 6;
         private int _RrfK = 60;
@@ -103,15 +102,6 @@ namespace Pneuma.Server.Settings
         {
             get { return _CommunityDetectionMaxIterations; }
             set { _CommunityDetectionMaxIterations = Math.Clamp(value, 1, 1000); }
-        }
-
-        /// <summary>
-        /// Number of nearest vectors requested from the vector store. Default 20; minimum 1; maximum 200.
-        /// </summary>
-        public int VectorTopK
-        {
-            get { return _VectorTopK; }
-            set { _VectorTopK = Math.Clamp(value, 1, 200); }
         }
 
         /// <summary>

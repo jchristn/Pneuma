@@ -140,14 +140,17 @@ namespace Pneuma.Server.Routes
 
             using (lease)
             {
-                GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, request.SubjectId, null, request.MetadataFilter, ctx.Token).ConfigureAwait(false);
+                // Retrieval overrides are a tuning/benchmarking aid, honored for administrators only.
+                RetrievalOverrides? overrides = (rc.IsAdmin || rc.IsTenantAdmin) ? request.Overrides : null;
+                GroundedAnswer answer = await _Query.AnswerAsync(tenantId, request.Question, max, request.SubjectId, null, request.MetadataFilter, ctx.Token, overrides).ConfigureAwait(false);
                 QueryResponse response = new QueryResponse
                 {
                     Answer = answer.Answer,
                     Sources = answer.Sources,
                     Grounded = answer.Grounded,
                     Model = answer.AnswerModel,
-                    GenerationMs = answer.GenerationMs
+                    GenerationMs = answer.GenerationMs,
+                    InsufficientSupport = answer.InsufficientSupport
                 };
                 await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
             }
@@ -197,7 +200,8 @@ namespace Pneuma.Server.Routes
                     Sources = answer.Sources,
                     Grounded = answer.Grounded,
                     Model = answer.AnswerModel,
-                    GenerationMs = answer.GenerationMs
+                    GenerationMs = answer.GenerationMs,
+                    InsufficientSupport = answer.InsufficientSupport
                 };
                 await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
             }
@@ -238,7 +242,11 @@ namespace Pneuma.Server.Routes
             SseWriter sse = new SseWriter(ctx);
             try
             {
-                List<GraphNode> sources = await _Query.RetrieveSourcesAsync(tenantId, request.Question, max, request.SubjectId, null, request.MetadataFilter, ctx.Token).ConfigureAwait(false);
+                // Same grounding path as the non-streaming answer (rewrite, retrieval, rerank, and the subject's own
+                // answering model), so /query and /query/stream answer from the same passages.
+                Subject? subject = await _Query.ReadSubjectAsync(tenantId, request.SubjectId, ctx.Token).ConfigureAwait(false);
+                RetrievalOverrides? overrides = (rc.IsAdmin || rc.IsTenantAdmin) ? request.Overrides : null;
+                List<GraphNode> sources = await _Query.RetrieveForAnswerAsync(tenantId, subject, request.Question, max, request.SubjectId, null, request.MetadataFilter, ctx.Token, overrides).ConfigureAwait(false);
                 await sse.SendAsync(new { type = "metadata", grounded = sources.Count > 0, sourceCount = sources.Count }, false, ctx.Token).ConfigureAwait(false);
 
                 if (sources.Count == 0)
@@ -253,7 +261,7 @@ namespace Pneuma.Server.Routes
                     return;
                 }
 
-                ModelRunner? runner = await _Query.ResolveAnswerRunnerAsync(tenantId, ctx.Token).ConfigureAwait(false);
+                ModelRunner? runner = await _Query.ResolveAnswerRunnerAsync(tenantId, subject, ctx.Token).ConfigureAwait(false);
                 if (runner == null)
                 {
                     await sse.SendAsync(new

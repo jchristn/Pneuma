@@ -5,6 +5,7 @@ namespace Pneuma.Server.Mcp
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Graph;
     using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Integrations.Abstractions;
@@ -12,6 +13,7 @@ namespace Pneuma.Server.Mcp
     using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
     using Pneuma.Server.Services;
@@ -62,7 +64,12 @@ namespace Pneuma.Server.Mcp
 
         #region Public-Methods
 
-        /// <summary>Full-text search the corpus, returning a bounded, ranked set of node summaries.</summary>
+        /// <summary>
+        /// Search the corpus through the shared retrieval service (hybrid by default: full-text and vector channels
+        /// fused with RRF, over the subject's own collection and embedding model, with its default facet filter),
+        /// returning a bounded, ranked set of node summaries. The optional <c>mode</c> argument selects
+        /// <c>text</c>, <c>vector</c>, or <c>hybrid</c>.
+        /// </summary>
         /// <param name="tenantId">Tenant whose RecallDB collection is searched.</param>
         /// <param name="arguments">Tool arguments.</param>
         /// <param name="subjectId">Optional subject to scope the search to; null searches the whole tenant.</param>
@@ -84,49 +91,53 @@ namespace Pneuma.Server.Mcp
                 return new { query = String.Empty, count = 0, results };
             }
 
-            string? collectionId = await CollectionResolver.ResolveAsync(_Collections, tenantId, null, _DefaultCollectionId, token).ConfigureAwait(false);
-            if (String.IsNullOrEmpty(collectionId))
-            {
-                return new { query, count = 0, results };
-            }
-
-            IReadOnlyDictionary<string, string>? tagFilter = String.IsNullOrEmpty(subjectId)
-                ? null
-                : new Dictionary<string, string> { { "subjectId", subjectId } };
-            // Apply the subject's default retrieval facet filter merged with any per-request filter so the
-            // agentic search tool narrows the same way the grounded path does.
-            RetrievalFilter? effectiveFilter = await _Query.ResolveEffectiveFilterAsync(tenantId, subjectId, requestFilter, token).ConfigureAwait(false);
-            List<RetrievalTagCondition> requiredList = effectiveFilter != null ? effectiveFilter.EffectiveRequired() : new List<RetrievalTagCondition>();
-            List<RetrievalTagCondition> excludedList = effectiveFilter != null ? effectiveFilter.EffectiveExcluded() : new List<RetrievalTagCondition>();
-            IReadOnlyList<RetrievalTagCondition>? requiredFacets = requiredList.Count > 0 ? requiredList : null;
-            IReadOnlyList<RetrievalTagCondition>? excludedFacets = excludedList.Count > 0 ? excludedList : null;
-            List<SearchHit> hits = await _Search.SearchAsync(tenantId, collectionId, query, max, tagFilter, requiredFacets, excludedFacets, token).ConfigureAwait(false);
+            // The same retrieval the REST search routes and grounded answers use: hybrid by default, over the
+            // subject's own collection and embedding model, with the subject's default facet filter merged with
+            // any per-request filter. (This tool previously ran the full-text channel alone, against the tenant's
+            // default collection, so the Ask screen had no semantic retrieval.)
+            RetrievalModeEnum mode = ParseMode(McpJsonRpc.GetStringArgument(arguments, "mode"));
+            List<RetrievedChunk> hits = await _Query.SearchAsync(tenantId, query, max, subjectId, mode, requestFilter, null, token, true).ConfigureAwait(false);
 
             // Optional reranking: when the subject has a reranking model configured, reorder the hits by
             // relevance to the query (by snippet) before they are surfaced to the assistant.
-            hits = await _Query.RerankAsync(tenantId, subjectId, query, hits, h => h.Snippet ?? String.Empty, token).ConfigureAwait(false);
+            hits = await _Query.RerankAsync(tenantId, subjectId, query, hits, h => h.Snippet ?? h.Node.Content ?? String.Empty, token).ConfigureAwait(false);
 
-            IGraphRepository graph = await _GraphFactory.ForTenantAsync(tenantId, token).ConfigureAwait(false);
-            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (SearchHit hit in hits)
+            foreach (RetrievedChunk hit in hits)
             {
-                if (!hit.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || String.IsNullOrEmpty(nodeId)) continue;
-                if (!seen.Add(nodeId)) continue;
-                if (citedLinkScores != null && hit.Tags.TryGetValue("linkId", out string? linkId) && !String.IsNullOrEmpty(linkId))
+                if (String.IsNullOrEmpty(hit.NodeId)) continue;
+                if (citedLinkScores != null && !String.IsNullOrEmpty(hit.LinkId))
                 {
-                    if (!citedLinkScores.TryGetValue(linkId, out double existing) || hit.Score > existing) citedLinkScores[linkId] = hit.Score;
+                    if (!citedLinkScores.TryGetValue(hit.LinkId!, out double existing) || hit.FusedScore > existing) citedLinkScores[hit.LinkId!] = hit.FusedScore;
                 }
-                GraphNode? node = await graph.ReadNodeAsync(nodeId, token).ConfigureAwait(false);
                 // RecallDB is the content authority; surface its chunk text as the snippet (falling back to any
                 // graph-node content) so the assistant can answer directly from search results.
-                string? snippet = !String.IsNullOrWhiteSpace(hit.Snippet) ? hit.Snippet : node?.Content;
-                string name = !String.IsNullOrWhiteSpace(node?.Name) ? node!.Name! : (nodeId);
-                string nodeType = node?.NodeType ?? String.Empty;
-                results.Add(new { id = nodeId, name, nodeType, score = hit.Score, snippet = Truncate(snippet, 1200) });
+                string? snippet = !String.IsNullOrWhiteSpace(hit.Snippet) ? hit.Snippet : hit.Node.Content;
+                string name = !String.IsNullOrWhiteSpace(hit.Node.Name) ? hit.Node.Name! : hit.NodeId;
+                string nodeType = hit.Node.NodeType ?? String.Empty;
+                results.Add(new { id = hit.NodeId, name, nodeType, score = hit.FusedScore, snippet = Truncate(snippet, 1200) });
                 if (results.Count >= max) break;
             }
 
-            return new { query, count = results.Count, results };
+            return new { query, mode = mode.ToString(), count = results.Count, results };
+        }
+
+        /// <summary>Parse the optional search mode argument (text, vector, or hybrid; hybrid by default).</summary>
+        private static RetrievalModeEnum ParseMode(string? raw)
+        {
+            switch ((raw ?? String.Empty).Trim().ToLowerInvariant())
+            {
+                case "text":
+                case "fulltext":
+                case "full-text":
+                case "keyword":
+                case "lexical":
+                    return RetrievalModeEnum.FullText;
+                case "vector":
+                case "semantic":
+                    return RetrievalModeEnum.Vector;
+                default:
+                    return RetrievalModeEnum.Hybrid;
+            }
         }
 
         /// <summary>Fetch a single full graph node by id.</summary>

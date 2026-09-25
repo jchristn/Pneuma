@@ -21,6 +21,11 @@ namespace Pneuma.Core.Integrations
         // OWN HttpClient. PolyPrompt applies the endpoint's API key as an Authorization header on the client's
         // DefaultRequestHeaders; a single shared HttpClient would accumulate one key per endpoint and throw
         // "Authorization does not support multiple values" as soon as a second keyed endpoint was used.
+        // PolyPrompt enforces its own per-request timeout (TimeoutMs, 120 s by default). Calls are meant to be bounded
+        // by the caller's cancellation token instead, so the client timeout is set to at least the default stage
+        // timeout; an endpoint configured with a longer MaximumTimeoutMs keeps its longer value.
+        private const int _MinimumCallTimeoutMs = 30 * 60 * 1000;
+
         private static readonly SocketsHttpHandler _Handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
@@ -105,11 +110,14 @@ namespace Pneuma.Core.Integrations
             if (!String.IsNullOrEmpty(runner.DefaultModel)) client.Model = runner.DefaultModel;
             else if (!String.IsNullOrEmpty(runner.DefaultEmbeddingModel)) client.Model = runner.DefaultEmbeddingModel;
 
-            // NOTE: we intentionally do NOT cap the per-call timeout at the endpoint's MaximumTimeoutMs. That
-            // default (60s) is far too short for slow local completion models (e.g. classifying a large document
-            // through a 4B model), and capping here canceled those calls mid-flight. Ingestion calls are already
-            // bounded by the per-stage timeout (StageTimeoutSeconds, whose cancellation token is passed to the
-            // call); query calls are bounded by the request lifecycle.
+            // Without this, PolyPrompt's 120 s default cancels slow local completions (a 4B model classifying a
+            // document under load), and the cancellation surfaced as a misleading "stage timed out after 1800 s".
+            client.TimeoutMs = Math.Max(runner.MaximumTimeoutMs, _MinimumCallTimeoutMs);
+
+            // NOTE: the per-call timeout is intentionally NOT capped at the endpoint's MaximumTimeoutMs (60 s by
+            // default), which is far too short for slow local completion models. Ingestion calls are bounded by the
+            // per-stage timeout (StageTimeoutSeconds, whose cancellation token is passed to the call); query calls
+            // are bounded by the request lifecycle.
             return client;
         }
 

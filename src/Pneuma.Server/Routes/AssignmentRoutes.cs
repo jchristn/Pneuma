@@ -83,7 +83,7 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
                 return;
             }
-            string? userId = ctx.Request.Query.Elements?["userId"];
+            string? userId = RouteHelper.Query(ctx, "userId");
             if (String.IsNullOrWhiteSpace(userId))
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Query parameter 'userId' is required.").ConfigureAwait(false);

@@ -93,7 +93,7 @@ namespace Pneuma.Server.Routes
         private static string? Q(System.Collections.Specialized.NameValueCollection? q, string key)
         {
             string? value = q?[key];
-            return String.IsNullOrEmpty(value) ? null : value;
+            return String.IsNullOrEmpty(value) ? null : System.Net.WebUtility.UrlDecode(value);
         }
 
         private static DateTime? ParseUtc(string? value)
@@ -113,7 +113,7 @@ namespace Pneuma.Server.Routes
             string tenantId = rc.TenantId ?? String.Empty;
 
             IngestionStatusEnum? status = null;
-            string? statusText = ctx.Request.Query.Elements?["status"];
+            string? statusText = RouteHelper.Query(ctx, "status");
             if (!String.IsNullOrEmpty(statusText) && Enum.TryParse<IngestionStatusEnum>(statusText, true, out IngestionStatusEnum parsed))
             {
                 status = parsed;
@@ -122,7 +122,7 @@ namespace Pneuma.Server.Routes
             List<IngestionJob> jobs = await _Db.IngestionJobs.EnumerateAsync(tenantId, status, ctx.Token).ConfigureAwait(false);
 
             // Optional subject filter, applied before pagination so the counts reflect the filtered set.
-            string? subjectFilter = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectFilter = RouteHelper.Query(ctx, "subjectId");
             if (!String.IsNullOrEmpty(subjectFilter))
             {
                 List<IngestionJob> filtered = new List<IngestionJob>();
@@ -142,7 +142,7 @@ namespace Pneuma.Server.Routes
             RequestContext rc = RouteHelper.Context(ctx);
             if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
             string tenantId = rc.TenantId ?? String.Empty;
-            string? subjectFilter = ctx.Request.Query.Elements?["subjectId"];
+            string? subjectFilter = RouteHelper.Query(ctx, "subjectId");
 
             IngestionLiveSnapshot snapshot = new IngestionLiveSnapshot();
 

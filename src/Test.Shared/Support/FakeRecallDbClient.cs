@@ -163,7 +163,16 @@ namespace Test.Shared.Support
                     double score = Cosine(embedding, doc.Embedding);
                     if (score < minimumScore) continue;
                     if (!doc.Tags.TryGetValue("litegraphNodeId", out string? nodeId) || string.IsNullOrEmpty(nodeId)) continue;
-                    hits.Add(new VectorSearchHit { NodeId = nodeId, Score = score, Content = doc.Content, Position = doc.Position });
+                    hits.Add(new VectorSearchHit
+                    {
+                        NodeId = nodeId,
+                        Score = score,
+                        Content = doc.Content,
+                        Position = doc.Position,
+                        DocumentKey = doc.DocumentKey,
+                        LinkId = doc.Tags.TryGetValue("linkId", out string? linkId) ? linkId : null,
+                        ChunkKind = doc.Tags.TryGetValue("chunkKind", out string? kind) ? kind : null
+                    });
                 }
             }
             return Task.FromResult(hits.OrderByDescending(h => h.Score).Take(Math.Max(1, topK)).ToList());
@@ -196,7 +205,9 @@ namespace Test.Shared.Support
                     hits.Add(new SearchHit
                     {
                         DocumentId = doc.DocumentKey,
-                        Score = 1.0,
+                        // TsRank-like magnitude: real full-text scores sit far below cosine similarities, which
+                        // is what makes mixing the two raw scores wrong.
+                        Score = 0.1,
                         Position = doc.Position,
                         Snippet = doc.Content,
                         Tags = new Dictionary<string, string>(doc.Tags, StringComparer.Ordinal)

@@ -130,7 +130,17 @@ namespace Pneuma.Core.Ingestion.Pipeline
                         {
                             stageCts.CancelAfter(TimeSpan.FromSeconds(_Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId)));
                             context.Message = String.Empty;
-                            await stage.ExecuteAsync(context, stageCts.Token).ConfigureAwait(false);
+                            try
+                            {
+                                await stage.ExecuteAsync(context, stageCts.Token).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException e) when (!stageCts.IsCancellationRequested && !token.IsCancellationRequested)
+                            {
+                                // Neither the stage deadline nor the job was cancelled, so this came from inside the
+                                // stage: typically an HTTP client giving up on a slow model endpoint (its maximum
+                                // request timeout). Report that, rather than letting it read as a stage timeout.
+                                throw new TimeoutException("A request made during the " + stage.Stage + " stage timed out before the stage deadline (check the model endpoint's maximum request timeout): " + e.Message, e);
+                            }
                             sw.Stop();
                             PneumaMetrics.RecordIngestionStage(stage.Stage.ToString(), "ok", sw.Elapsed.TotalSeconds);
                             span?.SetOk(null);
