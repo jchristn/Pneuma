@@ -10,6 +10,7 @@ namespace Pneuma.Sdk
     using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Sdk.Enums;
     using Pneuma.Sdk.Models;
     using Pneuma.Sdk.Requests;
     using Pneuma.Sdk.Responses;
@@ -647,6 +648,34 @@ namespace Pneuma.Sdk
             return SendAsync<SubjectLink>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/links", request, token);
         }
 
+        /// <summary>
+        /// Push content (text, Markdown, HTML, or JSON) into a subject; it is stored and ingested like a link. Reusing an
+        /// external key replaces earlier content with that key.
+        /// </summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="request">The content.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result: the link, the queued job id, and whether earlier content was replaced.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        /// <exception cref="PneumaException">Thrown with 400 for invalid content, 404 for an unknown subject, or 413 when too large.</exception>
+        public Task<ContentSubmitResult> SubmitContentAsync(string subjectId, SubmitContentRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<ContentSubmitResult>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/content", request, token);
+        }
+
+        /// <summary>Push up to 100 content items in one call; every item is attempted and reported.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="request">The items.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Counts and a result per item.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<ContentBatchResponse> SubmitContentBatchAsync(string subjectId, SubmitContentBatchRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<ContentBatchResponse>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/content/batch", request, token);
+        }
+
         /// <summary>Submit multiple content links for a subject in a single call; enqueues one ingestion job per URL.</summary>
         /// <param name="subjectId">Subject identifier.</param>
         /// <param name="request">Bulk link submission request.</param>
@@ -704,6 +733,38 @@ namespace Pneuma.Sdk
         public Task DeleteLinkAsync(string id, CancellationToken token = default)
         {
             return SendCoreAsync(HttpMethod.Delete, "/v1.0/links/" + Escape(id), null, token);
+        }
+
+        /// <summary>Set a link's scheduled refresh: an interval (0 off, 60 to 525600 minutes) or the subject's default.</summary>
+        /// <param name="id">Link identifier.</param>
+        /// <param name="request">The interval, or <see cref="LinkRefreshRequest.UseSubjectDefault"/>.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated link.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<SubjectLink> SetLinkRefreshAsync(string id, LinkRefreshRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<SubjectLink>(HttpMethod.Put, "/v1.0/links/" + Escape(id), request, token);
+        }
+
+        /// <summary>Set the scheduled refresh of several links (<see cref="LinkRefreshRequest.Ids"/>).</summary>
+        /// <param name="request">Link ids and the interval, or <see cref="LinkRefreshRequest.UseSubjectDefault"/>.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>How many links were updated and which were skipped.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<LinkRefreshBulkResult> BulkSetLinkRefreshAsync(LinkRefreshRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<LinkRefreshBulkResult>(HttpMethod.Post, "/v1.0/links/refresh-interval", request, token);
+        }
+
+        /// <summary>Check a link for changes now (a conditional GET); a changed link is re-ingested.</summary>
+        /// <param name="id">Link identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>What the check found.</returns>
+        public Task<LinkRefreshResult> RefreshLinkNowAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<LinkRefreshResult>(HttpMethod.Post, "/v1.0/links/" + Escape(id) + "/refresh", null, token);
         }
 
         /// <summary>Get a link's per-step ingestion log (one entry per ingestion run, each with its events).</summary>
@@ -765,14 +826,17 @@ namespace Pneuma.Sdk
             return SendBytesCoreAsync(HttpMethod.Get, "/v1.0/links/" + Escape(id) + "/source", token);
         }
 
-        /// <summary>List ingestion jobs, optionally filtered by status.</summary>
+        /// <summary>List ingestion jobs, optionally filtered by status, failure category, and whether they have warnings.</summary>
         /// <param name="query">Optional paging and filtering options.</param>
         /// <param name="status">Optional status filter (for example "Queued", "Failed").</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="failureCategory">Optional failure-category filter (for example Fetch or ModelUnavailable).</param>
+        /// <param name="hasWarnings">Optional filter: true for jobs with warnings, false for jobs without.</param>
         /// <returns>Paginated result of jobs.</returns>
-        public Task<EnumerationResult<IngestionJob>> ListJobsAsync(EnumerationQuery? query = null, string? status = null, CancellationToken token = default)
+        public Task<EnumerationResult<IngestionJob>> ListJobsAsync(EnumerationQuery? query = null, string? status = null, CancellationToken token = default, IngestionFailureCategoryEnum? failureCategory = null, bool? hasWarnings = null)
         {
-            List<(string, string?)> pairs = new List<(string, string?)> { ("status", status) };
+            string? warningsText = hasWarnings == null ? null : (hasWarnings.Value ? "true" : "false");
+            List<(string, string?)> pairs = new List<(string, string?)> { ("status", status), ("failureCategory", failureCategory?.ToString()), ("hasWarnings", warningsText) };
             AddEnumPairs(pairs, query);
             string path = "/v1.0/jobs" + QueryString(pairs.ToArray());
             return SendAsync<EnumerationResult<IngestionJob>>(HttpMethod.Get, path, null, token);
@@ -812,6 +876,185 @@ namespace Pneuma.Sdk
         public Task<IngestionJobDetail> GetJobLogAsync(string id, CancellationToken token = default)
         {
             return SendAsync<IngestionJobDetail>(HttpMethod.Get, "/v1.0/jobs/" + Escape(id) + "/log", null, token);
+        }
+
+        #endregion
+
+        #region Public-Methods-Crawling
+
+        /// <summary>List the crawl plan types this server supports, each with its settings schema.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The type catalog.</returns>
+        public Task<List<CrawlPlanTypeInfo>> ListCrawlPlanTypesAsync(CancellationToken token = default)
+        {
+            return SendAsync<List<CrawlPlanTypeInfo>>(HttpMethod.Get, "/v1.0/crawl-plan-types", null, token);
+        }
+
+        /// <summary>Create a crawl plan that keeps a subject in sync with a source.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="request">The plan.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The created plan (secret values are never returned).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<CrawlPlan> CreateCrawlPlanAsync(string subjectId, CrawlPlanRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<CrawlPlan>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/crawl-plans", request, token);
+        }
+
+        /// <summary>List crawl plans, optionally for one subject.</summary>
+        /// <param name="subjectId">Subject identifier, or null for all.</param>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of plans.</returns>
+        public Task<EnumerationResult<CrawlPlan>> ListCrawlPlansAsync(string? subjectId = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            string path = "/v1.0/crawl-plans" + (query?.ToQueryString() ?? string.Empty);
+            path = AppendQuery(path, "subjectId", subjectId);
+            return SendAsync<EnumerationResult<CrawlPlan>>(HttpMethod.Get, path, null, token);
+        }
+
+        /// <summary>Get a crawl plan.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The plan.</returns>
+        public Task<CrawlPlan> GetCrawlPlanAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<CrawlPlan>(HttpMethod.Get, "/v1.0/crawl-plans/" + Escape(id), null, token);
+        }
+
+        /// <summary>Replace a crawl plan's configuration. Secrets left null keep their stored values.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="request">The configuration.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated plan.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<CrawlPlan> UpdateCrawlPlanAsync(string id, CrawlPlanRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<CrawlPlan>(HttpMethod.Put, "/v1.0/crawl-plans/" + Escape(id), request, token);
+        }
+
+        /// <summary>Delete a crawl plan.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="deleteLinks">True to also delete the links the plan created.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>How many links were deleted or kept.</returns>
+        public Task<CrawlPlanDeleteResult> DeleteCrawlPlanAsync(string id, bool deleteLinks = false, CancellationToken token = default)
+        {
+            return SendAsync<CrawlPlanDeleteResult>(HttpMethod.Delete, "/v1.0/crawl-plans/" + Escape(id) + (deleteLinks ? "?deleteLinks=true" : string.Empty), null, token);
+        }
+
+        /// <summary>Test a draft crawl plan's connection without saving it.</summary>
+        /// <param name="request">The draft plan.</param>
+        /// <param name="fromPlanId">A stored plan whose secrets fill the draft's empty ones, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Each connectivity step.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<ConnectivityResult> TestCrawlPlanDraftAsync(CrawlPlanRequest request, string? fromPlanId = null, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<ConnectivityResult>(HttpMethod.Post, AppendQuery("/v1.0/crawl-plans/test", "fromPlanId", fromPlanId), request, token);
+        }
+
+        /// <summary>Test a stored crawl plan's connection.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Each connectivity step.</returns>
+        public Task<ConnectivityResult> TestCrawlPlanAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<ConnectivityResult>(HttpMethod.Post, "/v1.0/crawl-plans/" + Escape(id) + "/test", null, token);
+        }
+
+        /// <summary>Preview what a crawl plan would do if it ran now; nothing is changed.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The preview.</returns>
+        public Task<CrawlPreview> PreviewCrawlPlanAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<CrawlPreview>(HttpMethod.Post, "/v1.0/crawl-plans/" + Escape(id) + "/preview", null, token);
+        }
+
+        /// <summary>Start a crawl operation now (it runs in the background).</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The started operation.</returns>
+        public Task<CrawlOperation> StartCrawlPlanAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<CrawlOperation>(HttpMethod.Post, "/v1.0/crawl-plans/" + Escape(id) + "/start", null, token);
+        }
+
+        /// <summary>Stop a crawl plan's running operation.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        public Task StopCrawlPlanAsync(string id, CancellationToken token = default)
+        {
+            return SendCoreAsync(HttpMethod.Post, "/v1.0/crawl-plans/" + Escape(id) + "/stop", null, token);
+        }
+
+        /// <summary>List a crawl plan's operations, newest first.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of operations.</returns>
+        public Task<EnumerationResult<CrawlOperation>> ListCrawlPlanOperationsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<CrawlOperation>>(HttpMethod.Get, "/v1.0/crawl-plans/" + Escape(id) + "/operations" + (query?.ToQueryString() ?? string.Empty), null, token);
+        }
+
+        /// <summary>List the objects a crawl plan tracks.</summary>
+        /// <param name="id">Crawl plan identifier.</param>
+        /// <param name="status">Only objects with this status, or null.</param>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of objects.</returns>
+        public Task<EnumerationResult<CrawlObject>> ListCrawlPlanObjectsAsync(string id, CrawlObjectStatusEnum? status = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            string path = AppendQuery("/v1.0/crawl-plans/" + Escape(id) + "/objects" + (query?.ToQueryString() ?? string.Empty), "status", status?.ToString());
+            return SendAsync<EnumerationResult<CrawlObject>>(HttpMethod.Get, path, null, token);
+        }
+
+        /// <summary>List crawl operations, optionally for one plan.</summary>
+        /// <param name="planId">Plan identifier, or null for all.</param>
+        /// <param name="status">Only operations with this status, or null.</param>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of operations.</returns>
+        public Task<EnumerationResult<CrawlOperation>> ListCrawlOperationsAsync(string? planId = null, CrawlOperationStatusEnum? status = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            string path = AppendQuery("/v1.0/crawl-operations" + (query?.ToQueryString() ?? string.Empty), "planId", planId);
+            path = AppendQuery(path, "status", status?.ToString());
+            return SendAsync<EnumerationResult<CrawlOperation>>(HttpMethod.Get, path, null, token);
+        }
+
+        /// <summary>Get a crawl operation.</summary>
+        /// <param name="id">Crawl operation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The operation.</returns>
+        public Task<CrawlOperation> GetCrawlOperationAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<CrawlOperation>(HttpMethod.Get, "/v1.0/crawl-operations/" + Escape(id), null, token);
+        }
+
+        /// <summary>List what a crawl operation did with each object.</summary>
+        /// <param name="id">Crawl operation identifier.</param>
+        /// <param name="action">Only objects with this action, or null.</param>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of per-object results.</returns>
+        public Task<EnumerationResult<CrawlOperationObject>> ListCrawlOperationObjectsAsync(string id, CrawlActionEnum? action = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            string path = AppendQuery("/v1.0/crawl-operations/" + Escape(id) + "/objects" + (query?.ToQueryString() ?? string.Empty), "action", action?.ToString());
+            return SendAsync<EnumerationResult<CrawlOperationObject>>(HttpMethod.Get, path, null, token);
+        }
+
+        /// <summary>Confirm the deletions a held crawl operation is waiting on.</summary>
+        /// <param name="id">Crawl operation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The operation after the deletions ran.</returns>
+        public Task<CrawlOperation> ConfirmCrawlDeletionsAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<CrawlOperation>(HttpMethod.Post, "/v1.0/crawl-operations/" + Escape(id) + "/confirm-deletions", null, token);
         }
 
         #endregion
@@ -1110,6 +1353,12 @@ namespace Pneuma.Sdk
             string normalized = baseUrl.Trim();
             normalized = normalized.Replace("localhost", "127.0.0.1", StringComparison.OrdinalIgnoreCase);
             return normalized.TrimEnd('/');
+        }
+
+        private static string AppendQuery(string path, string name, string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return path;
+            return path + (path.Contains("?") ? "&" : "?") + name + "=" + Uri.EscapeDataString(value);
         }
 
         private static string Escape(string value)

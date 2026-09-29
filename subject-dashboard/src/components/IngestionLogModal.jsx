@@ -6,6 +6,7 @@ import { formatDateTime, formatDurationMs } from '../utils/format';
 import Modal from './Modal';
 import StatusPill from './StatusPill';
 import CopyableId from './CopyableId';
+import JobDiagnostics from './JobDiagnostics';
 import { stageLabel } from '../utils/ingestionActivity';
 import './IngestionLog.css';
 
@@ -61,7 +62,7 @@ function StepTimeline({ events }) {
   );
 }
 
-function IngestionRun({ run, index, total }) {
+function IngestionRun({ run, index, total, currentJobId }) {
   const { t } = useTranslation();
   const job = run.job || {};
   const events = Array.isArray(run.events) ? run.events : [];
@@ -71,6 +72,12 @@ function IngestionRun({ run, index, total }) {
     <div className="ilog-run">
       <div className="ilog-run-header">
         <span className="ilog-run-title">{runLabel}</span>
+        {currentJobId && job.id === currentJobId && (
+          <span title={t('ingestionLog.currentVersionTip')}><span className="status-pill pill-success">{t('ingestionLog.currentVersion')}</span></span>
+        )}
+        {currentJobId && job.id !== currentJobId && String(job.status || '').toLowerCase() === 'completed' && (
+          <span title={t('ingestionLog.supersededTip')}><span className="status-pill pill-neutral">{t('ingestionLog.superseded')}</span></span>
+        )}
         {job.documentType && <span className="ilog-doctype">{job.documentType}</span>}
         <StatusPill status={job.status} />
         <span className="ilog-run-times">
@@ -79,6 +86,7 @@ function IngestionRun({ run, index, total }) {
         </span>
       </div>
       {job.error && <div className="ilog-error">{job.error}</div>}
+      <JobDiagnostics job={job} attempts={run.attempts} />
       {events.length > 0
         ? <StepTimeline events={events} />
         : <div className="ilog-empty">{t('ingestionLog.emptyQueued')}</div>}
@@ -141,7 +149,7 @@ function IngestionLogModal({ isOpen, link, onClose }) {
             <div className="ilog-empty">{t('ingestionLog.emptyNoRuns')}</div>
           ) : (
             runs.map((run, idx) => (
-              <IngestionRun key={idx} run={run} index={idx} total={runs.length} />
+              <IngestionRun key={idx} run={run} index={idx} total={runs.length} currentJobId={link.currentJobId} />
             ))
           )}
           <div className="ilog-actions">

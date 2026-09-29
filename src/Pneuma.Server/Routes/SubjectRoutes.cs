@@ -5,18 +5,19 @@ namespace Pneuma.Server.Routes
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
-    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Helpers;
-    using Pneuma.Core.Responses;
-    using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Ingestion.Refresh;
+    using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Requests;
+    using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -125,6 +126,12 @@ namespace Pneuma.Server.Routes
             if (subject == null || String.IsNullOrWhiteSpace(subject.DisplayName))
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Subject display name is required.").ConfigureAwait(false);
+                return;
+            }
+            string? createRefreshProblem = LinkRefreshSchedule.Validate(subject.DefaultRefreshIntervalMinutes, "defaultRefreshIntervalMinutes");
+            if (createRefreshProblem != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", createRefreshProblem).ConfigureAwait(false);
                 return;
             }
             subject.TenantId = rc.TenantId;
@@ -246,11 +253,20 @@ namespace Pneuma.Server.Routes
             existing.ChunkStrategy = update.ChunkStrategy;
             existing.ChunkMaxTokens = update.ChunkMaxTokens;
             existing.ChunkOverlapTokens = update.ChunkOverlapTokens;
+            existing.ChunkHeaders = update.ChunkHeaders;
             existing.RerankingPrompt = update.RerankingPrompt;
             existing.PromptRewritePrompt = update.PromptRewritePrompt;
             existing.RetrievalFilterJson = update.RetrievalFilterJson;
             existing.ConcurrencyOverridesJson = update.ConcurrencyOverridesJson;
             existing.HistoryRetentionDays = update.HistoryRetentionDays;
+            string? refreshProblem = LinkRefreshSchedule.Validate(update.DefaultRefreshIntervalMinutes, "defaultRefreshIntervalMinutes");
+            if (refreshProblem != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", refreshProblem).ConfigureAwait(false);
+                return;
+            }
+            bool refreshChanged = existing.DefaultRefreshIntervalMinutes != update.DefaultRefreshIntervalMinutes;
+            existing.DefaultRefreshIntervalMinutes = update.DefaultRefreshIntervalMinutes;
 
             // A changed slug must stay unique within the tenant; an explicit clash with another subject is a conflict.
             if (!String.IsNullOrWhiteSpace(update.UrlSlug))
@@ -269,6 +285,11 @@ namespace Pneuma.Server.Routes
             }
 
             Subject saved = await _Db.Subjects.UpdateAsync(existing, ctx.Token).ConfigureAwait(false);
+            if (refreshChanged)
+            {
+                // Links that follow the subject's default start their new schedule now (or stop, when turned off).
+                await _Db.SubjectLinks.SetInheritedNextRefreshAsync(saved.TenantId, saved.Id, LinkRefreshSchedule.Next(DateTime.UtcNow, saved.DefaultRefreshIntervalMinutes), ctx.Token).ConfigureAwait(false);
+            }
             ApplyConcurrencyOverrides(saved);
             await RouteHelper.SendJsonAsync(ctx, 200, saved).ConfigureAwait(false);
         }

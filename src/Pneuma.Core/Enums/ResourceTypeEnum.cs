@@ -43,6 +43,10 @@ namespace Pneuma.Core.Enums
         /// <summary>Search index resource.</summary>
         SearchIndex,
         /// <summary>Provenance source resource.</summary>
-        Source
+        Source,
+        /// <summary>Crawl plan resource (a scheduled source a subject is kept in sync with).</summary>
+        CrawlPlan,
+        /// <summary>Crawl operation resource (one run of a crawl plan).</summary>
+        CrawlOperation
     }
 }

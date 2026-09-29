@@ -14,6 +14,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Ingestion.Stages;
     using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Security;
@@ -31,6 +32,16 @@ namespace Pneuma.Core.Ingestion.Pipeline
     /// </summary>
     public class IngestionProcessor
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Retrieves each job's content by its link's source kind. Set its <c>CrawlSource</c> so links crawl plans
+        /// create can be ingested.
+        /// </summary>
+        public ContentResolver Resolver { get; }
+
+        #endregion
+
         #region Private-Members
 
         private readonly DatabaseDriverBase _Db;
@@ -44,6 +55,8 @@ namespace Pneuma.Core.Ingestion.Pipeline
         private readonly int _MaxAttempts;
         private readonly int _RetryBackoffBaseMs;
         private readonly int _RetryBackoffMaxMs;
+        private readonly PartialLossPolicyEnum _PartialLossPolicy;
+        private readonly VersionRetirementService _Retirement;
 
         #endregion
 
@@ -87,12 +100,15 @@ namespace Pneuma.Core.Ingestion.Pipeline
             _MaxAttempts = settings.MaxAttempts;
             _RetryBackoffBaseMs = settings.RetryBackoffBaseMs;
             _RetryBackoffMaxMs = settings.RetryBackoffMaxMs;
+            _PartialLossPolicy = settings.PartialLossPolicy;
 
             _Journal = new IngestionJournal(db, logging);
             // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
             EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
             StageDependencies deps = new StageDependencies(db, processor, cipher, graphFactory, vectors, artifacts, fetcher, documentAtom, blobs, _Journal, embeddingCache, concurrency, logging);
+            Resolver = deps.Resolver;
             _Runner = new StageRunner(db, _Journal, concurrency, telemetry);
+            _Retirement = new VersionRetirementService(db, graphFactory, vectors, logging);
 
             _CategorizationStages = new List<IStage>
             {
@@ -138,31 +154,48 @@ namespace Pneuma.Core.Ingestion.Pipeline
                 await _Journal.RecordEventAsync(job, IngestionStageEnum.Pending, IngestionStatusEnum.Processing,
                     "Ingestion started for " + job.SourceUrl + ".", 0, token).ConfigureAwait(false);
 
-                // Each claim gets up to MaxAttempts inline attempts: a transient failure (a stage timeout or an
-                // exception from a subordinate service) is retried after an exponential backoff. Deterministic hard
-                // fails (unknown type, no cells, no endpoint, no collection) throw IngestionHardFailException and are
-                // never retried; unchanged content completes early; an operator "Stop" and server shutdown are
-                // handled distinctly and never retried.
+                // Each claim gets up to MaxAttempts inline attempts. Every failure is classified (see
+                // IngestionFailureClassifier): retryable categories back off and try again, deterministic ones (an
+                // unsupported type, missing configuration, a blocked URL) fail at once. Unchanged content completes
+                // early; an operator "Stop" and server shutdown are handled distinctly and never retried. Every attempt
+                // is recorded so the job's history shows each failure, not only the last.
                 int attempt = 0;
                 while (true)
                 {
                     attempt++;
+                    DateTime attemptStartedUtc = DateTime.UtcNow;
 
-                    // A fresh attempt records its own stage events, so clear any in-place failure marker left by
-                    // a contended stage on the previous attempt.
+                    // A fresh attempt records its own stage events and re-runs every stage, so clear any in-place
+                    // failure marker, warnings, and counts left by the previous attempt.
                     job.StageFailureRecorded = false;
+                    job.Warnings = new List<string>();
+                    job.Completeness = new IngestionCompleteness();
+
+                    // A retry re-runs every stage, so first remove what the failed attempt already wrote (its chunks
+                    // and its Source and Cell nodes); otherwise each retry would add another copy.
+                    if (attempt > 1)
+                    {
+                        RetirementResult cleared = await _Retirement.RemoveJobOutputAsync(job, token).ConfigureAwait(false);
+                        if (cleared.Errors.Count > 0)
+                        {
+                            _Logging.Warn("[IngestionProcessor] job " + job.Id + " could not fully clear its previous attempt: " + String.Join("; ", cleared.Errors));
+                        }
+                    }
 
                     try
                     {
                         StageContext context = new StageContext(job);
 
-                        // Phase 1 — Categorization: fetch, atomize, and classify into a candidate plan. Returns false
+                        // Phase 1: Categorization. Fetch, atomize, and classify into a candidate plan. Returns false
                         // when the job was already completed early (unchanged content).
                         bool proceed = await RunCategorizationAsync(context, jobSpan, token).ConfigureAwait(false);
-                        if (!proceed) return;
+                        if (proceed)
+                        {
+                            // Phase 2: Hydration. Commit the (auto-approved) candidate plan to the graph and index.
+                            await RunHydrationAsync(context, token).ConfigureAwait(false);
+                        }
 
-                        // Phase 2 — Hydration: commit the (auto-approved) candidate plan to the graph and index.
-                        await RunHydrationAsync(context, token).ConfigureAwait(false);
+                        await _Journal.RecordAttemptAsync(job, attempt, true, job.Stage, null, null, attemptStartedUtc, token).ConfigureAwait(false);
                         jobSpan?.SetOk(null);
                         return;
                     }
@@ -172,42 +205,43 @@ namespace Pneuma.Core.Ingestion.Pipeline
                         _Logging.Info("[IngestionProcessor] job " + job.Id + " cancelled by operator.");
                         PneumaMetrics.RecordIngestionJob("cancelled");
                         jobSpan?.SetError("Cancelled by operator.");
+                        await _Journal.RecordAttemptAsync(job, attempt, false, job.Stage, IngestionFailureCategoryEnum.Cancelled, "Cancelled by operator.", attemptStartedUtc, token).ConfigureAwait(false);
                         await _Journal.RecordEventAsync(job, job.Stage, IngestionStatusEnum.Cancelled, "Ingestion stopped by operator.", 0, token).ConfigureAwait(false);
-                        await _Journal.UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, "Cancelled by operator.", token).ConfigureAwait(false);
+                        await _Journal.UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, "Cancelled by operator.", token, null, IngestionFailureCategoryEnum.Cancelled, 0).ConfigureAwait(false);
                         return;
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
-                        // Server shutdown — let the worker observe cancellation without marking the job failed.
+                        // Server shutdown: let the worker observe cancellation without marking the job failed.
                         throw;
-                    }
-                    catch (IngestionHardFailException e)
-                    {
-                        // Deterministic failure — re-running would fail identically, so fail now without retrying.
-                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed (non-retryable) at " + e.Stage + ": " + e.Message);
-                        jobSpan?.SetError(e.Message);
-                        await _Journal.FailAsync(job, e.Stage, e.Message, token).ConfigureAwait(false);
-                        return;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // A per-stage timeout is treated as transient and retried.
-                        string message = "Stage '" + job.Stage + "' timed out after " + _Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId) + " seconds.";
-                        if (await TryScheduleRetryAsync(job, attempt, message, token).ConfigureAwait(false)) continue;
-                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " " + message);
-                        jobSpan?.SetError(message);
-                        await _Journal.FailAsync(job, job.Stage, message, token).ConfigureAwait(false);
-                        return;
                     }
                     catch (Exception e)
                     {
                         // Server shutdown surfacing as a generic exception must not mark the job failed.
                         if (token.IsCancellationRequested) throw;
-                        if (await TryScheduleRetryAsync(job, attempt, e.Message, token).ConfigureAwait(false)) continue;
-                        _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed: " + e.Message);
+
+                        IngestionFailureClassification classification = IngestionFailureClassifier.Classify(e, job.Stage);
+                        string message = e is OperationCanceledException
+                            ? "Stage '" + job.Stage + "' timed out after " + _Concurrency.EffectiveStageTimeoutSeconds(job.SubjectId) + " seconds."
+                            : e.Message;
+
+                        await _Journal.RecordAttemptAsync(job, attempt, false, job.Stage, classification.Category, message, attemptStartedUtc, token).ConfigureAwait(false);
+
+                        if (classification.Retryable && await TryScheduleRetryAsync(job, attempt, message, classification.BackoffMultiplier, token).ConfigureAwait(false)) continue;
+
+                        if (classification.Retryable)
+                        {
+                            _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed (" + classification.Category + ") after " + attempt + " attempt(s): " + message);
+                        }
+                        else
+                        {
+                            _Logging.Warn("[IngestionProcessor] job " + job.Id + " failed (" + classification.Category + ", not retryable) at " + job.Stage + ": " + message);
+                        }
+
                         jobSpan?.RecordException(e, true);
-                        jobSpan?.SetError(e.Message);
-                        await _Journal.FailAsync(job, job.Stage, e.Message, token).ConfigureAwait(false);
+                        jobSpan?.SetError(message);
+                        IngestionStageEnum failedStage = e is IngestionHardFailException hard ? hard.Stage : job.Stage;
+                        await _Journal.FailAsync(job, failedStage, message, token, classification.Category).ConfigureAwait(false);
                         return;
                     }
                 }
@@ -245,7 +279,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
                             await _Journal.RecordEventAsync(job, IngestionStageEnum.Categorization, IngestionStatusEnum.Completed,
                                 "Source content is unchanged since the last successful ingestion (matching content hash) — skipping re-processing.",
                                 0, token).ConfigureAwait(false);
-                            await _Journal.CompleteAsync(job, token, context.ContentHash).ConfigureAwait(false);
+                            await _Journal.CompleteAsync(job, token, context.ContentHash, false).ConfigureAwait(false);
                             jobSpan?.SetOk(null);
                             return false;
                         }
@@ -301,6 +335,25 @@ namespace Pneuma.Core.Ingestion.Pipeline
                         "Hydration complete — knowledge graph and search index updated.",
                         phaseSw.Elapsed.TotalMilliseconds, token).ConfigureAwait(false);
 
+                    // Work dropped along the way (a failed classification batch, summary, or cell node) is recorded as
+                    // warnings. Under the Fail policy the attempt fails instead, so a transient cause gets a retry.
+                    if (_PartialLossPolicy == PartialLossPolicyEnum.Fail && job.Warnings.Count > 0)
+                    {
+                        throw new PartialLossException(new List<string>(job.Warnings));
+                    }
+
+                    // The new version is fully indexed: remove earlier versions of the link so only this one is
+                    // searchable. A removal failure leaves both versions and is recorded as a warning; the next
+                    // successful ingest of the link removes the leftovers.
+                    RetirementResult retired = await _Retirement.RetireOlderVersionsAsync(job, token).ConfigureAwait(false);
+                    if (retired.JobsRetired > 0)
+                    {
+                        await _Journal.RecordEventAsync(job, IngestionStageEnum.Indexing, IngestionStatusEnum.Completed,
+                            "Replaced the previous version: removed the output of " + retired.JobsRetired + " earlier job(s), including " + retired.NodesDeleted + " source and cell node(s).",
+                            0, token).ConfigureAwait(false);
+                    }
+                    foreach (string error in retired.Errors) context.AddWarning("The previous version could not be fully removed (" + error + "); it stays searchable until the next successful ingest.");
+
                     await _Journal.CompleteAsync(job, token, context.ContentHash).ConfigureAwait(false);
                 }
                 catch (Exception)
@@ -325,13 +378,17 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="job">The job.</param>
         /// <param name="attempt">The 1-based attempt number that just failed.</param>
         /// <param name="reason">The failure reason to surface in the retry event.</param>
+        /// <param name="backoffMultiplier">Multiplier on the normal backoff.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>True to retry; false to give up.</returns>
-        private async Task<bool> TryScheduleRetryAsync(IngestionJob job, int attempt, string reason, CancellationToken token)
+        private async Task<bool> TryScheduleRetryAsync(IngestionJob job, int attempt, string reason, int backoffMultiplier, CancellationToken token)
         {
             if (attempt >= _MaxAttempts) return false;
 
-            int delayMs = ComputeBackoffMs(attempt);
+            // Categories that wait on an external recovery (a rate-limited model endpoint) back off longer; the
+            // configured maximum still caps the wait.
+            long scaled = (long)ComputeBackoffMs(attempt) * Math.Max(1, backoffMultiplier);
+            int delayMs = (int)Math.Min(scaled, (long)Math.Max(_RetryBackoffMaxMs, ComputeBackoffMs(attempt)));
             job.AttemptCount = job.AttemptCount + 1;
             await _Journal.UpdateJobAsync(job, token).ConfigureAwait(false);
             await _Journal.RecordEventAsync(job, job.Stage, IngestionStatusEnum.Processing,

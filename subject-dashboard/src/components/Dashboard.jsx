@@ -15,6 +15,7 @@ import EvalView from '../views/EvalView';
 import FeedbackView from '../views/FeedbackView';
 import ApiExplorerView from '../views/ApiExplorerView';
 import SettingsView from '../views/SettingsView';
+import CrawlersView from '../views/CrawlersView';
 import NotFound from './NotFound';
 import './Dashboard.css';
 
@@ -31,6 +32,8 @@ function Dashboard() {
         return <LinksView />;
       case 'ingestion':
         return <IngestionView />;
+      case 'crawlers':
+        return <CrawlersView />;
       case 'ask':
         return <AskView />;
       case 'conversations':

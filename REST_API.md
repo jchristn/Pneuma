@@ -95,9 +95,20 @@ Response envelope:
 
 ## Subjects
 
-`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}` · `GET /v1.0/subjects/by-slug/{slug}`. A subject has `displayName`, `type` (Person…), `description`, `tagline`, `graphRootNodeId`, plus: `urlSlug` (unique per tenant; auto-generated from the name when omitted — an explicit clash returns **409**), `thinkingEnabled` (show model reasoning in this subject's chats), `systemPrompt` (appended after the global system prompt for its chats), `ontologyClassifyPrompt` / `ontologyDefinitionPrompt` (appended after the global ontology prompts during ingestion), `historyRetentionDays` (chat-history retention, clamped ≥ 1), and a read-only `deletionStatus` (`None`/`Pending`/`Deleting`/`Failed`).
+`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}` · `GET /v1.0/subjects/by-slug/{slug}`. A subject has `displayName`, `type` (Person…), `description`, `tagline`, `graphRootNodeId`, plus: `urlSlug` (unique per tenant; auto-generated from the name when omitted - an explicit clash returns **409**), `thinkingEnabled` (show model reasoning in this subject's chats), `systemPrompt` (appended after the global system prompt for its chats), `ontologyClassifyPrompt` / `ontologyDefinitionPrompt` (appended after the global ontology prompts during ingestion), `historyRetentionDays` (chat-history retention, clamped ≥ 1), `defaultRefreshIntervalMinutes` (how often links that follow the subject default are re-checked for changes: 0 for off, the default, or 60 to 525600; other values are **400**; changing it reschedules those links), and a read-only `deletionStatus` (`None`/`Pending`/`Deleting`/`Failed`).
 
 **A subject owns its models and collection** (moved off link submission): `embeddingModel` (embedding model-endpoint id) and `inferenceModel` (completion model-endpoint id) are **required** before links can be ingested to it or questions answered about it; `collection` (RecallDB collection id, dimensionality must match the embedding model) is **required** to ingest. `rerankingModel` and `promptRewriteModel` (completion model-endpoint ids) are **optional** — when set, the answer pipeline re-ranks retrieved passages / rewrites the question before searching; when null those steps are skipped. `rerankingPrompt` / `promptRewritePrompt` are subject-level overrides appended after the global `reranking` / `prompt.rewrite` prompts (like `systemPrompt`), with sensible defaults applied on create. `tagline` is the subtitle shown beneath the subject's name on its ask page (defaults to the built-in label when omitted). `GET /v1.0/subjects/by-slug/{slug}` resolves a subject by its slug (tenant-scoped).
+
+**Chunking.** `chunkStrategy` (`FixedTokenCount` default, `SentenceBased`, `ParagraphBased`, `Recursive`),
+`chunkMaxTokens` (16 to 8192, default 256), and `chunkOverlapTokens` (0 to 4096, default 32) control how cells are split.
+Tokens are counted in the subject's embedding model's own tokenizer (WordPiece for BERT-family models such as
+nomic-embed-text, cl100k_base otherwise), and chunks are sized to fit the model's input limit less a 1% margin (at least 2
+tokens); the runner's `maxInputTokens` overrides the known limit. If the model still rejects a chunk as too long, that
+chunk is re-chunked at 75%, 50%, and then 30% of the size; one rejected even at 30% is left out with a warning.
+`chunkHeaders` (`None`, `Title`, `TitleAndHeadings`) embeds the document title (the link title, else the first
+top-level heading) and, for `TitleAndHeadings`, the section's heading path in front of each chunk; the stored and
+returned chunk text is unchanged and the header's tokens come out of the chunk budget. New subjects default to
+`TitleAndHeadings`; subjects created before the setting existed keep `None` until changed. Changes apply to new ingests.
 
 **Per-subject ingestion concurrency.** A subject may carry an optional `concurrencyOverrides` object with the same integer keys as the system-wide `IngestionTuning` (see [`/v1.0/settings/ingestion`](#settings-admin)) — `contentRetrieval`, `typeDetection`, `cellExtraction`, `classification`, `graphMerge`, `summarization`, `chunking`, `embedding`, `indexing`, `maxConcurrentTasks`, `summarizationConcurrency`, `summarizationMinCellLength`, `classificationBatchSize`, `classificationBatchOverlap`, `classificationBatchConcurrency`, `stageTimeoutSeconds`. **Each field is nullable**: a set value overrides the system default for this subject's ingestion, while `null`/absent inherits the system default (effective value = override ?? system default). Accepted on create and update and applied live to subsequent ingestion work.
 
@@ -144,40 +155,121 @@ Chat turns are persisted automatically as chats complete (agentic `POST /v1.0/ch
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1.0/subjects/{subjectId}/links` | Submit a link `{ url, title?, labels?: [string], tags?: { key: value } }` → creates the link and **enqueues an ingestion job**. The embedding/inference models and collection are taken from the **subject** (configure them on the subject first); a subject missing any returns **400**. Any `labels`/`tags` are attached to every chunk this link produces (RecallDB) and to the link's source graph node (LiteGraph) so retrieval can later be scoped to them via a query/chat `metadataFilter` (see **Search & Ask**) |
-| POST | `/v1.0/subjects/{subjectId}/links/bulk` | Submit many links at once `{ urls: [string], labels?: [string], tags?: { key: value } }` → `{ created, links: [...] }` (one link + job per URL). Models and collection come from the subject; any `labels`/`tags` are applied identically to every URL in the batch |
+| POST | `/v1.0/subjects/{subjectId}/links` | Submit a link `{ url, title?, labels?: [string], tags?: { key: value }, refreshIntervalMinutes? }` (see "Scheduled link refresh" below; omit it to follow the subject's default) → creates the link and **enqueues an ingestion job**. The embedding/inference models and collection are taken from the **subject** (configure them on the subject first); a subject missing any returns **400**. Any `labels`/`tags` are attached to every chunk this link produces (RecallDB) and to the link's source graph node (LiteGraph) so retrieval can later be scoped to them via a query/chat `metadataFilter` (see **Search & Ask**). The URL must be absolute `http` or `https`; a private IP literal or `localhost` (unless in `Ingestion.FetchSafety.AllowedPrivateHosts`) returns **400** and writes a `FetchBlocked` audit record. A host name that resolves to a private address fails its job with category `Blocked` |
+| POST | `/v1.0/subjects/{subjectId}/links/bulk` | Submit many links at once `{ urls: [string], labels?: [string], tags?: { key: value } }` → `{ created, links: [...] }` (one link + job per URL). Models and collection come from the subject; any `labels`/`tags` are applied identically to every URL in the batch. Every URL is checked as for a single submission, and one unsafe URL refuses the whole batch with **400** |
+| POST | `/v1.0/subjects/{subjectId}/content` | **Push content** `{ content, contentType, title?, externalKey?, labels?, tags? }` → **201** `ContentSubmitResult` `{ index, statusCode, replaced, link, jobId }`. `contentType` is `text/plain`, `text/markdown`, `text/html`, or `application/json` and replaces type detection. The content is stored in the blob store and ingested like a link's (the link has `sourceKind: Inline` and URL `pneuma-inline://{linkId}`). With an `externalKey` already used in the subject, the content is **replaced** (**200**, `replaced: true`, a new job; the previous version is retired once the new one is indexed). Limits: `Ingestion.MaxInlineContentBytes` (10 MB, **413** over it), `externalKey` at most 256 characters. Text is cleaned (lone surrogates become U+FFFD; control characters other than tab and line breaks are removed). **400** for empty content or an unsupported type, **404** for an unknown subject, **409** when the keyed content is being deleted. Subject models and collection are required, as for links. |
+| POST | `/v1.0/subjects/{subjectId}/content/batch` | Push up to 100 items `{ items: [ ...content bodies ] }` → **200** `{ accepted, rejected, results: [ContentSubmitResult] }`. Every item is attempted; an invalid item is reported with its `index`, `statusCode`, and `error` and never stops the rest. More than 100 items is **400**. |
 | GET | `/v1.0/ingestion/endpoints` | Available model endpoints for ingestion → `{ embedding: [{ id, name, model, apiFormat, active }], completion: [...] }` (from Pneuma's native model-endpoint store) |
 | GET | `/v1.0/subjects/{subjectId}/links` | List a subject's links (with `status`, `lastIngestedUtc`, `lastError`). Paginated `EnumerationResult` |
 | GET | `/v1.0/links` / `GET /v1.0/links/{id}` | List / read links |
 | DELETE | `/v1.0/links/{id}` | Delete a link and **cascade** through everything it produced: ingestion jobs + per-step processing logs, pipeline document artifacts (source/atoms/chunks/vectors/subgraph + raw blobs), the chunk documents (RecallDB), and the graph nodes/edges it asserted (LiteGraph). Shared entity nodes reused by other links are preserved. Returns 204; external-store cleanup is best-effort so an unavailable subordinate service never blocks removal of the link. |
-| POST | `/v1.0/links/{id}/reingest` | **Reingest a link** — queues a **fresh** ingestion job that forces a full re-run. The link's stored content hash is cleared first so the delta-skip can't short-circuit the pipeline, then a brand-new job is enqueued (works even when the link has no prior job). Returns **202 Accepted** with the created job. |
+| POST | `/v1.0/links/{id}/reingest` | **Reingest a link** — queues a **fresh** ingestion job that forces a full re-run. The link's stored content hash is cleared first so the delta-skip can't short-circuit the pipeline, then a brand-new job is enqueued (works even when the link has no prior job). Returns **202 Accepted** with the created job. The previous version stays searchable while the new job runs; once the new job has indexed its content, the earlier jobs' chunks and Source and Cell graph nodes are removed (shared entity nodes are kept) and the link's `currentJobId` moves to the new job. If the new job fails, the previous version stays in place. |
 | POST | `/v1.0/links/reingest` | **Bulk reingest** — body `{ ids: [string] }`. Queues a fresh ingestion job per link (each clears the link's content hash to force a full re-run). Returns **202 Accepted** with `{ queued, skipped }` (`skipped` counts ids that could not be resolved to a link). |
+| PUT | `/v1.0/links/{id}` | **Set a link's refresh schedule.** Body `{ refreshIntervalMinutes }` (0 turns it off, otherwise 60 to 525600) or `{ useSubjectDefault: true }`. Returns the updated link, whose `nextRefreshUtc` is the next check (null when off). **400** for an invalid interval, pushed content, a link a crawl plan manages, or a link being deleted; **404** for an unknown link. Needs Subject Write. |
+| POST | `/v1.0/links/refresh-interval` | **Set the refresh schedule of several links.** Body `{ ids: [string], refreshIntervalMinutes? , useSubjectDefault? }` → `{ updated, skipped: [ids] }` (`skipped` lists ids that are unknown or cannot be refreshed). |
+| POST | `/v1.0/links/{id}/refresh` | **Check a link for changes now.** A conditional GET (`If-None-Match` / `If-Modified-Since` from the last check) → `{ linkId, outcome, jobId?, message?, nextRefreshUtc? }`. `outcome` is `Unchanged` (304, or the same validators), `Queued` (changed; a re-ingest job with `trigger` `Refresh` was queued), `Busy` (an ingestion is already pending), or `Failed` (the current version is kept and the check backs off). Same 400/404 rules as above. |
 | GET | `/v1.0/links/{id}/log` | **Per-step ingestion log** for a link → `[{ job, events }]` (one entry per ingestion run, newest last). Each `event` is `{ stage, status, message, durationMs, createdUtc }`. |
 | GET | `/v1.0/links/{id}/source` | **Pipeline artifact** — the raw crawled source document in its original content type (may be HTML/PDF/binary). `404` if not present yet. |
 | GET | `/v1.0/links/{id}/atoms` | **Pipeline artifact** — DocumentAtom semantic cells as `application/json`. `404` if that stage hasn't run yet. |
 | GET | `/v1.0/links/{id}/chunks` | **Pipeline artifact** — the link's chunks as `application/json`. `404` if that stage hasn't run yet. |
 | GET | `/v1.0/links/{id}/vectors` | **Pipeline artifact** — the link's embeddings as `application/json`. `404` if that stage hasn't run yet. |
 | GET | `/v1.0/links/{id}/subgraph` | **Pipeline artifact** — candidate subgraph as `application/json`. `404` if that stage hasn't run yet. |
-| GET | `/v1.0/jobs?status=` | List ingestion jobs (optional status filter). Paginated `EnumerationResult` |
+| GET | `/v1.0/jobs?status=&failureCategory=&hasWarnings=` | List ingestion jobs. Optional filters: `status`; `failureCategory` (one of the categories below; an unknown value is 400); `hasWarnings` (`true` or `false`; anything else is 400). Paginated `EnumerationResult` |
 | GET | `/v1.0/jobs/summary` | Time-bucketed ingestion activity, broken down by pipeline stage → `IngestionActivitySummary` `{ totalCount, totals: [{ stage, count }], buckets: [{ bucketStartUtc, bucketEndUtc, totalCount, stages: [{ stage, count }] }] }`. Query: `fromUtc`, `toUtc`, `bucketMinutes` (1–1440, default 15), `subjectId` (optional). Tenant-scoped. |
 | GET | `/v1.0/jobs/live` | **Live pipeline snapshot** → `IngestionLiveSnapshot` `{ generatedUtc, running: [], waitingForSlot: [], queued: [] }`. Each entry is an `IngestionLiveJob` `{ jobId, subjectId, sourceUrl, stage｜null, stateSinceUtc }`: `running` = jobs executing a stage now, `waitingForSlot` = jobs whose current stage is waiting for a free per-stage concurrency slot, `queued` = jobs waiting in the pool to start (`stage` is null). Each list is ordered longest-in-state first. `stateSinceUtc` is absolute so a client can tick the elapsed "time in this state" between polls. Query: `subjectId` (optional). Tenant-scoped. |
-| GET | `/v1.0/jobs/{id}` | Job detail with per-stage events → `{ job, events }` |
-| GET | `/v1.0/jobs/{id}/log` | Live per-stage log for a job → `{ job, events }` (poll for a "follow logs" view) |
+| GET | `/v1.0/jobs/{id}` | Job detail → `{ job, events, attempts, remediation }`. `attempts` lists every attempt oldest first (`{ id, attemptNumber, succeeded, stage, failureCategory, message, startedUtc, endedUtc }`); `remediation` is the fix to try for the job's failure category, or null |
+| GET | `/v1.0/jobs/{id}/log` | Live per-stage log for a job → same shape as the job detail (poll for a "follow logs" view) |
 | POST | `/v1.0/jobs/{id}/restart` | Requeue a failed job |
 | POST | `/v1.0/jobs/{id}/stop` | Stop (cancel) a queued or in-flight job → job set to `Cancelled`. 409 if already finished |
 | DELETE | `/v1.0/jobs/{id}` | Delete an ingestion job (queue/job entry) and **cascade** its per-step processing log, the graph nodes/edges it asserted (LiteGraph), its chunk documents (RecallDB, deleted by `jobId` tag), and its raw blob. The link and its per-link S3 pipeline artifacts are left intact (they belong to the link). Returns 204; external-store cleanup is best-effort. |
 
+### Scheduled link refresh
+
+A URL link can be re-checked for changes on a schedule. A link's `refreshIntervalMinutes` is null (follow the
+subject's `defaultRefreshIntervalMinutes`), 0 (off), or 60 to 525600. Each check is a conditional GET using the
+`ETag` and `Last-Modified` from the previous check; an unchanged page costs one request and nothing is re-ingested.
+A changed page is re-ingested with a job whose `trigger` is `Refresh`, and the previous version stays searchable until
+the new one is indexed. A failed check keeps the current version and backs off (15 minutes, doubling, capped at the
+interval); `refreshFailures` counts failures in a row. Links a crawl plan manages follow their plan's schedule, and
+pushed content is replaced by pushing it again, so neither can be scheduled here. Links carry `refreshIntervalMinutes`,
+`nextRefreshUtc`, `lastRefreshUtc`, `refreshFailures`, `sourceETag`, and `sourceLastModifiedUtc`; ingestion jobs
+carry `trigger` (`Submit`, `Reingest`, `Refresh`, or `Crawl`). The server's `LinkRefresh` settings section sets
+`Enabled` (default true), `IntervalSeconds` (60), and `BatchSize` (50).
+
 **Ingestion labels & tags.** Operator-supplied `labels` (plain strings) and `tags` (key/value) on link submission are stamped onto every chunk the link produces and onto its source graph node. Each label `L` is stored as a distinct chunk tag `label:L` (so a chunk can carry several labels at once), and the detected document type is exposed the same way; tags are stored verbatim (reserved provenance keys — `litegraphNodeId`, `linkId`, `tenantId`, `subjectId`, `jobId`, `sourceUrl`, `documentType`, and any `label:*` — are never overwritten). A query/chat/search `metadataFilter` then scopes retrieval to them: a required label matches with an equals condition on its `label:L` tag; a required tag matches by key/value.
 
-Ingestion stages, each written to the log with a descriptive message and duration: **TypeDetection → CellExtraction → Classification (ontology mapping) → GraphMerge (knowledge-graph insertion) → Embedding (chunking + embedding generation) → Indexing (search index)**. Unknown document types fail at TypeDetection. Each stage records a completion log entry with counts (e.g. cells extracted, chunks produced, embeddings generated, nodes/edges inserted, documents indexed); failures record the stage and error.
+Ingestion stages, each written to the log with a descriptive message and duration, run in two phases. **Categorization:** ContentRetrieval → TypeDetection → CellExtraction → Classification (ontology mapping). **Hydration:** OntologyCanonicalization → GraphMerge (knowledge-graph insertion) → RelationshipConsolidation → Summarization → Chunking → Embedding → Indexing (search index). Content whose hash is unchanged since the last successful ingest completes right after ContentRetrieval. Unknown document types fail at TypeDetection. Each stage records a completion log entry with counts; failures record the stage, the error, and a failure category. The link log (`GET /v1.0/links/{id}/log`) returns one job detail per run in the same shape as `GET /v1.0/jobs/{id}`.
+
+**Failure categories and retries.** A failed job carries `failureCategory`, and so does its link. The category decides whether the job is retried (up to `Ingestion.MaxAttempts`, with exponential backoff; `ModelUnavailable` backs off four times longer). Every attempt is recorded in the job's `attempts`.
+
+| Category | Meaning | Retried |
+|---|---|---|
+| `Fetch` | The source returned an HTTP error, or the connection failed. A 4xx other than 408 and 429 is permanent. | Yes, except permanent 4xx |
+| `Blocked` | The fetch-safety policy refused the URL (private address or disallowed scheme). | No |
+| `TooLarge` | The content exceeded a size limit. | No |
+| `UnsupportedType` | The content type is unknown or has no extractor. | No |
+| `Extraction` | DocumentAtom failed. | Yes |
+| `NoContent` | Extraction produced no text. | No |
+| `ModelUnavailable` | A model endpoint stayed rate limited or unavailable after its own retries. | Yes, with a longer backoff |
+| `ModelRejected` | A model endpoint rejected the request (a 4xx, including a context-length error). | No |
+| `Configuration` | A required model, endpoint, or collection is missing. | No |
+| `Storage` | RecallDB, LiteGraph, or the blob store failed. | Yes |
+| `Timeout` | A stage or request timed out. | Yes |
+| `PartialLoss` | Work was dropped and `Ingestion.PartialLossPolicy` is `Fail`. | Yes |
+| `WorkerLost` | The worker stopped before the job finished. | Yes |
+| `Cancelled` | An operator stopped the job. | No |
+| `Internal` | Anything else. | Yes |
+
+**One live version per link.** Each link records `currentJobId`, the job whose output search returns. When a new
+job for the link finishes indexing (a re-ingest, a refresh, or a crawl update), the output of the link's earlier jobs
+(their RecallDB chunks and their Source and Cell graph nodes) is removed; entity nodes are shared across links and are
+kept. A job that completes early because the content is unchanged writes nothing and leaves `currentJobId` alone. A
+retry within a job first removes what the failed attempt wrote, so retries never duplicate chunks or nodes. If removal
+fails, the job still completes, records a warning, and the next successful ingest of the link removes the leftovers.
+
+**Completeness and warnings.** Every job records what each stage received and produced in `completeness` (`cellsExtracted`, `classificationBatches`, `classificationBatchesFailed`, `cellNodesCreated`, `cellNodesFailed`, `summariesAttempted`, `summariesFailed`, `chunksProduced`, `chunksEmbedded`, `chunksIndexed`). Work a job drops but can complete without (a failed classification batch, a failed cell summary, a cell node that could not be created) is recorded in the job's `warnings` list, and the link's `warningCount` holds the count from its latest ingest. With `Ingestion.PartialLossPolicy` set to `Warn` (the default) such a job still ends `Completed`; with `Fail` it fails with category `PartialLoss` and is retried. A chunk that did not receive an embedding is never dropped: the attempt fails and is retried.
+
+## Crawl plans
+
+A crawl plan keeps a subject in sync with a web site, sitemap, GitHub repository, S3, Azure Blob, or Google Cloud Storage bucket, CIFS or NFS share, or server folder; each run is a crawl
+operation. See `CRAWLING.md` for the model and the run lifecycle. Secret settings are write-only: they are stored
+encrypted, never returned (`secretsSet` names them), redacted from request history, and audited by name when they
+change. Permissions: `CrawlPlan` and `CrawlOperation` (Read for GETs, Write for create and replace, Delete for delete,
+Execute for test, preview, start, stop, and confirming deletions).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/crawl-plan-types` | Supported types, each `{ type, displayName, description, settingsProperty, fields: [{ name, label, help, kind, required, min, max, options, default }] }`. `kind` is `string`, `integer`, `boolean`, `list`, `choice`, or `secret`. |
+| POST | `/v1.0/subjects/{subjectId}/crawl-plans` | **Create** `CrawlPlanRequest` `{ name, type, web\|sitemap\|s3\|cifs\|nfs, filter?, schedule?, enabled?, processAdditions?, processUpdates?, processDeletions?, maxDeletionFraction?, retryFailedObjects?, labels?, tags?, operationRetentionDays? }` → **201** `CrawlPlan`. **400** for invalid settings (every problem listed), an invalid cron expression, an interval outside 5 to 525600 minutes, an unknown time zone, a type with no crawler, or a subject without models or a collection; **404** for an unknown subject. |
+| GET | `/v1.0/subjects/{subjectId}/crawl-plans` | A subject's plans (paginated). |
+| GET | `/v1.0/crawl-plans` | Plans (paginated; `subjectId=` filters). |
+| GET | `/v1.0/crawl-plans/{id}` | One plan: settings (secrets null), `filter`, `schedule`, flags, `status` (`Idle`, `Running`, `Stopping`), `lastOperationId`, `lastRunUtc`, `lastSuccessUtc`, `nextRunUtc`, `secretsSet`. |
+| PUT | `/v1.0/crawl-plans/{id}` | **Replace** the configuration (same body). A secret left out keeps its stored value; names in `clearSecrets` are removed. Changing `type` is **400**. |
+| DELETE | `/v1.0/crawl-plans/{id}` | Delete the plan, its settings, secrets, objects, and operations → `{ deleted, linksDeleted, linksKept }`. `deleteLinks=true` deletes its links in the background; otherwise they are kept and detached. **409** while running. |
+| POST | `/v1.0/crawl-plans/test` | Test a **draft** (same body) without saving anything → `ConnectivityResult` `{ success, layers: [{ name, success, message }] }`. `fromPlanId=` fills empty secrets from a stored plan. |
+| POST | `/v1.0/crawl-plans/{id}/test` | Test a stored plan's connection step by step. |
+| POST | `/v1.0/crawl-plans/{id}/preview` | What a run would do now → `CrawlPreview` `{ enumerated, bytesEnumerated, add, update, retry, unchanged, delete, missing, skip, deletionsHeld, truncated, items (at most 500) }`. Nothing is changed. **502** when the source cannot be listed. |
+| POST | `/v1.0/crawl-plans/{id}/start` | Start an operation now → **202** `CrawlOperation`. **409** when the plan is already running (on any server). |
+| POST | `/v1.0/crawl-plans/{id}/stop` | Stop the running operation: listing is cancelled; an operation waiting on ingestion has its unstarted jobs cancelled → **202**. **409** when idle. |
+| GET | `/v1.0/crawl-plans/{id}/operations` | The plan's operations, newest first (paginated). |
+| GET | `/v1.0/crawl-plans/{id}/objects` | Tracked objects `{ externalKey, linkId, versionToken, sizeBytes, contentType, status, lastError, firstSeenUtc, lastSeenUtc }` (paginated; `status=` `Active`, `Missing`, `Failed`, `Excluded`; **400** for another value). |
+
+## Crawl operations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/crawl-operations` | Operations, newest first (paginated; `planId=` and `status=` filter; **400** for an unknown status). |
+| GET | `/v1.0/crawl-operations/{id}` | One operation: `trigger` (`Schedule`, `Manual`), `status` (`Running`, `Ingesting`, `Succeeded`, `PartiallySucceeded`, `Failed`, `Cancelled`, `Held`), counts `enumerated`, `added`, `updated`, `retried`, `unchanged`, `deleted`, `missing`, `skipped`, `failed`, `bytesEnumerated`, `heldDeletions`, `error`, and timestamps. |
+| GET | `/v1.0/crawl-operations/{id}/objects` | What the operation did with each object `{ externalKey, action, succeeded, linkId, jobId, detail }` (paginated; `action=` `Add`, `Update`, `Retry`, `Delete`, `Skip`, `Fail`). Unchanged objects are counted only. |
+| POST | `/v1.0/crawl-operations/{id}/confirm-deletions` | Run the deletions a `Held` operation is waiting on → the operation. **409** when it is not `Held`. |
 
 ## Model Runners (admin)
 
-`GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. Pneuma **manages model endpoints natively** in its own `modelrunners` store; LLM access (embeddings, completions, summarization) runs in-process through PolyPrompt. Each item is an embedding or completion endpoint: `{ id, type (Embedding|Completion), provider, name, model, endpoint, apiFormat, deployment, apiVersion, region, project, accessKeyId, active, maxConcurrentRequests, maxQueueDepth, contextSize }`.
+`GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. Pneuma **manages model endpoints natively** in its own `modelrunners` store; LLM access (embeddings, completions, summarization) runs in-process through PolyPrompt. Each item is an embedding or completion endpoint: `{ id, type (Embedding|Completion), provider, name, model, endpoint, apiFormat, deployment, apiVersion, region, project, accessKeyId, active, maxConcurrentRequests, maxRetries, maxInputTokens, maxQueueDepth, contextSize }`.
 
 `provider` selects the PolyPrompt provider and determines which fields apply. Supported providers: **OpenAI, OpenAICompatible, Gemini, Ollama, AzureOpenAI, Anthropic** (completions only), **Bedrock, VoyageAI** (embeddings only), **VertexAI**. Provider-specific fields: `deployment` and `apiVersion` (AzureOpenAI), `region` and `accessKeyId` (Bedrock), `project` and `region` (VertexAI).
 
-Create/update body `{ type (Embedding|Completion), provider, name?, model, endpoint?, apiFormat?, deployment?, apiVersion?, region?, project?, accessKeyId?, apiKey?, secretAccessKey?, sessionToken?, active, maxConcurrentRequests?, maxQueueDepth?, contextSize? }`. **Secrets are write-only** — `apiKey`, `secretAccessKey`, and `sessionToken` are accepted on create/update and **never returned** on read. `maxConcurrentRequests` caps concurrent connections to the endpoint (minimum 1, default 2); `maxQueueDepth` is how many requests may wait for a slot once that cap is reached (minimum 0, default 0 rejects over-limit requests immediately with 429, a queued wait past the endpoint timeout returns 504); `contextSize` is the completion model's context window in tokens and drives automatic chat conversation compaction (0 disables). Deletes resolve the endpoint type automatically.
+Create/update body `{ type (Embedding|Completion), provider, name?, model, endpoint?, apiFormat?, deployment?, apiVersion?, region?, project?, accessKeyId?, apiKey?, secretAccessKey?, sessionToken?, active, maxConcurrentRequests?, maxRetries?, maxInputTokens?, maxQueueDepth?, contextSize? }`. **Secrets are write-only** — `apiKey`, `secretAccessKey`, and `sessionToken` are accepted on create/update and **never returned** on read. `maxConcurrentRequests` caps concurrent requests to the endpoint across ingestion and chat (minimum 1, default 2; requests beyond it wait for a slot; a changed value applies after a restart); `maxInputTokens` is the largest embedding input the endpoint accepts in its own tokens (0, the default, uses the known limit for the model family); `maxRetries` is how many times a transient failure (408, 429, 502, 503, 504, or a 500 whose body names one or says the endpoint is at capacity) is retried, with exponential, jittered backoff that honors `Retry-After` (0 to 10, default 5; client errors are never retried). A call that still fails returns **503** `ModelUnavailable` with `Retry-After`, and one the endpoint rejected returns **502** `ModelRejected`; `maxQueueDepth` is how many requests may wait for a slot once that cap is reached (minimum 0, default 0 rejects over-limit requests immediately with 429, a queued wait past the endpoint timeout returns 504); `contextSize` is the completion model's context window in tokens and drives automatic chat conversation compaction (0 disables). Deletes resolve the endpoint type automatically.
 
 ### Model endpoint health
 

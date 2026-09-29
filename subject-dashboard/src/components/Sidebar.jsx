@@ -40,6 +40,11 @@ function Sidebar() {
           icon: icon(<><path d="M12 2v13" /><path d="m19 9-7 7-7-7" /><path d="M5 20h14" /></>)
         },
         {
+          id: 'crawlers',
+          label: t('nav.crawlers'),
+          icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15 15 0 0 1 0 18" /><path d="M12 3a15 15 0 0 0 0 18" /></>)
+        },
+        {
           id: 'ask',
           label: t('nav.ask'),
           icon: icon(<><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>)

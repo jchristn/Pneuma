@@ -26,5 +26,14 @@ namespace Pneuma.Core.Integrations.Models
         /// Stamped on the stored chunk as the <c>chunkKind</c> tag so retrieval can tell the two apart.
         /// </summary>
         public string Kind { get; set; } = "content";
+
+        /// <summary>
+        /// The text that is embedded when it differs from <see cref="Text"/>: the chunk with its context header (the
+        /// document title and section headings) in front. Null embeds <see cref="Text"/> as is. Never stored or returned.
+        /// </summary>
+        public string? EmbeddingText { get; set; } = null;
+
+        /// <summary>The context header this chunk was embedded with, or null (used to re-chunk with the same header).</summary>
+        public string? Header { get; set; } = null;
     }
 }

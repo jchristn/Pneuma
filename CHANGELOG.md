@@ -26,8 +26,105 @@ between releases, and the project will adopt semantic versioning at its stable 1
   neighbor_expand, rewrite, rerank, generate) and `pneuma_retrieval_leg_failures_total{leg}`, so a search that
   silently degraded to one channel is visible.
 - **`chunkKind` chunk tag** (`content` or `summary`) on newly indexed chunks.
+- **Ingestion failure categories and attempt history.** Failed jobs and links carry a `failureCategory` (Fetch,
+  Blocked, TooLarge, UnsupportedType, Extraction, NoContent, ModelUnavailable, ModelRejected, Configuration, Storage,
+  Timeout, PartialLoss, WorkerLost, Cancelled, Internal) that decides whether the job is retried. Every attempt is
+  recorded, and job detail returns `attempts` and `remediation`. `GET /v1.0/jobs` filters by `failureCategory` and
+  `hasWarnings`; so do the SDKs and the MCP `pneuma_enumerate_jobs` tool. New metrics
+  `pneuma_ingestion_failures_total{category}` and `pneuma_ingestion_partial_total{stage,reason}`.
+- **Ingestion completeness and warnings.** Each job records what every stage received and produced
+  (`completeness`), and work it dropped but completed without (a failed classification batch, a failed summary, a
+  cell node that could not be created) is listed in `warnings`; links carry `warningCount`. The dashboards show the
+  category, warnings, counts, and attempts. `Ingestion.PartialLossPolicy` (`Warn` by default, or `Fail`) decides
+  whether dropped work fails the job.
+- **Chunk headers.** `chunkHeaders` on subjects (`None`, `Title`, `TitleAndHeadings`) embeds the document title and
+  the section's heading path in front of each chunk, so a passage from the middle of a document still says what it is
+  about. The stored text is unchanged and the header's tokens come out of the chunk budget. New subjects default to
+  `TitleAndHeadings`; existing subjects keep `None`. Cells now carry their heading path from DocumentAtom.
+- **Model-aware chunk budget.** Chunks are sized to the embedding model's input limit less a 1% margin (at least 2
+  tokens); a runner's new `maxInputTokens` overrides the known limit. A chunk the model rejects as too long is
+  re-chunked at 75%, 50%, then 30% of the size instead of failing the job. Metric `pneuma_ingestion_rechunk_total`.
+- **Crawl plans.** A crawl plan keeps a subject in sync with a web site, sitemap, GitHub repository, S3, Azure Blob, or Google Cloud Storage bucket, CIFS or NFS share, or server folder
+  (connectors arrive with their own entries). Each run lists the source and compares it with what the plan saw
+  before. It ingests new and changed objects and retries failures. Deletions are opt-in, and a run that would
+  delete more than `maxDeletionFraction` of the plan's links is held for confirmation. Plans run manually, on an
+  interval, or on a cron schedule in a time zone. Two servers never run the same plan at once, and interrupted runs
+  are recovered. Secrets are write-only and encrypted. Test and preview change nothing. New routes are under
+  `/v1.0/crawl-plan-types`, `/v1.0/crawl-plans`, and `/v1.0/crawl-operations`. New MCP tools start with
+  `pneuma_*_crawl_*`. The SDKs, Postman, and new metrics (`pneuma_crawl_*`) cover them too. See `CRAWLING.md`.
+- **Crawl plan connectors.** Five connectors are available:
+  - **Web:** CrawlSharp, with scope, depth, page cap, robots.txt (turning it off is admin-only and audited), crawl
+    delay, authentication, tracking-parameter removal, content-hash versions, and fetch-safety checks on every URL.
+  - **Sitemap:** plain and gzipped sitemaps, nested indexes, and `robots.txt` discovery, with `lastmod` as the version
+    and off-host URLs ignored.
+  - **S3:** Amazon S3 or S3-compatible buckets, with ETag versions.
+  - **CIFS:** SMB 2 or 3 through Blobject.CIFS (built on OpenCIFS), with a custom port, domain, size and time versions, and a skip list for
+    system files.
+  - **NFS:** NFSv3 through Blobject.NFS (built on OpenNFS), with custom NFS and mount ports (or portmapper discovery) and AUTH_SYS identity.
+
+  - **GitHub:** a repository's default branch through GitHubCrawler, with an optional folder and access token.
+  - **Azure Blob:** containers, with ETag versions and Azurite support.
+  - **Google Cloud Storage:** buckets, with ETag versions and emulator support.
+  - **Local folders:** folders on the server, only under roots an administrator allows in
+    `Crawling.AllowedLocalRoots`.
+
+  Each connector has a step-by-step connectivity test. See the connector sections of `CRAWLING.md`.
+- **Scheduled link refresh.** A URL link can be re-checked for changes hourly, daily, weekly, or on any interval from
+  60 minutes to a year, per link or through the subject's new `defaultRefreshIntervalMinutes`. Checks are conditional
+  GETs, so an unchanged page is not re-ingested; a changed page is re-ingested and the old version stays searchable
+  until the new one is ready. Failed checks keep the current version and back off. New routes `PUT /v1.0/links/{id}`,
+  `POST /v1.0/links/refresh-interval`, and `POST /v1.0/links/{id}/refresh`; `refreshIntervalMinutes` on link
+  submission; MCP tool `pneuma_set_link_refresh`; metric `pneuma_link_refresh_total{outcome}`; the `LinkRefresh`
+  settings section; and a "Next Refresh" column with schedule and check-now actions in the admin and subject
+  dashboards. Ingestion jobs now record their `trigger` (Submit, Reingest, Refresh, or Crawl).
+- **Request history masks secrets in request bodies.** Captured JSON bodies have the values of `password`,
+  `apiKey`, `secretKey`, `bearerToken`, `sessionToken`, and similar properties replaced with `***redacted***`.
+- **Content push API.** `POST /v1.0/subjects/{id}/content` and `/content/batch` (up to 100 items, a result per item)
+  ingest text, Markdown, HTML, or JSON without a URL; the declared type replaces type detection. An `externalKey`
+  upserts: pushing again with the same key replaces the content. The subject dashboard has an "Add Text" dialog with
+  Markdown preview; the SDKs gain `submitContent`/`submitContentBatch`; MCP gains `pneuma_submit_content` so agents
+  can add what they learn. Links carry `sourceKind` (`Url`, `Inline`, `Crawl`), `externalKey`, `contentType`, and
+  `sizeBytes`.
+- **`--suite` filter for `Test.Automated`** to run named suites only.
+
+### Changed
+- **One retry policy for every model call.** Embeddings, classification, summarization, chat, and reranking now retry an
+  endpoint's transient failures (408, 429, 502, 503, 504, or a 500 wrapping one) with jittered exponential backoff that
+  honors `Retry-After`, up to the runner's new `maxRetries` (default 5). Previously only embeddings retried, by
+  matching "429" in error text, so a rate-limited summary was silently dropped and a rate-limited classification cost
+  the document its graph. Exhausted retries return 503 `ModelUnavailable` from the API and categorize an ingestion job
+  as `ModelUnavailable`; a request the endpoint rejects returns 502 `ModelRejected`.
+- **Model runners' `maxConcurrentRequests` is enforced** across ingestion and chat together (it was stored but not
+  applied to ingestion). Requests beyond it wait for a slot. A runner left at the default of 2 now caps embedding
+  concurrency at 2; raise it for endpoints that can take more.
+- **A failed summary is a counted failure.** `SummarizeAsync` returned an empty summary when the model call failed, so
+  the failure was invisible; it now throws and the job records a warning.
+
+### Security
+- **Fetch safety (SSRF guard).** Content fetching refuses URLs that resolve to loopback, private, link-local (including
+  cloud metadata), carrier-grade NAT, unique-local IPv6, and multicast addresses unless the host is listed in
+  `Ingestion.FetchSafety.AllowedPrivateHosts`. The address is checked when each connection opens, so redirects and DNS
+  rebinding are covered; the headless browser checks every request a page makes. Only `http` and `https` are fetched,
+  TLS certificates are validated (the browser previously ignored certificate errors), responses over
+  `MaxDownloadBytes` (100 MB) are abandoned while streaming, and `MaxRequestsPerHost` (2) bounds concurrent requests to
+  one host. Link submission rejects private IP literals, `localhost`, and other schemes with a 400 and a
+  `FetchBlocked` audit record. Deployments that ingest intranet sites must add those hosts to the allow-list.
 
 ### Fixed
+- **Re-ingesting a link left the old version searchable.** A re-ingest created new chunks and Source and Cell nodes
+  but never removed the previous job's, so search returned stale text beside current text; retries within a job also
+  duplicated nodes. Once a new job indexes a link, earlier jobs' chunks and Source and Cell nodes are now removed
+  (entity nodes are kept), the link records `currentJobId`, and a retry first clears its failed attempt's output.
+- **Partial ingests were reported as complete.** A failed classification call returned an empty graph without any
+  record, failed summaries and cell nodes were only logged, and chunks without an embedding were dropped at indexing.
+  Classification failures and dropped work are now counted and recorded as warnings, and a missing embedding fails
+  the attempt so it is retried.
+- **Deterministic failures were retried.** An unmapped document type (`NotSupportedException`) and a 404 from the
+  source were retried up to `MaxAttempts`; they now fail on the first attempt.
+- **Tests no longer reach a local model server.** The test database seeded model runners at `127.0.0.1:11434`, so a
+  running Ollama made ingestion tests non-deterministic; runners are now seeded at an address nothing listens on.
+- **Documentation.** `REST_API.md` listed six of the eleven ingestion stages; `MCP_API.md` listed a
+  `maxConcurrentTasks` subject override that does not exist.
 - **Hybrid subject search now follows the fused ranking.** Documents were re-sorted by their best raw channel score,
   mixing cosine similarity (about 0.3 to 0.9) with TsRank (usually under 0.1), so hybrid results were effectively the
   vector ranking. Benchmarks showed hybrid equal to vector-only on every dataset.

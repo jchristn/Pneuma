@@ -29,5 +29,8 @@ namespace Pneuma.Core.Requests
         /// <see cref="RetrievalFilter.ExcludedTags"/>).
         /// </summary>
         public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>Minutes between scheduled refreshes: null uses the subject's default, 0 is off, otherwise 60 to 525600.</summary>
+        public int? RefreshIntervalMinutes { get; set; } = null;
     }
 }

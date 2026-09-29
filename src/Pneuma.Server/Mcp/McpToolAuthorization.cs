@@ -62,6 +62,23 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_distinct_labels":
                 case "pneuma_distinct_tags":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_set_link_refresh":
+                case "pneuma_submit_content":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Write, null, token).ConfigureAwait(false);
+                case "pneuma_enumerate_crawl_plans":
+                case "pneuma_get_crawl_plan":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.CrawlPlan, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_create_crawl_plan":
+                case "pneuma_update_crawl_plan":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.CrawlPlan, OperationTypeEnum.Write, null, token).ConfigureAwait(false);
+                case "pneuma_test_crawl_plan":
+                case "pneuma_preview_crawl_plan":
+                case "pneuma_start_crawl_plan":
+                case "pneuma_stop_crawl_plan":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.CrawlPlan, OperationTypeEnum.Execute, null, token).ConfigureAwait(false);
+                case "pneuma_enumerate_crawl_operations":
+                case "pneuma_get_crawl_operation":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.CrawlOperation, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
                 case "pneuma_create_eval_fact":
                 case "pneuma_start_eval_run":
                 case "pneuma_cancel_eval_run":

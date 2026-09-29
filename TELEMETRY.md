@@ -38,6 +38,30 @@ stay bounded.
   (ContentRetrieval, TypeDetection, CellExtraction, Classification, GraphMerge, Summarization, Chunking,
   Embedding, Indexing), including `queued` when a stage waited for a concurrency slot.
 - `pneuma_ingestion_stage_duration_seconds{stage}` — per-stage duration histogram (where stalls show up).
+- `pneuma_ingestion_failures_total{category}`: failed jobs by failure category (Fetch, Blocked, TooLarge,
+  UnsupportedType, Extraction, NoContent, ModelUnavailable, ModelRejected, Configuration, Storage, Timeout,
+  PartialLoss, WorkerLost, Cancelled, Internal). A jump in one category points at its cause.
+- `pneuma_ingestion_retired_total{kind}`: output removed from earlier versions of links and from failed attempts
+  (`chunk_set` is one job's chunks, `node` is a Source or Cell node).
+- `pneuma_ingestion_rechunk_total{scale}`: chunks re-chunked smaller after the embedding model rejected them as too
+  long. A steady rate means the chunk size or the runner's `maxInputTokens` is set above what the model accepts.
+- `pneuma_model_retries_total{runner,status}`: model requests retried after a transient failure. A steady rate on
+  one runner means the endpoint is undersized or shared; raise its capacity or lower `maxConcurrentRequests`.
+- `pneuma_model_limiter_wait_seconds{runner}`: how long model requests waited for a free slot on their endpoint
+  (histogram). Long waits mean ingestion and chat are queuing behind the runner's `maxConcurrentRequests`.
+- `pneuma_ingestion_partial_total{stage,reason}`: work a job dropped but completed without (`classification_batch`,
+  `summary`, `cell_node`). Non-zero means some ingests are partial; the jobs carry the details as warnings.
+
+### Crawling
+
+- `pneuma_crawl_operations_total{type,outcome}`: finished crawl operations by plan type and final status.
+- `pneuma_crawl_objects_total{type,action}`: objects operations acted on, by action (Add, Update, Retry, Unchanged,
+  Skip, Missing, Delete).
+- `pneuma_crawl_operation_duration_seconds{type}`: operation duration from start to finish (including ingestion).
+- `pneuma_crawl_bytes_total{type}`: bytes of the objects operations listed.
+- `pneuma_crawl_running`: operations listing or dispatching on this server (gauge).
+- `pneuma_link_refresh_total{outcome}`: scheduled and on-demand link refresh checks, by outcome (Unchanged, Queued,
+  Failed, Busy, Skipped).
 
 ### Retrieval & Answer
 - `pneuma_chat_answers_total{outcome}` — answered chat/query turns by outcome.
@@ -66,6 +90,8 @@ Traces are emitted over OTLP and stored in Tempo. Spans exist for:
 - **Ingestion** — a root span per job (`ingestion <sourceUrl>`, tagged `pneuma.job.id`, `pneuma.tenant.id`,
   `pneuma.subject.id`) with a child span per pipeline stage (`stage:<Name>`), so a slow job's stage breakdown
   is visible in one trace.
+- **Crawling**: a root span per crawl operation (`crawl <type>`, tagged `pneuma.tenant.id`, `pneuma.crawl.plan.id`,
+  `pneuma.crawl.operation.id`, `pneuma.crawl.status`) with `stage:Enumerate` and `stage:Dispatch` children.
 - **Requests & integrations** — request capture and downstream integration calls carry spans, tagged with the
   service and operation, so a slow answer resolves to the specific RecallDB/PolyPrompt/LiteGraph call that caused
   it.
@@ -122,6 +148,9 @@ The observability dashboards are split by domain — open the one that matches y
 - **Pneuma — Integrations** — request and error rate by service and the p95 latency per service+operation. When
   an answer or ingestion is slow, this tells you whether a downstream (RecallDB/PolyPrompt/LiteGraph/DocumentAtom)
   is the cause.
+
+- **Pneuma Crawling**: operations by outcome, objects by action, operation p95 duration, bytes listed, and running
+  operations. A rising Failed or Held rate, or a plan whose Missing count jumps, is where to look first.
 
 ## 7. Reading traces
 

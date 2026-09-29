@@ -9,7 +9,7 @@ namespace Pneuma.Core.Integrations.Abstractions
     /// <summary>
     /// Provider-neutral lexical (full-text) search over the same chunk collection the vector store writes.
     /// Backed today by RecallDB's full-text query. Documents are written once by
-    /// <see cref="IVectorRepository.StoreChunkAsync"/> (content + embedding together); this interface only
+    /// <see cref="IVectorRepository.StoreChunksAsync"/> (content + embedding together); this interface only
     /// reads, returning scored hits that carry their tags for round-trip back to the knowledge graph.
     /// </summary>
     public interface IInvertedIndex

@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_set_link_refresh", "pneuma_submit_content", "pneuma_enumerate_crawl_plans", "pneuma_get_crawl_plan", "pneuma_create_crawl_plan", "pneuma_update_crawl_plan", "pneuma_test_crawl_plan", "pneuma_preview_crawl_plan", "pneuma_start_crawl_plan", "pneuma_stop_crawl_plan", "pneuma_enumerate_crawl_operations", "pneuma_get_crawl_operation", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -102,7 +102,7 @@ namespace Pneuma.Server.Mcp
                             ontologyClassifyPrompt = new { type = "string", description = "Subject ontology classification prompt, appended after the global one." },
                             ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition, appended after the global one." },
                             historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1). Default 90." },
-                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, maxConcurrentTasks, summarizationConcurrency, summarizationMinCellLength, stageTimeoutSeconds." }
+                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, summarizationConcurrency, summarizationMinCellLength, classificationBatchSize, classificationBatchOverlap, classificationBatchConcurrency, stageTimeoutSeconds." }
                         },
                         required = new[] { "displayName" }
                     }
@@ -135,7 +135,7 @@ namespace Pneuma.Server.Mcp
                             ontologyDefinitionPrompt = new { type = "string", description = "Subject ontology definition." },
                             historyRetentionDays = new { type = "integer", description = "Chat-history retention in days (minimum 1)." },
                             active = new { type = "boolean", description = "Whether the subject is active." },
-                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). A JSON null clears the subject's overrides. Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, maxConcurrentTasks, summarizationConcurrency, summarizationMinCellLength, stageTimeoutSeconds." }
+                            concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). A JSON null clears the subject's overrides. Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, summarizationConcurrency, summarizationMinCellLength, classificationBatchSize, classificationBatchOverlap, classificationBatchConcurrency, stageTimeoutSeconds." }
                         },
                         required = new[] { "id" }
                     }
@@ -143,7 +143,7 @@ namespace Pneuma.Server.Mcp
                 new
                 {
                     name = "pneuma_enumerate_jobs",
-                    description = "Enumerate ingestion jobs as small summaries, paged. Same paging protocol as pneuma_enumerate_subjects: start skip=0, read totalRecords, advance skip until endOfResults. Use pneuma_get_job for the full record. An optional \"status\" argument filters by job status.",
+                    description = "Enumerate ingestion jobs as small summaries, paged. Same paging protocol as pneuma_enumerate_subjects: start skip=0, read totalRecords, advance skip until endOfResults. Use pneuma_get_job for the full record. Optional filters: \"status\" (Queued, Processing, Completed, Failed, Cancelled), \"failureCategory\" (why a job failed, for example Fetch, ModelUnavailable, UnsupportedType), and \"hasWarnings\" (true for jobs that completed but dropped work). Each summary carries its failureCategory and warningCount.",
                     inputSchema = new
                     {
                         type = "object",
@@ -151,14 +151,17 @@ namespace Pneuma.Server.Mcp
                         {
                             maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
                             skip = new { type = "integer", description = "Number of records to skip." },
-                            order = new { type = "string", description = "asc or desc by creation time." }
+                            order = new { type = "string", description = "asc or desc by creation time." },
+                            status = new { type = "string", description = "Optional job status filter." },
+                            failureCategory = new { type = "string", description = "Optional failure-category filter: Fetch, Blocked, TooLarge, UnsupportedType, Extraction, NoContent, ModelUnavailable, ModelRejected, Configuration, Storage, Timeout, PartialLoss, WorkerLost, Cancelled, Internal." },
+                            hasWarnings = new { type = "boolean", description = "Optional: true for jobs with warnings (work they dropped), false for jobs without." }
                         }
                     }
                 },
                 new
                 {
                     name = "pneuma_get_job",
-                    description = "Fetch a single full ingestion job by id, including its stage, status, error, and graph/index ids.",
+                    description = "Fetch a single full ingestion job by id, including its stage, status, error, failureCategory, warnings (work it dropped but completed without), completeness counters, and graph/index ids.",
                     inputSchema = new
                     {
                         type = "object",
@@ -207,6 +210,139 @@ namespace Pneuma.Server.Mcp
                         properties = new { id = new { type = "string", description = "Content link id." } },
                         required = new[] { "id" }
                     }
+                },
+                new
+                {
+                    name = "pneuma_set_link_refresh",
+                    description = "Keep a URL link current: set how often Pneuma re-checks it for changes (refreshIntervalMinutes: 0 for off, or 60 to 525600), or useSubjectDefault to follow the subject's default. A check is a conditional GET; the page is re-ingested only when it changed. refreshNow also checks it immediately. Links a crawl plan manages and pushed content cannot be refreshed this way.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            id = new { type = "string", description = "Link id (lnk_...)." },
+                            refreshIntervalMinutes = new { type = "integer", description = "Minutes between checks: 0 (off) or 60 to 525600." },
+                            useSubjectDefault = new { type = "boolean", description = "Follow the subject's default interval instead." },
+                            refreshNow = new { type = "boolean", description = "Also check the link now." }
+                        },
+                        required = new[] { "id" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_submit_content",
+                    description = "Add text you already have (notes, a transcript, a generated report, a record from another system) to a subject's knowledge so it can be searched and cited. The content is stored and ingested asynchronously: the result returns the link and job ids, and pneuma_get_job shows progress (usually seconds to a few minutes). Pass an externalKey you can reuse: pushing again with the same key replaces that content rather than adding a duplicate, so use it whenever you update something you wrote before. Never submit credentials, secrets, or personal data. Content types: text/plain, text/markdown, text/html, application/json; at most 10 MB.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id to add the content to." },
+                            content = new { type = "string", description = "The content text." },
+                            contentType = new { type = "string", description = "text/plain, text/markdown, text/html, or application/json." },
+                            title = new { type = "string", description = "Optional title (also used as the document title in chunk headers)." },
+                            externalKey = new { type = "string", description = "Optional stable key; a later push with the same key replaces this content." },
+                            labels = new { type = "array", items = new { type = "string" }, description = "Optional labels stamped on every chunk." },
+                            tags = new { type = "object", description = "Optional key/value tags stamped on every chunk." }
+                        },
+                        required = new[] { "subjectId", "content", "contentType" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_crawl_plans",
+                    description = "Enumerate crawl plans (sources a subject is kept in sync with: a web site, a sitemap, a GitHub repository, an S3, Azure Blob, or Google Cloud Storage bucket, a CIFS or NFS share, or a server folder) as small summaries, paged. Optionally pass subjectId. Use pneuma_get_crawl_plan for the full plan.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Only this subject's plans." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_crawl_plan",
+                    description = "Fetch one crawl plan by id: its settings, filter, schedule, flags, last and next run, and which secrets are set (secret values are never returned).",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl plan id (cpl_...)." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_create_crawl_plan",
+                    description = "Create a crawl plan that keeps a subject in sync with a source. 'plan' has name, type (Web, Sitemap, S3, Cifs, Nfs, GitHub, AzureBlob, GoogleCloud, LocalFolder), the settings object named after the type in camelCase (for example web: { startUrls: [...] }), and optional filter, schedule ({ type: Manual|Interval|Cron, intervalMinutes, cronExpression, timeZone }), processAdditions, processUpdates, processDeletions (default false), maxDeletionFraction, labels, and tags. Only create plans the user asked for; a plan can ingest many documents. Test it with pneuma_test_crawl_plan and pneuma_preview_crawl_plan before starting it.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject the plan fills." },
+                            plan = new { type = "object", description = "The crawl plan (see the description)." }
+                        },
+                        required = new[] { "subjectId", "plan" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_update_crawl_plan",
+                    description = "Replace a crawl plan's configuration. 'plan' has the same shape as for creation and replaces every configurable field; the type cannot change. Secrets left empty keep their stored values; list names in plan.clearSecrets to remove them.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            id = new { type = "string", description = "Crawl plan id." },
+                            plan = new { type = "object", description = "The full configuration." }
+                        },
+                        required = new[] { "id", "plan" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_test_crawl_plan",
+                    description = "Test a crawl plan's connection step by step (settings, DNS, TCP, authentication, listing the root). Returns each step with success and a message saying what to fix.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl plan id." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_preview_crawl_plan",
+                    description = "Preview what a crawl plan would add, update, retry, delete, and skip if it ran now, without changing anything. Returns counts and up to 500 objects.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl plan id." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_start_crawl_plan",
+                    description = "Start a crawl operation now. Returns the operation; it runs in the background (poll pneuma_get_crawl_operation). Fails if the plan is already running.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl plan id." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_stop_crawl_plan",
+                    description = "Stop a crawl plan's running operation; ingestion jobs that have not started are cancelled.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl plan id." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_crawl_operations",
+                    description = "Enumerate crawl operations (runs) as small summaries, newest first, paged. Optionally pass planId.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            planId = new { type = "string", description = "Only this plan's operations." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." }
+                        }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_crawl_operation",
+                    description = "Fetch one crawl operation: status (Running, Ingesting, Succeeded, PartiallySucceeded, Failed, Cancelled, Held), counts of added, updated, retried, unchanged, deleted, missing, skipped, and failed objects, and the error or held-deletion count.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Crawl operation id (cop_...)." } }, required = new[] { "id" } }
                 },
                 new
                 {
@@ -627,12 +763,16 @@ namespace Pneuma.Server.Mcp
                 "Fetch a single full subject by id.",
                 ObjectSchema(new Dictionary<string, object> { ["id"] = StringProp("Subject id.") }, new[] { "id" })));
 
+            Dictionary<string, object> jobProperties = PagingProperties(null);
+            jobProperties["status"] = StringProp("Optional job status filter.");
+            jobProperties["failureCategory"] = StringProp("Optional failure-category filter (for example Fetch, ModelUnavailable, UnsupportedType).");
+            jobProperties["hasWarnings"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Optional: true for jobs with warnings, false for jobs without." };
             tools.Add(ToolDefinition.Function("pneuma_enumerate_jobs",
-                "Enumerate ingestion jobs as small summaries, paged. Same paging protocol as pneuma_enumerate_subjects. Use pneuma_get_job for the full record.",
-                ObjectSchema(PagingProperties(null), null)));
+                "Enumerate ingestion jobs as small summaries, paged. Same paging protocol as pneuma_enumerate_subjects. Optional status, failureCategory, and hasWarnings filters. Use pneuma_get_job for the full record.",
+                ObjectSchema(jobProperties, null)));
 
             tools.Add(ToolDefinition.Function("pneuma_get_job",
-                "Fetch a single full ingestion job by id, including its stage, status, and error.",
+                "Fetch a single full ingestion job by id, including its stage, status, error, failureCategory, warnings, and completeness counters.",
                 ObjectSchema(new Dictionary<string, object> { ["id"] = StringProp("Ingestion job id.") }, new[] { "id" })));
 
             tools.Add(ToolDefinition.Function("pneuma_ingestion_summary",

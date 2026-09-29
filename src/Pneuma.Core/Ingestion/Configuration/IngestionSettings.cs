@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Ingestion.Configuration
 {
     using System;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Integrations.Implementations;
 
     /// <summary>
@@ -40,6 +41,23 @@ namespace Pneuma.Core.Ingestion.Configuration
         {
             get { return _RetryBackoffBaseMs; }
             set { _RetryBackoffBaseMs = Math.Clamp(value, 0, 300000); }
+        }
+
+        /// <summary>
+        /// What happens when a job finishes but dropped some of its work (a failed classification batch, a failed
+        /// summary, or a cell node that could not be created). <c>Warn</c> (the default) completes the job and records
+        /// a warning per loss; <c>Fail</c> fails the job with category PartialLoss so it is retried.
+        /// </summary>
+        public PartialLossPolicyEnum PartialLossPolicy { get; set; } = PartialLossPolicyEnum.Warn;
+
+        /// <summary>
+        /// Largest content accepted by the content push API for one item, in bytes. Default 10485760 (10 MB); clamped to
+        /// [1024, 104857600].
+        /// </summary>
+        public int MaxInlineContentBytes
+        {
+            get { return _MaxInlineContentBytes; }
+            set { _MaxInlineContentBytes = Math.Clamp(value, 1024, 104857600); }
         }
 
         /// <summary>Maximum backoff, in milliseconds, between retry attempts. Default 60000; clamped to [0, 600000].</summary>
@@ -157,6 +175,17 @@ namespace Pneuma.Core.Ingestion.Configuration
         /// </summary>
         public IngestionStageConcurrencySettings StageConcurrency { get; set; } = new IngestionStageConcurrencySettings();
 
+        /// <summary>
+        /// Limits on what the content fetchers and crawlers may reach (no private or internal addresses unless
+        /// allow-listed), how much they may download, whether invalid certificates are accepted, and how many requests
+        /// may run against one host at once. Applied at startup.
+        /// </summary>
+        public FetchSafetySettings FetchSafety
+        {
+            get { return _FetchSafety; }
+            set { _FetchSafety = value ?? new FetchSafetySettings(); }
+        }
+
         #endregion
 
         #region Private-Members
@@ -175,6 +204,8 @@ namespace Pneuma.Core.Ingestion.Configuration
         private int _ClassificationBatchConcurrency = 4;
         private int _BrowserNavigationTimeoutMs = 60000;
         private string _UserAgent = HttpContentFetcher.DefaultUserAgent;
+        private FetchSafetySettings _FetchSafety = new FetchSafetySettings();
+        private int _MaxInlineContentBytes = 10485760;
 
         #endregion
     }

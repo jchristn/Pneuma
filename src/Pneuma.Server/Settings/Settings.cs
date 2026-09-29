@@ -2,8 +2,10 @@ namespace Pneuma.Server.Settings
 {
     using System;
     using System.Text.Json.Serialization;
+    using Pneuma.Core.Crawling;
     using Pneuma.Core.Database;
     using Pneuma.Core.Ingestion.Configuration;
+    using Pneuma.Core.Ingestion.Refresh;
     using Pneuma.Core.Observability;
 
     /// <summary>
@@ -64,6 +66,27 @@ namespace Pneuma.Server.Settings
 
         /// <summary>First-boot seeding options.</summary>
         public SeedOptions Seed { get; set; } = new SeedOptions();
+
+        /// <summary>Scheduled link refresh settings.</summary>
+        public LinkRefreshSettings LinkRefresh
+        {
+            get { return _LinkRefresh; }
+            set { _LinkRefresh = value ?? new LinkRefreshSettings(); }
+        }
+
+        /// <summary>Crawl plan scheduling settings.</summary>
+        public CrawlingSettings Crawling
+        {
+            get { return _Crawling; }
+            set { _Crawling = value ?? new CrawlingSettings(); }
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private CrawlingSettings _Crawling = new CrawlingSettings();
+        private LinkRefreshSettings _LinkRefresh = new LinkRefreshSettings();
 
         #endregion
     }

@@ -104,7 +104,8 @@ namespace Pneuma.Server.Services
                 RequestHeaders = RedactHeaders(ctx.Request.Headers)
             };
 
-            string? requestBody = ctx.Request.DataAsString;
+            // Secret-named JSON values (passwords, API keys, tokens, crawl-plan credentials) are masked before storage.
+            string? requestBody = JsonBodyRedactor.Redact(ctx.Request.DataAsString);
             AttachRequestBody(entry, requestBody);
 
             string? responseBody = ctx.Response.DataAsString;

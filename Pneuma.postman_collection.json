@@ -56,6 +56,14 @@
     {
       "key": "modelRunnerId",
       "value": ""
+    },
+    {
+      "key": "crawlPlanId",
+      "value": ""
+    },
+    {
+      "key": "crawlOperationId",
+      "value": ""
     }
   ],
   "auth": {
@@ -230,6 +238,24 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/v1.0/model-runners"
+          }
+        },
+        {
+          "name": "Create Model Runner (with retry and concurrency limits)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/model-runners",
+            "description": "Create a model endpoint. maxConcurrentRequests caps requests in flight to it across ingestion and chat (requests beyond it wait); maxRetries is how many times a transient failure (408, 429, 502, 503, 504) is retried with jittered backoff that honors Retry-After. Secrets such as apiKey are write-only. maxInputTokens is the largest embedding input in the model's tokens (0 uses the known limit for the model family); chunks are sized to fit it.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"Embedding\",\n  \"provider\": \"Ollama\",\n  \"name\": \"shared-gateway-embeddings\",\n  \"model\": \"nomic-embed-text\",\n  \"endpoint\": \"http://ollama:11434\",\n  \"active\": true,\n  \"maxConcurrentRequests\": 4,\n  \"maxRetries\": 5,\n  \"maxInputTokens\": 0\n}"
+            }
           }
         },
         {
@@ -447,7 +473,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null\n}"
+              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject. Answers are grounded in the archive, with sources.\",\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null\n}"
             },
             "url": "{{baseUrl}}/v1.0/subjects"
           }
@@ -509,6 +535,42 @@
           }
         },
         {
+          "name": "Submit Link (private address, 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links",
+            "description": "Negative example: a URL whose host is a private IP literal or localhost is refused by the fetch-safety policy with 400 and a FetchBlocked audit record. Allow the host in Ingestion.FetchSafety.AllowedPrivateHosts to ingest it.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"http://127.0.0.1:8600/\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Link (unsupported scheme, 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/links",
+            "description": "Negative example: only http and https URLs can be ingested; file, ftp, and other schemes return 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"file:///etc/passwd\"\n}"
+            }
+          }
+        },
+        {
           "name": "List Links",
           "request": {
             "method": "GET",
@@ -562,8 +624,21 @@
           "description": "Queues a fresh ingestion job that forces a full re-run of this link. The link's content hash is cleared first so the delta-skip can't short-circuit the pipeline. Returns 202 Accepted with the created job.",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/v1.0/links/{{linkId}}/reingest"
-          }
+            "url": "{{baseUrl}}/v1.0/links/{{linkId}}/reingest",
+            "description": "Queue a fresh ingestion job for the link (202). The previous version stays searchable until the new job has indexed the new content; then the earlier chunks and Source and Cell graph nodes are removed and the link's currentJobId moves to the new job."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('re-ingest is accepted', function () { pm.response.to.have.status(202); });",
+                  "pm.test('a new job is returned', function () { pm.expect(pm.response.json().id).to.match(/^job_/); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Reingest Links (bulk)",
@@ -584,10 +659,103 @@
           }
         },
         {
+          "name": "Set Link Refresh Schedule",
+          "description": "Set how often Pneuma re-checks this URL link for changes: refreshIntervalMinutes 0 (off) or 60 to 525600, or useSubjectDefault. Returns the link with its nextRefreshUtc. 400 for pushed content, crawled links, or an invalid interval.",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshIntervalMinutes\": 1440\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/links/{{linkId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('schedule is set', function () { pm.response.to.have.status(200); });",
+                  "pm.test('interval is saved', function () { pm.expect(pm.response.json().refreshIntervalMinutes).to.eql(1440); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set Link Refresh Schedule (bulk)",
+          "description": "Set the refresh schedule of several links. Returns { updated, skipped } where skipped lists ids that are unknown or cannot be refreshed.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"{{linkId}}\"\n  ],\n  \"useSubjectDefault\": true\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/links/refresh-interval"
+          }
+        },
+        {
+          "name": "Check Link for Changes Now",
+          "description": "Conditional GET of the link now. outcome is Unchanged, Queued (a re-ingest job with trigger Refresh was queued), Busy, or Failed (the current version is kept and the check backs off).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/links/{{linkId}}/refresh"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('check runs', function () { pm.response.to.have.status(200); });",
+                  "pm.test('an outcome is returned', function () { pm.expect(pm.response.json().outcome).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "List Jobs",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/v1.0/jobs?status=&maxResults=100&order=desc"
+            "url": "{{baseUrl}}/v1.0/jobs?status=&failureCategory=&hasWarnings=&maxResults=100&order=desc",
+            "description": "List ingestion jobs, newest first. Optional filters: status (Queued, Processing, Completed, Failed, Cancelled), failureCategory (why a job failed, for example Fetch or ModelUnavailable), and hasWarnings (true or false). Leave a filter empty to ignore it."
+          }
+        },
+        {
+          "name": "List Failed Jobs By Category",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs?status=Failed&failureCategory=Fetch&maxResults=100",
+            "description": "Failed jobs whose source could not be fetched. Change failureCategory to any category in REST_API.md."
+          }
+        },
+        {
+          "name": "List Jobs With Warnings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs?hasWarnings=true&maxResults=100",
+            "description": "Jobs that completed but dropped some work (a failed classification batch, summary, or cell node). Each job lists its warnings."
+          }
+        },
+        {
+          "name": "List Jobs (invalid category, 400)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/jobs?failureCategory=Bogus",
+            "description": "Negative example: an unknown failureCategory returns 400 BadRequest."
           }
         },
         {
@@ -601,7 +769,8 @@
           "name": "Job Detail",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/v1.0/jobs/:id"
+            "url": "{{baseUrl}}/v1.0/jobs/:id",
+            "description": "Job detail: the job (with failureCategory, warnings, and completeness), its stage events, every attempt, and remediation for its failure category."
           }
         },
         {
@@ -680,7 +849,7 @@
             "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject — answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"example-subject\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Example Subject's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\",\n  \"concurrencyOverrides\": {\n    \"embedding\": 2,\n    \"maxConcurrentTasks\": 2\n  }\n}"
+              "raw": "{\n  \"displayName\": \"Example Subject\",\n  \"type\": \"Topic\",\n  \"description\": \"A demonstration subject for the API examples.\",\n  \"tagline\": \"Ask about Example Subject. Answers are grounded in the archive, with sources.\",\n  \"urlSlug\": \"example-subject\",\n  \"thinkingEnabled\": true,\n  \"historyRetentionDays\": 90,\n  \"embeddingModel\": \"{{embeddingEndpointId}}\",\n  \"inferenceModel\": \"{{completionEndpointId}}\",\n  \"collection\": \"{{collectionId}}\",\n  \"rerankingModel\": null,\n  \"promptRewriteModel\": null,\n  \"systemPrompt\": \"Answer in Example Subject's voice where appropriate.\",\n  \"ontologyClassifyPrompt\": \"\",\n  \"ontologyDefinitionPrompt\": \"\",\n  \"rerankingPrompt\": \"\",\n  \"promptRewritePrompt\": \"\",\n  \"concurrencyOverrides\": {\n    \"embedding\": 2,\n    \"maxConcurrentTasks\": 2\n  }\n}"
             }
           }
         },
@@ -823,6 +992,486 @@
           }
         }
       ]
+    },
+    {
+      "name": "Inline content",
+      "item": [
+        {
+          "name": "Push Markdown",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/content",
+            "description": "Push Markdown into a subject. Returns 201 with the inline link and the queued job id. The declared contentType replaces type detection.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Release notes\",\n  \"content\": \"# Release notes\\n\\nVersion 2 adds crawl plans.\",\n  \"contentType\": \"text/markdown\",\n  \"labels\": [\n    \"release\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Push JSON",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/content",
+            "description": "Push a JSON document; it is extracted through DocumentAtom's JSON route.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Product record\",\n  \"content\": \"{\\\"sku\\\":\\\"A-100\\\",\\\"name\\\":\\\"Widget\\\",\\\"description\\\":\\\"A small widget.\\\"}\",\n  \"contentType\": \"application/json\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Upsert by external key",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/content",
+            "description": "Push content with an externalKey. Sending it again with the same key replaces the content (200, replaced: true) instead of adding a duplicate.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Team notes\",\n  \"content\": \"Updated notes.\",\n  \"contentType\": \"text/plain\",\n  \"externalKey\": \"team-notes\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Push batch (one invalid item)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/content/batch",
+            "description": "Push several items at once (at most 100). The third item has an unsupported contentType and is reported as rejected; the others are created.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"content\": \"One.\",\n      \"contentType\": \"text/plain\"\n    },\n    {\n      \"content\": \"<p>Two.</p>\",\n      \"contentType\": \"text/html\"\n    },\n    {\n      \"content\": \"Three.\",\n      \"contentType\": \"application/pdf\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Push (unsupported type, 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/content",
+            "description": "Negative example: contentType must be text/plain, text/markdown, text/html, or application/json.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"x\",\n  \"contentType\": \"application/pdf\"\n}"
+            }
+          }
+        }
+      ],
+      "description": "Push text, Markdown, HTML, or JSON into a subject without a URL. Content is stored and ingested like a link; an externalKey makes a push an upsert."
+    },
+    {
+      "name": "Crawl plans",
+      "item": [
+        {
+          "name": "List crawl plan types",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-plan-types",
+            "description": "The crawler types this server supports, each with its settings schema (fields, kinds, ranges, options, defaults, and which are secrets)."
+          }
+        },
+        {
+          "name": "Create Web crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan that crawls a site into the subject nightly at 03:00 UTC. Returns 201 with the plan; save its id as crawlPlanId. 400 for invalid settings or schedule, 404 for an unknown subject, 400 when the subject has no models or collection.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product docs\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ],\n    \"maxDepth\": 3,\n    \"maxPages\": 500,\n    \"scope\": \"SameHost\",\n    \"authentication\": \"None\"\n  },\n  \"filter\": {\n    \"excludePatterns\": [\n      \"*/archive/*\"\n    ],\n    \"allowedContentTypes\": [\n      \"text/html\",\n      \"application/pdf\"\n    ]\n  },\n  \"schedule\": {\n    \"type\": \"Cron\",\n    \"cronExpression\": \"0 3 * * *\",\n    \"timeZone\": \"UTC\"\n  },\n  \"processDeletions\": false,\n  \"labels\": [\n    \"docs\"\n  ],\n  \"tags\": {\n    \"source\": \"docs-site\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create S3 crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a daily S3 plan with deletions on. The secretKey is stored encrypted and never returned; the response lists it in secretsSet.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Policy bucket\",\n  \"type\": \"S3\",\n  \"s3\": {\n    \"bucket\": \"policies\",\n    \"region\": \"us-west-2\",\n    \"prefix\": \"published/\",\n    \"accessKey\": \"AKIA...\",\n    \"secretKey\": \"set-once-never-returned\"\n  },\n  \"schedule\": {\n    \"type\": \"Interval\",\n    \"intervalMinutes\": 1440\n  },\n  \"processDeletions\": true,\n  \"maxDeletionFraction\": 0.2\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Sitemap crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan that ingests the URLs in a site's sitemaps (a robots.txt URL is read for its Sitemap lines). lastmod is the version, so unchanged pages are not re-read.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Docs sitemap\",\n  \"type\": \"Sitemap\",\n  \"sitemap\": {\n    \"sitemapUrls\": [\n      \"https://docs.example.com/sitemap.xml\"\n    ],\n    \"maxUrls\": 5000,\n    \"useLastModified\": true\n  },\n  \"schedule\": {\n    \"type\": \"Interval\",\n    \"intervalMinutes\": 720\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create CIFS crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over an SMB share. The password is stored encrypted and never returned. When Pneuma runs in a container, host localhost means the host machine.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Policies share\",\n  \"type\": \"Cifs\",\n  \"cifs\": {\n    \"host\": \"files.example.com\",\n    \"port\": 445,\n    \"share\": \"Policies\",\n    \"path\": \"Published\",\n    \"includeSubfolders\": true,\n    \"domain\": \"CONTOSO\",\n    \"username\": \"crawler\",\n    \"password\": \"set-once-never-returned\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create NFS crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over an NFSv3 export (AUTH_SYS). mountPort is the server's mountd port (20048 on most Linux servers).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Engineering export\",\n  \"type\": \"Nfs\",\n  \"nfs\": {\n    \"host\": \"nfs.example.com\",\n    \"port\": 2049,\n    \"mountPort\": 20048,\n    \"export\": \"/srv/docs\",\n    \"path\": \"handbook\",\n    \"userId\": 1000,\n    \"groupId\": 1000,\n    \"version\": \"V3\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create GitHub crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over a GitHub repository's default branch, limited to the docs folder. The token is optional (needed for private repositories and a higher rate limit), stored encrypted, and never returned.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Handbook repo\",\n  \"type\": \"GitHub\",\n  \"gitHub\": {\n    \"repositoryUrl\": \"https://github.com/acme/handbook\",\n    \"path\": \"docs\",\n    \"token\": \"set-once-never-returned\"\n  },\n  \"schedule\": {\n    \"type\": \"Cron\",\n    \"cronExpression\": \"0 4 * * *\",\n    \"timeZone\": \"UTC\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Azure Blob crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over an Azure Blob container. Leave endpoint empty for https://{account}.blob.core.windows.net/.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Contracts container\",\n  \"type\": \"AzureBlob\",\n  \"azureBlob\": {\n    \"accountName\": \"acmestorage\",\n    \"container\": \"contracts\",\n    \"prefix\": \"signed/\",\n    \"accessKey\": \"set-once-never-returned\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Google Cloud crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over a Google Cloud Storage bucket. jsonCredentials is the service account key file contents, stored encrypted and never returned.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Research bucket\",\n  \"type\": \"GoogleCloud\",\n  \"googleCloud\": {\n    \"projectId\": \"acme-research\",\n    \"bucket\": \"papers\",\n    \"prefix\": \"published/\",\n    \"jsonCredentials\": \"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"acme-research\\\",\\\"private_key\\\":\\\"...\\\",\\\"client_email\\\":\\\"crawler@acme-research.iam.gserviceaccount.com\\\"}\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create local folder crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Create a plan over a folder on the Pneuma server. Available only when Crawling.AllowedLocalRoots lists a root containing the folder; otherwise 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mounted docs\",\n  \"type\": \"LocalFolder\",\n  \"localFolder\": {\n    \"folder\": \"/data/docs\",\n    \"includeSubfolders\": true\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "List crawl plans",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-plans?maxResults=50",
+            "description": "List crawl plans (add subjectId= to scope to a subject)."
+          }
+        },
+        {
+          "name": "List subject crawl plans",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "List one subject's crawl plans."
+          }
+        },
+        {
+          "name": "Get crawl plan",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}",
+            "description": "Read a plan. Secret values are never returned."
+          }
+        },
+        {
+          "name": "Replace crawl plan",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}",
+            "description": "Replace the configuration. Secrets left out keep their stored values; names in clearSecrets are removed. The type cannot change (400).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product docs (weekly)\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ],\n    \"maxDepth\": 3,\n    \"maxPages\": 500,\n    \"scope\": \"SameHost\",\n    \"authentication\": \"None\"\n  },\n  \"filter\": {\n    \"excludePatterns\": [\n      \"*/archive/*\"\n    ],\n    \"allowedContentTypes\": [\n      \"text/html\",\n      \"application/pdf\"\n    ]\n  },\n  \"schedule\": {\n    \"type\": \"Cron\",\n    \"cronExpression\": \"0 3 * * 0\",\n    \"timeZone\": \"America/New_York\"\n  },\n  \"processDeletions\": false,\n  \"labels\": [\n    \"docs\"\n  ],\n  \"tags\": {\n    \"source\": \"docs-site\"\n  },\n  \"clearSecrets\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Test draft crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/test",
+            "description": "Test a draft plan's connection without saving anything. Add ?fromPlanId= to fill empty secrets from a stored plan while editing it.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product docs\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ],\n    \"maxDepth\": 3,\n    \"maxPages\": 500,\n    \"scope\": \"SameHost\",\n    \"authentication\": \"None\"\n  },\n  \"filter\": {\n    \"excludePatterns\": [\n      \"*/archive/*\"\n    ],\n    \"allowedContentTypes\": [\n      \"text/html\",\n      \"application/pdf\"\n    ]\n  },\n  \"schedule\": {\n    \"type\": \"Cron\",\n    \"cronExpression\": \"0 3 * * *\",\n    \"timeZone\": \"UTC\"\n  },\n  \"processDeletions\": false,\n  \"labels\": [\n    \"docs\"\n  ],\n  \"tags\": {\n    \"source\": \"docs-site\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Test crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/test",
+            "description": "Test the stored plan's connection step by step; each layer says what was checked and what to fix."
+          }
+        },
+        {
+          "name": "Preview crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/preview",
+            "description": "What a run would add, update, retry, delete, and skip right now. Nothing is changed. 502 when the source cannot be listed."
+          }
+        },
+        {
+          "name": "Start crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/start",
+            "description": "Start an operation now. 202 with the operation (save its id as crawlOperationId); 409 when the plan is already running."
+          }
+        },
+        {
+          "name": "Stop crawl plan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/stop",
+            "description": "Stop the running operation; queued ingestion jobs are cancelled. 409 when the plan is idle."
+          }
+        },
+        {
+          "name": "List plan operations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/operations",
+            "description": "The plan's operations, newest first."
+          }
+        },
+        {
+          "name": "List plan objects",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}/objects?status=Failed",
+            "description": "Objects the plan tracks, optionally by status (Active, Missing, Failed, Excluded)."
+          }
+        },
+        {
+          "name": "Delete crawl plan",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/crawl-plans/{{crawlPlanId}}?deleteLinks=false",
+            "description": "Delete the plan. With deleteLinks=true its links are deleted too; otherwise they are kept and detached. 409 while running."
+          }
+        },
+        {
+          "name": "Create crawl plan (invalid cron, 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Negative example: an invalid cron expression is rejected with 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ]\n  },\n  \"schedule\": {\n    \"type\": \"Cron\",\n    \"cronExpression\": \"every night\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create crawl plan (short interval, 400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Negative example: intervals shorter than 5 minutes are rejected with 400.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Too often\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ]\n  },\n  \"schedule\": {\n    \"type\": \"Interval\",\n    \"intervalMinutes\": 1\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Web crawl plan (robots off, admin only)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/crawl-plans",
+            "description": "Negative example for non-administrators: turning robots.txt off requires a system or tenant administrator (403 otherwise) and is audited.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Impolite crawl\",\n  \"type\": \"Web\",\n  \"web\": {\n    \"startUrls\": [\n      \"https://docs.example.com/\"\n    ],\n    \"respectRobotsTxt\": false\n  }\n}"
+            }
+          }
+        }
+      ],
+      "description": "Keep a subject in sync with a web site, sitemap, S3 bucket, or CIFS or NFS share. Secret settings (passwords, keys, tokens) are write-only: they are stored encrypted, never returned, and redacted from request history; secretsSet names the ones stored. Deletions are off by default, and a run that would delete more than maxDeletionFraction of the plan's links is held for confirmation."
+    },
+    {
+      "name": "Crawl operations",
+      "item": [
+        {
+          "name": "List crawl operations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-operations?planId={{crawlPlanId}}",
+            "description": "Operations, newest first; filter by planId and status (Running, Ingesting, Succeeded, PartiallySucceeded, Failed, Cancelled, Held)."
+          }
+        },
+        {
+          "name": "Get crawl operation",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-operations/{{crawlOperationId}}",
+            "description": "One operation with its counts and error."
+          }
+        },
+        {
+          "name": "List operation objects",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/crawl-operations/{{crawlOperationId}}/objects?action=Add",
+            "description": "What the operation did with each object; filter by action (Add, Update, Retry, Delete, Skip, Fail)."
+          }
+        },
+        {
+          "name": "Confirm held deletions",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/crawl-operations/{{crawlOperationId}}/confirm-deletions",
+            "description": "Run the deletions a Held operation is waiting on. 409 when the operation is not Held."
+          }
+        }
+      ],
+      "description": "Runs of crawl plans: counts, per-object results, and confirmation of held deletions."
     }
   ]
 }

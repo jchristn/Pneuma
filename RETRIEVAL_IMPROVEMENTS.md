@@ -36,7 +36,7 @@ every dashboard's Ask screen (`AgenticChatService.cs`, `POST /v1.0/chat/stream`)
 go through `McpGraphTools.SearchAsync` (`src/Pneuma.Server/Mcp/McpGraphTools.cs:71-130`), which is a separate,
 full-text-only implementation.
 
-Pneuma's own history of retrieval work is in `CKG_IMPROVEMENTS.md`: RRF, MMR, the cross-encoder option, the embedding
+Pneuma's own history of retrieval work is in `archive/CKG_IMPROVEMENTS.md`: RRF, MMR, the cross-encoder option, the embedding
 cache, content-hash delta skip, and multi-hop expansion are already done there, and this document builds on that list
 rather than repeating it.
 
@@ -77,7 +77,7 @@ letter in the next section.
 | 26 | Count query on ranked text search (Isis #8) | Not applicable | Fixed upstream in RecallDB (`COUNT(*) OVER ()`), and Pneuma reads no totals from search. | |
 | 27 | Single-call RecallDB hybrid (Isis #15) | Applicable | Pneuma has its own RecallDB client, so it can send `Hybrid` options without waiting for an SDK release. The single call also fixes a vector-leg under-fill described under Q. | Q |
 | 28 | Split multi-part questions into sub-queries (Isis #16) | Partially applicable | The agentic loop can issue several searches (`ChatMaxToolIterations` 6); the grounded path cannot. Tracked as CKG item 10. | |
-| 29 | Query expansion (Isis #17) | Partially applicable | A per-subject prompt-rewrite model exists (`RewriteQuestionAsync`, lines 554-572). No hypothetical-answer expansion. | |
+| 29 | Query expansion (Isis #17) | Partially applicable | A per-subject prompt-rewrite model exists (`GroundedQueryService.RewriteQuestionAsync`, line 622), but it replaces the question rather than adding to it, and there is no hypothetical-answer expansion. | Z, AA |
 | 30 | Search legs run in parallel (Isis round 1) | Applicable | The text leg finishes before the query is even embedded (`GatherAsync`, lines 1022-1112), and every hit is resolved with a serial LiteGraph read (lines 1039 and 1085). | H |
 | 31 | URL-unsafe chunk document keys (Isis `#` bug) | Not applicable | Keys are `jobId_position` (`IndexingStage.cs:97`), all URL-safe characters. | |
 
@@ -167,6 +167,8 @@ simplicity of 8 or more are good candidates for a first round.
 | 23 | U | Cross-link duplicate detection at write time | 5 | 5 | 10 |
 | 24 | W | Serialize RecallDB tenant and collection provisioning and adopt on conflict | 3 | 7 | 10 |
 | 25 | V | Source-date recency signal for dated corpora | 3 | 6 | 9 |
+| 26 | AA | Conversation-aware question rewrite: give `RewriteQuestionAsync` the earlier turns so follow-ups become standalone queries | 6 | 6 | 12 |
+| 27 | Z | Additive, weighted query rewrite: keep the original question and fuse the rewrite, a hypothetical answer, and keyword expansion at lower weight | 5 | 6 | 11 |
 
 ## Proposal details
 
@@ -412,6 +414,26 @@ For corpora where source date matters, tag chunks with the source's published or
 RRF signal, default 0, as Isis did with `RecencyWeight`. Isis found that recency costs accuracy on undated or
 bulk-imported corpora, which describes most Pneuma subjects, so leave it off by default.
 
+### Z. Additive, weighted query rewrite
+
+`RewriteQuestionAsync` replaces the question with the rewrite model's output (`GroundedQueryService.cs:213`,
+`RetrieveForAnswerAsync`), so a rewrite that drops an identifier or drifts from the question loses what the original
+query would have found. Keep the original question at full weight and fuse the rewritten forms at a lower weight (0.3 to
+0.5) with the existing reciprocal-rank fusion: the rewrite itself, a short hypothetical answer embedded for the vector
+leg (answers resemble stored chunks more than questions do), and keyword expansion for the full-text leg. Use one
+model-agnostic prompt at temperature 0, and fall back to the original question when the reply cannot be used. Evidence
+from the sibling platforms: AssistantHub's replace-the-query rewrite gained only +0.010 nDCG for 2.5 s per query, and
+Isis's equal-weight query decomposition lowered nDCG (isis-live 0.879 to 0.844), which is why the original must stay
+dominant. Measure on paraphrase and exact-identifier questions, with and without the cross-encoder path.
+
+### AA. Conversation-aware question rewrite
+
+The agentic chat path rewrites only the latest user turn (`AgenticChatService.cs:181`), without the turns before it, so
+a follow-up such as "and the side effects?" is rewritten with no idea what it follows. The subject name helps, but not
+when the earlier turn named something more specific. Pass the recent turns (bounded, for example the last three) to the
+rewrite so it can produce a standalone query, and search that alongside the original turn at full weight. Needs a small
+multi-turn test set to measure.
+
 ## Benchmarking Pneuma
 
 The Isis harness in `C:\Code\AgentMemory\src\Test.Benchmark` can measure Pneuma with an adapter, and the reuse is worth
@@ -485,5 +507,7 @@ Mark each item with a decision (do, defer, drop), an owner, and notes. Letters m
 - [ ] U. Chunk content-hash tag and cross-link duplicate handling. Decision: ____ Owner: ____ Notes: ____
 - [ ] W. Serialized provisioning with adopt-on-conflict; upstream RecallDB index-name fix. Decision: ____ Owner: ____ Notes: ____
 - [ ] V. Optional source-date recency signal, default off. Decision: ____ Owner: ____ Notes: ____
+- [ ] Z. Additive, weighted query rewrite (original kept at full weight; rewrite, hypothetical answer, and keyword expansion fused lower). Decision: ____ Owner: ____ Notes: ____
+- [ ] AA. Conversation-aware question rewrite using the earlier turns. Decision: ____ Owner: ____ Notes: ____
 - [ ] Benchmark adapter: `IBenchmarkTarget`, `PneumaTarget`, document server, SSE reader for agentic chat, Pneuma-specific report fields. Decision: ____ Owner: ____ Notes: ____
 - [ ] Baseline run on `isis-live` and `atlas` before any fix lands, so every change above has a before and after. Decision: ____ Owner: ____ Notes: ____

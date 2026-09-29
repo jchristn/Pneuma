@@ -50,6 +50,53 @@ namespace Pneuma.Core.Integrations.Models
         public string? ModelId { get; set; } = null;
 
         /// <summary>Overlap between adjacent chunks in tokens, sent as the chunker's <c>OverlapCount</c>. Default 32; clamped to [0, 4096].</summary>
+        /// <summary>
+        /// Context header embedded in front of each chunk (the document title and section headings), or null for none.
+        /// Its token cost is taken out of the chunk budget so header plus chunk still fits the model. The stored chunk
+        /// text never includes it.
+        /// </summary>
+        public string? ContextHeader { get; set; } = null;
+
+        /// <summary>
+        /// Override of the embedding model's input limit in tokens, or null to use the known limit for the model
+        /// family. Chunks are sized to fit it less the safety margin. Minimum 1 when set.
+        /// </summary>
+        public int? EffectiveInputBudget { get; set; } = null;
+
+        /// <summary>
+        /// Fraction of the model's input limit held back, for runtimes whose tokenizer counts slightly more than the
+        /// local one. Default 0.01; clamped to [0, 0.5].
+        /// </summary>
+        public double SafetyMarginPercentage
+        {
+            get { return _SafetyMarginPercentage; }
+            set { _SafetyMarginPercentage = Math.Clamp(value, 0.0, 0.5); }
+        }
+
+        /// <summary>Tokens held back from the model's input limit in addition to the percentage. Default 2; clamped to [0, 1024].</summary>
+        public int SafetyMarginTokens
+        {
+            get { return _SafetyMarginTokens; }
+            set { _SafetyMarginTokens = Math.Clamp(value, 0, 1024); }
+        }
+
+        /// <summary>Copy these options.</summary>
+        /// <returns>A copy.</returns>
+        public ChunkingOptions Clone()
+        {
+            return new ChunkingOptions
+            {
+                Strategy = Strategy,
+                MaxTokens = MaxTokens,
+                ModelId = ModelId,
+                OverlapCount = OverlapCount,
+                ContextHeader = ContextHeader,
+                EffectiveInputBudget = EffectiveInputBudget,
+                SafetyMarginPercentage = SafetyMarginPercentage,
+                SafetyMarginTokens = SafetyMarginTokens
+            };
+        }
+
         public int OverlapCount
         {
             get { return _OverlapCount; }
@@ -61,6 +108,8 @@ namespace Pneuma.Core.Integrations.Models
         #region Private-Members
 
         private string _Strategy = "FixedTokenCount";
+        private double _SafetyMarginPercentage = 0.01;
+        private int _SafetyMarginTokens = 2;
         private int _MaxTokens = 256;
         private int _OverlapCount = 32;
 

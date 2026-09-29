@@ -46,6 +46,13 @@
     "PruneIntervalMinutes": 60
   },
   "Ingestion": {
+    "FetchSafety": {
+      "BlockPrivateAddresses": true,
+      "AllowedPrivateHosts": [],
+      "MaxDownloadBytes": 104857600,
+      "AllowInvalidCertificates": false,
+      "MaxRequestsPerHost": 2
+    },
     "MaxConcurrentTasks": 8,
     "PollIntervalMs": 2000,
     "MaxAttempts": 3,
@@ -139,5 +146,17 @@
     "OllamaBaseUrl": "http://ollama:11434",
     "OpenAiBaseUrl": "https://api.openai.com/v1",
     "GeminiBaseUrl": "https://generativelanguage.googleapis.com/v1beta"
+  },
+  "Crawling": {
+    "SchedulerEnabled": true,
+    "SchedulerIntervalSeconds": 15,
+    "MaxConcurrentOperations": 2,
+    "ClaimMinutes": 30,
+    "AllowedLocalRoots": []
+  },
+  "LinkRefresh": {
+    "Enabled": true,
+    "IntervalSeconds": 60,
+    "BatchSize": 50
   }
 }

@@ -6,6 +6,7 @@ namespace Pneuma.Core.Ingestion.Stages
     using Pneuma.Core.Ingestion.Pipeline;
     using Pneuma.Core.Integrations;
     using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
@@ -63,6 +64,12 @@ namespace Pneuma.Core.Ingestion.Stages
         /// <summary>Logging module.</summary>
         public LoggingModule Logging { get; }
 
+        /// <summary>
+        /// Retrieves each link's content by its source kind (URL, pushed content, or crawl plan). Built from the fetcher
+        /// and blob store; set its <c>CrawlSource</c> to ingest crawled links.
+        /// </summary>
+        public ContentResolver Resolver { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -111,6 +118,7 @@ namespace Pneuma.Core.Ingestion.Stages
             Concurrency = concurrency ?? throw new ArgumentNullException(nameof(concurrency));
             Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             Classifier = new PolyPromptClassifier(logging);
+            Resolver = new ContentResolver(fetcher, blobs);
         }
 
         #endregion

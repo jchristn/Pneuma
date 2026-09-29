@@ -581,6 +581,53 @@ class PneumaClient:
             "POST", f"/v1.0/subjects/{subject_id}/links", json_body=body
         )
 
+    def submit_content(
+        self,
+        subject_id: str,
+        content: str,
+        content_type: str = "text/markdown",
+        title: Optional[str] = None,
+        external_key: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        """POST /v1.0/subjects/{subjectId}/content. Stores content and queues its ingestion.
+
+        Args:
+            subject_id: The subject to add the content to.
+            content: The content text.
+            content_type: ``text/plain``, ``text/markdown``, ``text/html``, or ``application/json``.
+            title: Optional title (also the document title in chunk headers).
+            external_key: Optional stable key; pushing again with it replaces the content.
+            labels: Optional labels attached to every chunk.
+            tags: Optional key/value tags attached to every chunk.
+
+        Returns:
+            ``{ index, statusCode, replaced, link, jobId }``.
+        """
+        body: Dict[str, Any] = {"content": content, "contentType": content_type}
+        if title is not None:
+            body["title"] = title
+        if external_key is not None:
+            body["externalKey"] = external_key
+        if labels is not None:
+            body["labels"] = labels
+        if tags is not None:
+            body["tags"] = tags
+        return self._request("POST", f"/v1.0/subjects/{subject_id}/content", json_body=body)
+
+    def submit_content_batch(self, subject_id: str, items: List[Dict[str, Any]]) -> Any:
+        """POST /v1.0/subjects/{subjectId}/content/batch: up to 100 items, each reported.
+
+        Args:
+            subject_id: The subject to add the content to.
+            items: Items with the same keys as the ``submit_content`` body (``content``, ``contentType``, ...).
+
+        Returns:
+            ``{ accepted, rejected, results }``.
+        """
+        return self._request("POST", f"/v1.0/subjects/{subject_id}/content/batch", json_body={"items": items})
+
     def submit_links(
         self,
         subject_id: str,
@@ -660,6 +707,84 @@ class PneumaClient:
             params=self._list_params(max_results, skip, order, search),
         )
 
+    # ---- Crawl plans and crawl operations ----
+
+    def list_crawl_plan_types(self) -> Any:
+        """GET /v1.0/crawl-plan-types: the supported crawler types with their settings schemas."""
+        return self._request("GET", "/v1.0/crawl-plan-types")
+
+    def create_crawl_plan(self, subject_id: str, plan: Dict[str, Any]) -> Any:
+        """POST /v1.0/subjects/{subjectId}/crawl-plans: create a plan that keeps a subject in sync with a source.
+
+        Secret settings are write-only: stored encrypted and never returned (``secretsSet`` names them).
+        """
+        return self._request("POST", f"/v1.0/subjects/{subject_id}/crawl-plans", json_body=plan)
+
+    def list_crawl_plans(self, subject_id: Optional[str] = None, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/crawl-plans, optionally for one subject."""
+        return self._request("GET", "/v1.0/crawl-plans", params=self._clean({"subjectId": subject_id, "maxResults": max_results, "skip": skip}))
+
+    def get_crawl_plan(self, plan_id: str) -> Any:
+        """GET /v1.0/crawl-plans/{id}."""
+        return self._request("GET", f"/v1.0/crawl-plans/{plan_id}")
+
+    def update_crawl_plan(self, plan_id: str, plan: Dict[str, Any]) -> Any:
+        """PUT /v1.0/crawl-plans/{id}: replace the configuration; omitted secrets keep their stored values."""
+        return self._request("PUT", f"/v1.0/crawl-plans/{plan_id}", json_body=plan)
+
+    def delete_crawl_plan(self, plan_id: str, delete_links: bool = False) -> Any:
+        """DELETE /v1.0/crawl-plans/{id}; ``delete_links`` also deletes the links the plan created."""
+        return self._request("DELETE", f"/v1.0/crawl-plans/{plan_id}", params={"deleteLinks": "true"} if delete_links else None)
+
+    def test_crawl_plan_draft(self, plan: Dict[str, Any], from_plan_id: Optional[str] = None) -> Any:
+        """POST /v1.0/crawl-plans/test: test a draft plan's connection without saving it."""
+        return self._request("POST", "/v1.0/crawl-plans/test", params={"fromPlanId": from_plan_id} if from_plan_id else None, json_body=plan)
+
+    def test_crawl_plan(self, plan_id: str) -> Any:
+        """POST /v1.0/crawl-plans/{id}/test: each connectivity step."""
+        return self._request("POST", f"/v1.0/crawl-plans/{plan_id}/test")
+
+    def preview_crawl_plan(self, plan_id: str) -> Any:
+        """POST /v1.0/crawl-plans/{id}/preview: what a run would do; nothing is changed."""
+        return self._request("POST", f"/v1.0/crawl-plans/{plan_id}/preview")
+
+    def start_crawl_plan(self, plan_id: str) -> Any:
+        """POST /v1.0/crawl-plans/{id}/start: start an operation now (409 when already running)."""
+        return self._request("POST", f"/v1.0/crawl-plans/{plan_id}/start")
+
+    def stop_crawl_plan(self, plan_id: str) -> Any:
+        """POST /v1.0/crawl-plans/{id}/stop."""
+        return self._request("POST", f"/v1.0/crawl-plans/{plan_id}/stop")
+
+    def list_crawl_plan_operations(self, plan_id: str, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/crawl-plans/{id}/operations, newest first."""
+        return self._request("GET", f"/v1.0/crawl-plans/{plan_id}/operations", params=self._clean({"maxResults": max_results, "skip": skip}))
+
+    def list_crawl_plan_objects(self, plan_id: str, status: Optional[str] = None, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/crawl-plans/{id}/objects, optionally by status (Active, Missing, Failed, Excluded)."""
+        return self._request("GET", f"/v1.0/crawl-plans/{plan_id}/objects", params=self._clean({"status": status, "maxResults": max_results, "skip": skip}))
+
+    def list_crawl_operations(self, plan_id: Optional[str] = None, status: Optional[str] = None, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/crawl-operations, optionally by plan and status."""
+        return self._request("GET", "/v1.0/crawl-operations", params=self._clean({"planId": plan_id, "status": status, "maxResults": max_results, "skip": skip}))
+
+    def get_crawl_operation(self, operation_id: str) -> Any:
+        """GET /v1.0/crawl-operations/{id}."""
+        return self._request("GET", f"/v1.0/crawl-operations/{operation_id}")
+
+    def list_crawl_operation_objects(self, operation_id: str, action: Optional[str] = None, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/crawl-operations/{id}/objects, optionally by action."""
+        return self._request("GET", f"/v1.0/crawl-operations/{operation_id}/objects", params=self._clean({"action": action, "maxResults": max_results, "skip": skip}))
+
+    def confirm_crawl_deletions(self, operation_id: str) -> Any:
+        """POST /v1.0/crawl-operations/{id}/confirm-deletions: run a held operation's deletions."""
+        return self._request("POST", f"/v1.0/crawl-operations/{operation_id}/confirm-deletions")
+
+    @staticmethod
+    def _clean(params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        cleaned = {k: v for k, v in params.items() if v is not None}
+        return cleaned or None
+
     def list_links(
         self,
         max_results: Optional[int] = None,
@@ -687,6 +812,40 @@ class PneumaClient:
     def get_link(self, link_id: str) -> Any:
         """GET /v1.0/links/{id}."""
         return self._request("GET", f"/v1.0/links/{link_id}")
+
+    def set_link_refresh(
+        self,
+        link_id: str,
+        refresh_interval_minutes: Optional[int] = None,
+        use_subject_default: bool = False,
+    ) -> Any:
+        """PUT /v1.0/links/{id} - set a link's scheduled refresh.
+
+        refresh_interval_minutes is 0 (off) or 60 to 525600; use_subject_default follows the subject's default.
+        """
+        body: Dict[str, Any] = {"useSubjectDefault": use_subject_default}
+        if refresh_interval_minutes is not None:
+            body["refreshIntervalMinutes"] = refresh_interval_minutes
+        return self._request("PUT", f"/v1.0/links/{link_id}", json_body=body)
+
+    def bulk_set_link_refresh(
+        self,
+        ids: List[str],
+        refresh_interval_minutes: Optional[int] = None,
+        use_subject_default: bool = False,
+    ) -> Any:
+        """POST /v1.0/links/refresh-interval - set the scheduled refresh of several links.
+
+        Returns {"updated": n, "skipped": [ids]}.
+        """
+        body: Dict[str, Any] = {"ids": ids, "useSubjectDefault": use_subject_default}
+        if refresh_interval_minutes is not None:
+            body["refreshIntervalMinutes"] = refresh_interval_minutes
+        return self._request("POST", "/v1.0/links/refresh-interval", json_body=body)
+
+    def refresh_link_now(self, link_id: str) -> Any:
+        """POST /v1.0/links/{id}/refresh - check a link for changes now; a changed link is re-ingested."""
+        return self._request("POST", f"/v1.0/links/{link_id}/refresh")
 
     def get_link_ingestion_log(self, link_id: str) -> Any:
         """GET /v1.0/links/{id}/log — per-step ingestion log for a link."""
@@ -735,11 +894,15 @@ class PneumaClient:
         skip: Optional[int] = None,
         order: Optional[str] = None,
         search: Optional[str] = None,
+        failure_category: Optional[str] = None,
+        has_warnings: Optional[bool] = None,
     ) -> Any:
         """GET /v1.0/jobs (optional status filter) -> EnumerationResult envelope.
 
         Args:
             status: Optional job status filter.
+            failure_category: Optional failure-category filter (for example ``"Fetch"``).
+            has_warnings: Optional filter: True for jobs with warnings, False for jobs without.
             max_results: Optional page size (server ``maxResults``, default 100).
             skip: Optional number of records to skip.
             order: Optional sort order, ``"asc"`` or ``"desc"`` (default ``desc``).
@@ -752,12 +915,20 @@ class PneumaClient:
             "GET",
             "/v1.0/jobs",
             params=self._list_params(
-                max_results, skip, order, search, extra={"status": status}
+                max_results,
+                skip,
+                order,
+                search,
+                extra={
+                    "status": status,
+                    "failureCategory": failure_category,
+                    "hasWarnings": None if has_warnings is None else ("true" if has_warnings else "false"),
+                },
             ),
         )
 
     def get_job(self, job_id: str) -> Any:
-        """GET /v1.0/jobs/{id} -> { job, events }."""
+        """GET /v1.0/jobs/{id} -> { job, events, attempts, remediation }."""
         return self._request("GET", f"/v1.0/jobs/{job_id}")
 
     def restart_job(self, job_id: str) -> Any:

@@ -31,6 +31,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="db">Database driver.</param>
         /// <param name="processor">Ingestion processor.</param>
         /// <param name="settings">Ingestion settings.</param>
+        /// <param name="concurrency">Runtime concurrency manager that gates job slots.</param>
         /// <param name="logging">Logging module.</param>
         public IngestionWorkerService(DatabaseDriverBase db, IngestionProcessor processor, IngestionSettings settings, ConcurrencyManager concurrency, LoggingModule logging)
         {

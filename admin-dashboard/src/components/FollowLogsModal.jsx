@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import Modal from './Modal';
 import StatusPill, { toneForStatus } from './StatusPill';
+import JobDiagnostics from './JobDiagnostics';
 import CopyButton from './CopyButton';
 import { formatDateTime, formatDuration } from '../i18n/formatters';
 import { stageLabel } from '../utils/ingestionActivity';
@@ -142,6 +143,7 @@ function FollowLogsModal({ job, onClose }) {
       </div>
 
       {jobData.error && <div className="ilog-error">{jobData.error}</div>}
+      <JobDiagnostics job={jobData} attempts={detail?.attempts} />
 
       {loading && !detail && <div className="table-loading"><div className="loading-spinner" /></div>}
       {error && <div className="error-message" style={{ marginBottom: '0.75rem' }}>{error}</div>}

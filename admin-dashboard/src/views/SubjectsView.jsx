@@ -102,6 +102,12 @@ function SubjectsView() {
     // Line 2
     { name: 'urlSlug', label: 'URL Slug', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify, tip: 'URL-safe slug used to reach this subject in the user dashboard (must be unique within the tenant). Auto-derived from the display name.' },
     { name: 'historyRetentionDays', label: 'Chat History Retention (days)', type: 'number', default: 90, min: 1, tip: 'How many days chat-turn history is kept for this subject before pruning. Minimum 1.' },
+    { name: 'defaultRefreshIntervalMinutes', label: t('subjects.defaultRefresh'), type: 'select', numeric: true, default: 0, options: [
+      { value: 0, label: t('links.refreshPreset.0') },
+      { value: 60, label: t('links.refreshPreset.60') },
+      { value: 1440, label: t('links.refreshPreset.1440') },
+      { value: 10080, label: t('links.refreshPreset.10080') }
+    ], tip: t('subjects.defaultRefreshTip') },
     // Line 3
     { name: 'graphRootNodeId', label: 'Graph Root Node ID', placeholder: 'Derived from display name', deriveFrom: 'displayName', derive: slugify, tip: 'The knowledge-graph root node id for this subject. Auto-derived from the display name; override only if you need a specific slug.' },
     { name: 'thinkingEnabled', label: 'Show Thinking', type: 'checkbox', tip: 'When on, model reasoning is shown in a collapsible section (with a Thinking-time statistic) for chats about this subject. Off hides it. Applies to all chats about this subject.' },
@@ -124,6 +130,11 @@ function SubjectsView() {
     ], tip: 'How this subject’s content is split into chunks for retrieval. Fixed token count uses the size/overlap below; sentence- and paragraph-based split on natural boundaries. Applies to new ingestions.' },
     { name: 'chunkMaxTokens', label: 'Chunk Size (tokens)', type: 'number', default: 256, min: 16, tip: 'Target chunk size in tokens for fixed-token-count chunking. Larger chunks give more context per hit; smaller chunks give finer-grained retrieval. Default 256.' },
     { name: 'chunkOverlapTokens', label: 'Chunk Overlap (tokens)', type: 'number', default: 32, min: 0, tip: 'How many tokens adjacent chunks share, so context is not lost at chunk boundaries. Default 32.' },
+    { name: 'chunkHeaders', label: 'Chunk Headers', type: 'select', default: 'TitleAndHeadings', options: [
+      { value: 'TitleAndHeadings', label: 'Title and headings' },
+      { value: 'Title', label: 'Title only' },
+      { value: 'None', label: 'None' }
+    ], tip: 'Context embedded in front of each chunk so a passage cut from the middle of a document still says what it is about: the document title, plus the section headings above it. The stored and returned text is unchanged. Applies to new ingestions; re-ingest existing links to apply it to them.' },
     // Full-width prompts
     { name: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_SYSTEM_PROMPT, tip: 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.' },
     { name: 'rerankingPrompt', label: 'Reranking Prompt', type: 'textarea', rows: 3, fullWidth: true, default: DEFAULT_RERANKING_PROMPT, tip: 'Used only when a reranking model is set. Appended after the global reranking prompt to guide how passages are ordered by relevance.' },

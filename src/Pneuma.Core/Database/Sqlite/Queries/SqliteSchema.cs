@@ -210,6 +210,79 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchoverlap INTEGER NOT NULL DEFAULT 3;",
                     "ALTER TABLE ingestiontuning ADD COLUMN classificationbatchconcurrency INTEGER NOT NULL DEFAULT 4;"
                 }));
+                list.Add(new SchemaMigration(28, "Add ingestion failure categories, warnings, completeness counters, and job attempts", new List<string>
+                {
+                    "ALTER TABLE ingestionjobs ADD COLUMN failurecategory TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN warningsjson TEXT;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN cellsextracted INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN classificationbatches INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN classificationbatchesfailed INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN cellnodescreated INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN cellnodesfailed INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN summariesattempted INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN summariesfailed INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN chunksproduced INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN chunksembedded INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN chunksindexed INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjectlinks ADD COLUMN failurecategory TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN warningcount INTEGER NOT NULL DEFAULT 0;",
+                    "CREATE TABLE IF NOT EXISTS ingestionjobattempts (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, jobid TEXT NOT NULL, attemptnumber INTEGER NOT NULL DEFAULT 1, succeeded INTEGER NOT NULL DEFAULT 0, stage TEXT, failurecategory TEXT, message TEXT, startedutc TEXT NOT NULL, endedutc TEXT NOT NULL, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_ingestionjobattempts_tenant_job ON ingestionjobattempts (tenantid, jobid, attemptnumber);"
+                }));
+                list.Add(new SchemaMigration(29, "Add model runner maximum retries", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN maxretries INTEGER NOT NULL DEFAULT 5;"
+                }));
+                list.Add(new SchemaMigration(30, "Add link current job id", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN currentjobid TEXT;"
+                }));
+                list.Add(new SchemaMigration(31, "Add model runner maximum input tokens and subject chunk headers", new List<string>
+                {
+                    "ALTER TABLE modelrunners ADD COLUMN maxinputtokens INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjects ADD COLUMN chunkheaders TEXT DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(32, "Add link source kind, external key, content type, size, and crawl plan", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN sourcekind TEXT NOT NULL DEFAULT 'Url';",
+                    "ALTER TABLE subjectlinks ADD COLUMN externalkey TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN contenttype TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN sizebytes INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjectlinks ADD COLUMN crawlplanid TEXT;",
+                    "CREATE INDEX IF NOT EXISTS idx_subjectlinks_tenant_crawlplan ON subjectlinks (tenantid, crawlplanid);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_subjectlinks_tenant_subject_externalkey ON subjectlinks (tenantid, subjectid, externalkey);"
+                }));
+                list.Add(new SchemaMigration(33, "Add crawl plans, settings, secrets, objects, operations, and operation objects", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS crawlplans (id TEXT NOT NULL PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, name TEXT NOT NULL, plantype TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'Idle', filterminsizebytes INTEGER NOT NULL DEFAULT 0, filtermaxsizebytes INTEGER NOT NULL DEFAULT 0, filtermaxobjects INTEGER NOT NULL DEFAULT 0, scheduletype TEXT NOT NULL DEFAULT 'Manual', scheduleintervalminutes INTEGER NOT NULL DEFAULT 1440, schedulecron TEXT, scheduletimezone TEXT NOT NULL DEFAULT 'UTC', processadditions INTEGER NOT NULL DEFAULT 1, processupdates INTEGER NOT NULL DEFAULT 1, processdeletions INTEGER NOT NULL DEFAULT 0, maxdeletionfraction REAL NOT NULL DEFAULT 0.2, retryfailedobjects INTEGER NOT NULL DEFAULT 1, operationretentiondays INTEGER NOT NULL DEFAULT 30, lastoperationid TEXT, lastrunutc TEXT, lastsuccessutc TEXT, nextrunutc TEXT, claimtoken TEXT, claimexpiresutc TEXT, createdutc TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawlplans_tenant_subject ON crawlplans (tenantid, subjectid);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawlplans_nextrun ON crawlplans (nextrunutc);",
+                    "CREATE TABLE IF NOT EXISTS crawlplansettings (tenantid TEXT NOT NULL, planid TEXT NOT NULL, name TEXT NOT NULL, ordinal INTEGER NOT NULL DEFAULT 0, settingvalue TEXT);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_crawlplansettings_plan_name_ordinal ON crawlplansettings (tenantid, planid, name, ordinal);",
+                    "CREATE TABLE IF NOT EXISTS crawlplansecrets (tenantid TEXT NOT NULL, planid TEXT NOT NULL, name TEXT NOT NULL, ciphertext TEXT NOT NULL, lastupdateutc TEXT NOT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_crawlplansecrets_plan_name ON crawlplansecrets (tenantid, planid, name);",
+                    "CREATE TABLE IF NOT EXISTS crawlobjects (id TEXT NOT NULL PRIMARY KEY, tenantid TEXT NOT NULL, planid TEXT NOT NULL, externalkey TEXT NOT NULL, linkid TEXT, versiontoken TEXT, sizebytes INTEGER NOT NULL DEFAULT 0, contenttype TEXT, status TEXT NOT NULL DEFAULT 'Active', lasterror TEXT, lastoperationid TEXT, firstseenutc TEXT NOT NULL, lastseenutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawlobjects_tenant_plan ON crawlobjects (tenantid, planid);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawlobjects_tenant_link ON crawlobjects (tenantid, linkid);",
+                    "CREATE TABLE IF NOT EXISTS crawloperations (id TEXT NOT NULL PRIMARY KEY, tenantid TEXT NOT NULL, planid TEXT NOT NULL, subjectid TEXT NOT NULL, triggeredby TEXT NOT NULL DEFAULT 'Manual', status TEXT NOT NULL DEFAULT 'Running', enumerated INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, retried INTEGER NOT NULL DEFAULT 0, unchanged INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, missing INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, bytesenumerated INTEGER NOT NULL DEFAULT 0, helddeletions INTEGER NOT NULL DEFAULT 0, error TEXT, startedutc TEXT NOT NULL, enumeratedutc TEXT, dispatchedutc TEXT, finishedutc TEXT);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawloperations_tenant_plan ON crawloperations (tenantid, planid);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawloperations_status ON crawloperations (status);",
+                    "CREATE TABLE IF NOT EXISTS crawloperationobjects (id TEXT NOT NULL PRIMARY KEY, tenantid TEXT NOT NULL, operationid TEXT NOT NULL, externalkey TEXT NOT NULL, crawlaction TEXT NOT NULL, succeeded INTEGER, linkid TEXT, jobid TEXT, detail TEXT, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawloperationobjects_tenant_operation ON crawloperationobjects (tenantid, operationid);",
+                    "CREATE INDEX IF NOT EXISTS idx_crawloperationobjects_job ON crawloperationobjects (jobid);"
+                }));
+                list.Add(new SchemaMigration(34, "Add scheduled link refresh (link interval, next refresh, source ETag and Last-Modified; subject default) and job trigger", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN refreshintervalminutes INTEGER;",
+                    "ALTER TABLE subjectlinks ADD COLUMN nextrefreshutc TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN lastrefreshutc TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN refreshfailures INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE subjectlinks ADD COLUMN sourceetag TEXT;",
+                    "ALTER TABLE subjectlinks ADD COLUMN sourcelastmodifiedutc TEXT;",
+                    "ALTER TABLE subjects ADD COLUMN defaultrefreshintervalminutes INTEGER NOT NULL DEFAULT 0;",
+                    "ALTER TABLE ingestionjobs ADD COLUMN triggeredby TEXT NOT NULL DEFAULT 'Submit';",
+                    "CREATE INDEX IF NOT EXISTS idx_subjectlinks_nextrefresh ON subjectlinks (nextrefreshutc);"
+                }));
                 return list;
             }
         }

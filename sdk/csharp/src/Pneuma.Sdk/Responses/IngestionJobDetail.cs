@@ -13,5 +13,11 @@ namespace Pneuma.Sdk.Responses
 
         /// <summary>The chronological stage events.</summary>
         public List<IngestionJobEvent> Events { get; set; } = new List<IngestionJobEvent>();
+
+        /// <summary>The job's attempts, oldest first.</summary>
+        public List<IngestionJobAttempt> Attempts { get; set; } = new List<IngestionJobAttempt>();
+
+        /// <summary>Remediation for the job's failure category, or null when the job has not failed.</summary>
+        public string? Remediation { get; set; } = null;
     }
 }

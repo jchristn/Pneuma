@@ -30,6 +30,9 @@ namespace Test.Shared.Support
         /// <summary>Total stored chunk documents across all tenants and collections.</summary>
         public int DocumentCount { get { lock (_Lock) { return _Docs.Count; } } }
 
+        /// <summary>When true, delete-by-tag throws, to exercise removal failures.</summary>
+        public bool FailDeletes { get; set; } = false;
+
         /// <summary>Snapshot of every stored chunk document's tag map (test inspection).</summary>
         /// <returns>One tag dictionary per stored document.</returns>
         public List<Dictionary<string, string>> AllDocumentTags()
@@ -181,6 +184,7 @@ namespace Test.Shared.Support
         /// <inheritdoc />
         public Task DeleteByTagAsync(string tenantId, string collectionId, string tagKey, string tagValue, CancellationToken token = default)
         {
+            if (FailDeletes) throw new Pneuma.Core.Integrations.Implementations.IntegrationClientException("recalldb", "/documents/delete/filter", 503, "unavailable");
             lock (_Lock)
             {
                 _Docs.RemoveAll(d => d.TenantId == tenantId && d.CollectionId == collectionId && d.Tags.TryGetValue(tagKey, out string? v) && v == tagValue);

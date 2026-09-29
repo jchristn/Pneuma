@@ -125,6 +125,31 @@ The full port + default-credential list is in [`docker/PORTS.md`](docker/PORTS.m
 
 Configuration is a mounted `docker/pneuma.json`: web server, CORS, logging, database, auth, request-history capture, ingestion concurrency, integration endpoints (DocumentAtom, RecallDB, LiteGraph, S3), retrieval tuning, model-runner gate, telemetry, and first-boot seeding. Secrets can be overridden with `PNEUMA_*` environment variables. Most settings are also editable at runtime from the admin **Settings** page (`GET/PUT /v1.0/settings`), with secrets masked on read; changes that require a restart are annotated.
 
+### Shared model endpoints
+
+Every model call (embeddings, classification, summaries, chat, reranking) retries an endpoint's transient failures
+(408, 429, 502, 503, 504, or a proxy's 500 that wraps one) with growing, jittered waits that honor `Retry-After`, up to
+the runner's `maxRetries` (default 5). Calls to one endpoint never exceed its `maxConcurrentRequests`, counted across
+ingestion and chat together, so a shared gateway or a single local model is not flooded. When ingestion runs against
+a busy shared endpoint, lower `maxConcurrentRequests` rather than raising the stage concurrency; the
+`pneuma_model_retries_total` and `pneuma_model_limiter_wait_seconds` metrics show whether the endpoint is keeping up.
+
+### Fetch safety
+
+Pneuma fetches the URLs your users submit, so by default it refuses any URL that resolves to a loopback, private
+(RFC 1918), link-local (including the cloud metadata address `169.254.169.254`), carrier-grade NAT, unique-local IPv6,
+or multicast address. The check runs when the connection is opened, so a redirect or a DNS answer that changes after
+submission cannot reach an internal service, and the headless browser applies it to every request a page makes. Only
+`http` and `https` are fetched, certificates are validated, a response over 100 MB is abandoned mid-stream, and at most
+two requests run against one host at a time. A URL with a private IP literal, `localhost`, or another scheme is refused
+at submission with a 400 and an audit record; a host name that resolves to a private address fails its job with
+category `Blocked`.
+
+To ingest intranet sources, list them under `Ingestion.FetchSafety.AllowedPrivateHosts` in `pneuma.json`: host names
+(`wiki.corp.local`), wildcards (`*.corp.local`), IP addresses, or CIDR ranges (`10.0.0.0/8`). The same section holds
+`MaxDownloadBytes`, `AllowInvalidCertificates` (for internal PKI; exposes fetches to interception), `MaxRequestsPerHost`,
+and `BlockPrivateAddresses` (turn it off only when every user is trusted with the server's network position).
+
 ### Factory reset
 
 To wipe the stack back to factory defaults (fresh databases, seeded admin, and starter configuration), use `docker/reset.bat` (Windows). To pull the latest published images and restart, use `docker/update.bat`.

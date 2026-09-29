@@ -58,6 +58,15 @@ namespace Pneuma.Sdk.Models
         /// <summary>Whether the runner is enabled.</summary>
         public bool Active { get; set; } = true;
 
+        /// <summary>Maximum concurrent requests Pneuma sends to this endpoint (ingestion and chat together). Default 2.</summary>
+        public int MaxConcurrentRequests { get; set; } = 2;
+
+        /// <summary>Retries of a transient failure (408, 429, 502, 503, 504) before a call fails. Default 5; 0 to 10.</summary>
+        public int MaxRetries { get; set; } = 5;
+
+        /// <summary>Largest embedding input in the model's tokens; 0 (default) uses the known limit for the model family.</summary>
+        public int MaxInputTokens { get; set; } = 0;
+
         /// <summary>Whether the runner is protected from deletion.</summary>
         public bool IsProtected { get; set; } = false;
 

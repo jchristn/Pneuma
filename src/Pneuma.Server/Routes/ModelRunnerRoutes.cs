@@ -284,6 +284,8 @@ namespace Pneuma.Server.Routes
             runner.AccessKeyId = request.AccessKeyId;
             runner.ContextSize = Math.Max(0, request.ContextSize);
             runner.MaxConcurrentRequests = Math.Max(1, request.MaxConcurrentRequests);
+            runner.MaxRetries = request.MaxRetries;
+            runner.MaxInputTokens = request.MaxInputTokens;
             runner.MaxQueueDepth = Math.Max(0, request.MaxQueueDepth);
             runner.MaximumTimeoutMs = Math.Max(1, request.MaximumTimeoutMs);
             runner.HealthCheckEnabled = request.HealthCheckEnabled;
@@ -379,6 +381,8 @@ namespace Pneuma.Server.Routes
                 Active = runner.Active,
                 ContextSize = runner.ContextSize,
                 MaxConcurrentRequests = runner.MaxConcurrentRequests,
+                MaxRetries = runner.MaxRetries,
+                MaxInputTokens = runner.MaxInputTokens,
                 MaxQueueDepth = runner.MaxQueueDepth,
                 MaximumTimeoutMs = runner.MaximumTimeoutMs,
                 HealthCheckEnabled = runner.HealthCheckEnabled,

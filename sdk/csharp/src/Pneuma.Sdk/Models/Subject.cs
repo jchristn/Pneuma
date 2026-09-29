@@ -68,8 +68,23 @@ namespace Pneuma.Sdk.Models
         /// <summary>Number of days chat-turn history is retained for this subject (minimum 1). Default 90.</summary>
         public int HistoryRetentionDays { get; set; } = 90;
 
+        /// <summary>Minutes between refresh checks for links that follow the subject default: 0 (off) or 60 to 525600.</summary>
+        public int DefaultRefreshIntervalMinutes { get; set; } = 0;
+
         /// <summary>Lifecycle state of this subject's tracked cascade deletion: None, Pending, Deleting, or Failed.</summary>
         public string DeletionStatus { get; set; } = "None";
+
+        /// <summary>Chunking strategy: FixedTokenCount (default), SentenceBased, ParagraphBased, or Recursive.</summary>
+        public string? ChunkStrategy { get; set; } = null;
+
+        /// <summary>Target chunk size in tokens (16 to 8192, default 256), counted in the embedding model's tokens.</summary>
+        public int ChunkMaxTokens { get; set; } = 256;
+
+        /// <summary>Overlap between adjacent chunks in tokens (0 to 4096, default 32).</summary>
+        public int ChunkOverlapTokens { get; set; } = 32;
+
+        /// <summary>Context embedded in front of each chunk: None, Title, or TitleAndHeadings (default for new subjects).</summary>
+        public string ChunkHeaders { get; set; } = "TitleAndHeadings";
 
         /// <summary>Whether the subject archive is enabled.</summary>
         public bool Active { get; set; } = true;

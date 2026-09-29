@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Test.Shared;
 using Touchstone.Cli;
+using Touchstone.Core;
 
 // Test.Automated CLI. Database connection details for the four-provider contract suite may be supplied as
 // arguments (they are mapped onto the PNEUMA_TEST_DB_* environment variables that TestDatabase reads, so the
@@ -17,11 +20,13 @@ using Touchstone.Cli;
 //                                                create the per-case isolated databases (defaults to the
 //                                                provider's admin database: postgres/mysql/master)
 //   --results <path>                             write the run results to <path>
+//   --suite <id[,id...]>                         run only the named suites (by suite id, case-insensitive)
 //
 // Example: dotnet run --project src/Test.Automated -- --type postgresql --host localhost --port 5432 \
 //          --user pneuma --pass pneuma --database pneuma_test
 
 string? resultsPath = null;
+string? suiteFilter = null;
 
 for (int i = 0; i + 1 < args.Length; i++)
 {
@@ -29,6 +34,7 @@ for (int i = 0; i + 1 < args.Length; i++)
     switch (args[i])
     {
         case "--results": resultsPath = value; break;
+        case "--suite": suiteFilter = value; break;
         case "--type": Environment.SetEnvironmentVariable("PNEUMA_TEST_DB_TYPE", value); break;
         case "--host": Environment.SetEnvironmentVariable("PNEUMA_TEST_DB_HOST", value); break;
         case "--port": Environment.SetEnvironmentVariable("PNEUMA_TEST_DB_PORT", value); break;
@@ -42,4 +48,11 @@ for (int i = 0; i + 1 < args.Length; i++)
     }
 }
 
-return await ConsoleRunner.RunAsync(PneumaSuites.All, resultsPath: resultsPath);
+IReadOnlyList<TestSuiteDescriptor> suites = PneumaSuites.All;
+if (!String.IsNullOrWhiteSpace(suiteFilter))
+{
+    HashSet<string> wanted = new HashSet<string>(suiteFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), StringComparer.OrdinalIgnoreCase);
+    suites = suites.Where(s => wanted.Contains(s.SuiteId)).ToList();
+}
+
+return await ConsoleRunner.RunAsync(suites, resultsPath: resultsPath);

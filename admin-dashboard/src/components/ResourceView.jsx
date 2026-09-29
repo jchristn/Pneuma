@@ -187,7 +187,7 @@ function ResourceForm({ fields, initial, onSubmit, onCancel, submitLabel, disabl
         if (typeof f.visibleWhen === 'function' && !f.visibleWhen(values)) return;
         if (f.readOnly && !f.includeReadOnly) return;
         let val = values[f.name];
-        if (f.type === 'number' && val !== '' && val !== null) val = Number(val);
+        if ((f.type === 'number' || f.numeric) && val !== '' && val !== null) val = Number(val);
         if (val === '' && f.omitIfEmpty !== false) return;
         body[f.name] = val;
       });

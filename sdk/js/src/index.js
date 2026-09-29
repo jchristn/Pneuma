@@ -418,6 +418,27 @@ export class PneumaClient {
     }
 
     /**
+     * Push content (text, Markdown, HTML, or JSON) into a subject; it is stored and ingested like a link. Reusing an
+     * `externalKey` replaces earlier content with that key instead of adding a duplicate.
+     * @param {string} subjectId
+     * @param {{ content: string, contentType: string, title?: string, externalKey?: string, labels?: string[], tags?: Record<string,string> }} item
+     * @returns {Promise<{ index: number, statusCode: number, replaced: boolean, link: object, jobId: string }>}
+     */
+    submitContent(subjectId, item) {
+        return this.request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content`, { body: item });
+    }
+
+    /**
+     * Push up to 100 content items in one call; every item is attempted and reported.
+     * @param {string} subjectId
+     * @param {object[]} items items shaped like `submitContent`'s
+     * @returns {Promise<{ accepted: number, rejected: number, results: object[] }>}
+     */
+    submitContentBatch(subjectId, items) {
+        return this.request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content/batch`, { body: { items } });
+    }
+
+    /**
      * Submit multiple links for a subject in a single call, enqueuing one ingestion job per URL. The models and
      * collection are taken from the subject. Any `labels`/`tags` are applied to every URL in the batch.
      * @param {string} subjectId
@@ -457,6 +478,103 @@ export class PneumaClient {
      * @param {object} [options] `{ maxResults, skip, order, search }`
      * @returns {Promise<object>} EnumerationResult envelope; records are in `.objects`.
      */
+    // ---- Crawl plans and crawl operations ----
+
+    /** List the crawl plan types this server supports, each with its settings schema. @returns {Promise<object[]>} */
+    listCrawlPlanTypes() {
+        return this.request('GET', '/v1.0/crawl-plan-types');
+    }
+
+    /**
+     * Create a crawl plan that keeps a subject in sync with a source. Secret settings (passwords, keys, tokens) are
+     * write-only: they are stored encrypted and never returned; `secretsSet` names the ones stored.
+     * @param {string} subjectId
+     * @param {object} plan `{ name, type, web|sitemap|s3|cifs|nfs, filter?, schedule?, processAdditions?, processUpdates?, processDeletions?, maxDeletionFraction?, labels?, tags? }`
+     * @returns {Promise<object>}
+     */
+    createCrawlPlan(subjectId, plan) {
+        return this.request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/crawl-plans`, { body: plan });
+    }
+
+    /** List crawl plans; pass `{ subjectId }` to scope to a subject. @param {object} [options] @returns {Promise<object>} */
+    listCrawlPlans(options = {}) {
+        return this.request('GET', '/v1.0/crawl-plans', { query: options });
+    }
+
+    /** @param {string} id @returns {Promise<object>} */
+    getCrawlPlan(id) {
+        return this.request('GET', `/v1.0/crawl-plans/${encodeURIComponent(id)}`);
+    }
+
+    /**
+     * Replace a crawl plan's configuration. Secrets left out keep their stored values; list names in
+     * `clearSecrets` to remove them. The type cannot change.
+     * @param {string} id @param {object} plan @returns {Promise<object>}
+     */
+    updateCrawlPlan(id, plan) {
+        return this.request('PUT', `/v1.0/crawl-plans/${encodeURIComponent(id)}`, { body: plan });
+    }
+
+    /** Delete a crawl plan; `deleteLinks` also deletes the links it created. @param {string} id @param {boolean} [deleteLinks] */
+    deleteCrawlPlan(id, deleteLinks = false) {
+        return this.request('DELETE', `/v1.0/crawl-plans/${encodeURIComponent(id)}`, { query: deleteLinks ? { deleteLinks: 'true' } : {} });
+    }
+
+    /** Test a draft plan's connection without saving it. @param {object} plan @param {string} [fromPlanId] @returns {Promise<object>} */
+    testCrawlPlanDraft(plan, fromPlanId) {
+        return this.request('POST', '/v1.0/crawl-plans/test', { body: plan, query: fromPlanId ? { fromPlanId } : {} });
+    }
+
+    /** Test a stored plan's connection step by step. @param {string} id @returns {Promise<object>} */
+    testCrawlPlan(id) {
+        return this.request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/test`);
+    }
+
+    /** Preview what a plan would do if it ran now; nothing is changed. @param {string} id @returns {Promise<object>} */
+    previewCrawlPlan(id) {
+        return this.request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/preview`);
+    }
+
+    /** Start a crawl operation now (202; 409 when already running). @param {string} id @returns {Promise<object>} */
+    startCrawlPlan(id) {
+        return this.request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/start`);
+    }
+
+    /** Stop a plan's running operation. @param {string} id */
+    stopCrawlPlan(id) {
+        return this.request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/stop`);
+    }
+
+    /** @param {string} id @param {object} [options] @returns {Promise<object>} */
+    listCrawlPlanOperations(id, options = {}) {
+        return this.request('GET', `/v1.0/crawl-plans/${encodeURIComponent(id)}/operations`, { query: options });
+    }
+
+    /** List a plan's tracked objects; `{ status }` filters. @param {string} id @param {object} [options] @returns {Promise<object>} */
+    listCrawlPlanObjects(id, options = {}) {
+        return this.request('GET', `/v1.0/crawl-plans/${encodeURIComponent(id)}/objects`, { query: options });
+    }
+
+    /** List crawl operations; `{ planId, status }` filter. @param {object} [options] @returns {Promise<object>} */
+    listCrawlOperations(options = {}) {
+        return this.request('GET', '/v1.0/crawl-operations', { query: options });
+    }
+
+    /** @param {string} id @returns {Promise<object>} */
+    getCrawlOperation(id) {
+        return this.request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}`);
+    }
+
+    /** List what an operation did with each object; `{ action }` filters. @param {string} id @param {object} [options] @returns {Promise<object>} */
+    listCrawlOperationObjects(id, options = {}) {
+        return this.request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}/objects`, { query: options });
+    }
+
+    /** Confirm the deletions a held operation is waiting on. @param {string} id @returns {Promise<object>} */
+    confirmCrawlDeletions(id) {
+        return this.request('POST', `/v1.0/crawl-operations/${encodeURIComponent(id)}/confirm-deletions`);
+    }
+
     listLinks(options = {}) {
         return this.request('GET', '/v1.0/links', { query: options });
     }
@@ -510,6 +628,35 @@ export class PneumaClient {
         return this.request('GET', `/v1.0/links/${encodeURIComponent(id)}/subgraph`);
     }
 
+    /**
+     * Set a link's scheduled refresh.
+     * @param {string} id
+     * @param {{refreshIntervalMinutes?: number, useSubjectDefault?: boolean}} body 0 is off, otherwise 60 to 525600
+     * @returns {Promise<object>} the updated link
+     */
+    setLinkRefresh(id, body) {
+        return this.request('PUT', `/v1.0/links/${encodeURIComponent(id)}`, { body });
+    }
+
+    /**
+     * Set the scheduled refresh of several links.
+     * @param {string[]} ids
+     * @param {{refreshIntervalMinutes?: number, useSubjectDefault?: boolean}} body
+     * @returns {Promise<{updated: number, skipped: string[]}>}
+     */
+    bulkSetLinkRefresh(ids, body) {
+        return this.request('POST', '/v1.0/links/refresh-interval', { body: { ...body, ids } });
+    }
+
+    /**
+     * Check a link for changes now (a conditional GET); a changed link is re-ingested.
+     * @param {string} id
+     * @returns {Promise<{linkId: string, outcome: string, jobId?: string, message?: string, nextRefreshUtc?: string}>}
+     */
+    refreshLinkNow(id) {
+        return this.request('POST', `/v1.0/links/${encodeURIComponent(id)}/refresh`);
+    }
+
     /** @param {string} id @returns {Promise<null>} */
     deleteLink(id) {
         return this.request('DELETE', `/v1.0/links/${encodeURIComponent(id)}`);
@@ -520,7 +667,9 @@ export class PneumaClient {
     /**
      * List ingestion jobs (paginated).
      * @param {string} [status] optional status filter
-     * @param {object} [options] `{ maxResults, skip, order, search }`
+     * @param {object} [options] `{ maxResults, skip, order, search, failureCategory, hasWarnings }`; `failureCategory`
+     *   narrows to jobs that failed for that reason (for example `Fetch`), `hasWarnings` to jobs with (true) or
+     *   without (false) warnings.
      * @returns {Promise<object>} EnumerationResult envelope; records are in `.objects`.
      */
     listJobs(status, options = {}) {
@@ -528,9 +677,9 @@ export class PneumaClient {
     }
 
     /**
-     * Job detail with per-stage events.
+     * Job detail with per-stage events, attempt history, and remediation for its failure category.
      * @param {string} id
-     * @returns {Promise<{ job: object, events: object[] }>}
+     * @returns {Promise<{ job: object, events: object[], attempts: object[], remediation: ?string }>}
      */
     getJob(id) {
         return this.request('GET', `/v1.0/jobs/${encodeURIComponent(id)}`);

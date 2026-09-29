@@ -137,9 +137,10 @@ namespace Pneuma.Core.Integrations.Implementations
             // DocumentAtom returns atoms as a hierarchy: header/container atoms carry their
             // content in nested "Quarks". Flatten the whole tree so every atom (paragraphs,
             // lists, tables, and nested content) becomes a cell — not just the top level.
+            List<string> headings = new List<string>();
             foreach (AtomDto atom in atoms)
             {
-                FlattenAtom(atom, cells);
+                FlattenAtom(atom, cells, headings);
             }
 
             return cells;
@@ -149,11 +150,27 @@ namespace Pneuma.Core.Integrations.Implementations
 
         #region Private-Methods
 
-        private static void FlattenAtom(AtomDto? atom, List<ExtractedCell> cells)
+        private static void FlattenAtom(AtomDto? atom, List<ExtractedCell> cells, List<string> headings)
         {
             if (atom == null) return;
 
             string type = atom.Type ?? "Text";
+
+            // Track the heading path in document order: a heading at level N replaces levels N and deeper. Every cell
+            // records the headings above it (a heading cell includes itself), which gives chunk headers their context.
+            int headerLevel = atom.HeaderLevel != null && atom.HeaderLevel.Value > 0 ? Math.Min(atom.HeaderLevel.Value, 6) : 0;
+            if (headerLevel > 0)
+            {
+                string heading = CleanHeading(atom.Text);
+                if (!String.IsNullOrEmpty(heading))
+                {
+                    if (headings.Count >= headerLevel) headings.RemoveRange(headerLevel - 1, headings.Count - (headerLevel - 1));
+                    while (headings.Count < headerLevel - 1) headings.Add(String.Empty);
+                    headings.Add(heading);
+                }
+            }
+
+            int firstNew = cells.Count;
 
             // Binary atoms (raw embedded blobs) carry no groundable text — skip them for now. Any nested
             // content is still walked below. All other atom kinds (text, code, hyperlink, meta, lists,
@@ -199,14 +216,41 @@ namespace Pneuma.Core.Integrations.Implementations
                 }
             }
 
+            string? path = HeadingPath(headings);
+            for (int i = firstNew; i < cells.Count; i++)
+            {
+                cells[i].HeadingPath = path;
+                if (headerLevel > 0) cells[i].HeaderLevel = headerLevel;
+            }
+
             // Recurse into nested atoms (a header's child content, a container's block children, etc.).
             if (atom.Quarks != null)
             {
                 foreach (AtomDto child in atom.Quarks)
                 {
-                    FlattenAtom(child, cells);
+                    FlattenAtom(child, cells, headings);
                 }
             }
+        }
+
+        private static string CleanHeading(string? text)
+        {
+            if (String.IsNullOrWhiteSpace(text)) return String.Empty;
+            string trimmed = text.Trim().TrimStart('#').Trim();
+            int newline = trimmed.IndexOf('\n');
+            if (newline > 0) trimmed = trimmed.Substring(0, newline).Trim();
+            return trimmed.Length > 200 ? trimmed.Substring(0, 200) : trimmed;
+        }
+
+        private static string? HeadingPath(List<string> headings)
+        {
+            List<string> parts = new List<string>();
+            foreach (string h in headings)
+            {
+                if (!String.IsNullOrWhiteSpace(h)) parts.Add(h);
+            }
+
+            return parts.Count == 0 ? null : String.Join(" > ", parts);
         }
 
         private static void AppendTableRowCells(AtomDto atom, List<ExtractedCell> cells)
@@ -297,6 +341,7 @@ namespace Pneuma.Core.Integrations.Implementations
             public string? Type { get; set; }
             public string? Text { get; set; }
             public string? Title { get; set; }
+            public int? HeaderLevel { get; set; }
             public List<string>? UnorderedList { get; set; }
             public List<string>? OrderedList { get; set; }
             public AtomTableDto? Table { get; set; }

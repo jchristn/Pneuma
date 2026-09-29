@@ -174,13 +174,25 @@ namespace Pneuma.Server
                 logging.Warn("[Bootstrapper] tenant provisioning failed (continuing): " + e.Message);
             }
 
+            // One fetch-safety policy (and so one per-host limiter) is shared by every fetcher and crawler.
+            FetchSafetyPolicy fetchPolicy = new FetchSafetyPolicy(settings.Ingestion.FetchSafety);
+            if (settings.Ingestion.FetchSafety.AllowInvalidCertificates)
+            {
+                logging.Warn("[Bootstrapper] Ingestion.FetchSafety.AllowInvalidCertificates is on: content fetches accept invalid TLS certificates and are open to interception.");
+            }
+            if (!settings.Ingestion.FetchSafety.BlockPrivateAddresses)
+            {
+                logging.Warn("[Bootstrapper] Ingestion.FetchSafety.BlockPrivateAddresses is off: submitted URLs may reach private and internal addresses.");
+            }
             IContentFetcher fetcher = settings.Ingestion.UseHeadlessBrowser
-                ? new PlaywrightContentFetcher(new HttpContentFetcher(settings.Ingestion.UserAgent), settings.Ingestion.BrowserNavigationTimeoutMs, settings.Ingestion.UserAgent)
-                : new HttpContentFetcher(settings.Ingestion.UserAgent);
+                ? new PlaywrightContentFetcher(new HttpContentFetcher(settings.Ingestion.UserAgent, fetchPolicy), settings.Ingestion.BrowserNavigationTimeoutMs, settings.Ingestion.UserAgent, fetchPolicy)
+                : new HttpContentFetcher(settings.Ingestion.UserAgent, fetchPolicy);
             NativeSemanticProcessor semanticProcessor = new NativeSemanticProcessor(database, authentication.Cipher, logging);
             IngestionProcessor processor = new IngestionProcessor(
                 database, clients.DocumentAtom, semanticProcessor, graphFactory, clients.Vectors, clients.Blobs,
                 artifactStore, fetcher, authentication.Cipher, settings.Ingestion, concurrency, logging, telemetry);
+            // Crawled links are opened through the crawler of the plan that created them.
+            processor.Resolver.CrawlSource = server.CrawlContent;
             IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, concurrency, logging);
 
             using (CancellationTokenSource shutdown = new CancellationTokenSource())

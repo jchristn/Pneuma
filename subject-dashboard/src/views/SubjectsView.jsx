@@ -34,10 +34,10 @@ const DEFAULT_PROMPT_REWRITE = 'Rewrite the question into a single, self-contain
 
 const EMPTY_FORM = {
   displayName: '', type: 'Subject', description: '', tagline: DEFAULT_TAGLINE, urlSlug: '',
-  thinkingEnabled: false, publishedForChat: true, historyRetentionDays: 90,
+  thinkingEnabled: false, publishedForChat: true, historyRetentionDays: 90, defaultRefreshIntervalMinutes: 0,
   embeddingModel: '', inferenceModel: '', collection: '', rerankingModel: '', promptRewriteModel: '',
   rerankerType: 'LlmListwise',
-  chunkStrategy: 'FixedTokenCount', chunkMaxTokens: 256, chunkOverlapTokens: 32,
+  chunkStrategy: 'FixedTokenCount', chunkMaxTokens: 256, chunkOverlapTokens: 32, chunkHeaders: 'TitleAndHeadings',
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   ontologyClassifyPrompt: DEFAULT_ONTOLOGY_CLASSIFY,
   ontologyDefinitionPrompt: DEFAULT_ONTOLOGY_DEFINITION,
@@ -143,12 +143,14 @@ function SubjectsView() {
       thinkingEnabled: !!subject.thinkingEnabled,
       publishedForChat: subject.publishedForChat !== false,
       historyRetentionDays: subject.historyRetentionDays || 90,
+      defaultRefreshIntervalMinutes: subject.defaultRefreshIntervalMinutes || 0,
       embeddingModel: subject.embeddingModel || '',
       inferenceModel: subject.inferenceModel || '',
       collection: subject.collection || '',
       chunkStrategy: subject.chunkStrategy || 'FixedTokenCount',
       chunkMaxTokens: subject.chunkMaxTokens || 256,
       chunkOverlapTokens: subject.chunkOverlapTokens != null ? subject.chunkOverlapTokens : 32,
+      chunkHeaders: subject.chunkHeaders || 'None',
       rerankingModel: subject.rerankingModel || '',
       rerankerType: subject.rerankerType || 'LlmListwise',
       promptRewriteModel: subject.promptRewriteModel || '',
@@ -188,7 +190,9 @@ function SubjectsView() {
       chunkStrategy: form.chunkStrategy || 'FixedTokenCount',
       chunkMaxTokens: Math.max(16, Number(form.chunkMaxTokens) || 256),
       chunkOverlapTokens: Math.max(0, Number(form.chunkOverlapTokens) || 0),
+      chunkHeaders: form.chunkHeaders || 'None',
       historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90),
+      defaultRefreshIntervalMinutes: Number(form.defaultRefreshIntervalMinutes) || 0,
       // Only the concurrency knobs the operator set are sent as overrides; the rest inherit the system default.
       concurrencyOverrides: Object.fromEntries(
         Object.entries(form.concurrencyOverrides || {})
@@ -392,6 +396,17 @@ function SubjectsView() {
               title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}
             />
           </div>
+          <div className="form-group" title={t('subjects.defaultRefreshTip')}>
+            <label htmlFor="cd-refresh" title={t('subjects.defaultRefreshTip')}>{t('subjects.defaultRefresh')}</label>
+            <select
+              id="cd-refresh"
+              value={String(form.defaultRefreshIntervalMinutes || 0)}
+              onChange={(e) => setForm({ ...form, defaultRefreshIntervalMinutes: Number(e.target.value) })}
+              title={t('subjects.defaultRefreshTip')}
+            >
+              {['0', '60', '1440', '10080'].map((p) => <option key={p} value={p}>{t(`links.refreshPreset.${p}`)}</option>)}
+            </select>
+          </div>
           <div className="form-group" title={t('subjects.embeddingModelTip', 'The embedding endpoint used to vectorize this subject’s content at ingestion and to embed queries when answering. Must match the collection’s dimensionality. Required to ingest links.')}>
             <label htmlFor="cd-embedding" title={t('subjects.embeddingModelTip', 'The embedding endpoint used to vectorize this subject’s content and queries. Required.')}>{t('subjects.embeddingModel', 'Embedding Model')} <span className="required-mark">*</span></label>
             <select id="cd-embedding" value={form.embeddingModel} required onChange={(e) => setForm({ ...form, embeddingModel: e.target.value })}
@@ -431,6 +446,14 @@ function SubjectsView() {
           <div className="form-group" title={t('subjects.chunkOverlapTip', 'How many tokens adjacent chunks share, so context is not lost at chunk boundaries. Default 32.')}>
             <label htmlFor="cd-chunkoverlap">{t('subjects.chunkOverlapTokens', 'Chunk Overlap (tokens)')}</label>
             <input id="cd-chunkoverlap" type="number" min="0" value={form.chunkOverlapTokens} onChange={(e) => setForm({ ...form, chunkOverlapTokens: e.target.value })} />
+          </div>
+          <div className="form-group" title={t('subjects.chunkHeadersTip')}>
+            <label htmlFor="cd-chunkheaders">{t('subjects.chunkHeaders')}</label>
+            <select id="cd-chunkheaders" value={form.chunkHeaders} onChange={(e) => setForm({ ...form, chunkHeaders: e.target.value })} title={t('subjects.chunkHeadersTip')}>
+              <option value="TitleAndHeadings">{t('subjects.chunkHeadersTitleAndHeadings')}</option>
+              <option value="Title">{t('subjects.chunkHeadersTitle')}</option>
+              <option value="None">{t('subjects.chunkHeadersNone')}</option>
+            </select>
           </div>
           <div className="form-group" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages by relevance before answering. Leave as None to skip reranking.')}>
             <label htmlFor="cd-rerankmodel" title={t('subjects.rerankingModelTip', 'Optional completion endpoint used to re-rank retrieved passages before answering. None skips reranking.')}>{t('subjects.rerankingModel', 'Reranking Model (optional)')}</label>

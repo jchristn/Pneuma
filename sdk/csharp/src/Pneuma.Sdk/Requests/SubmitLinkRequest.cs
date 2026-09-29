@@ -22,5 +22,8 @@ namespace Pneuma.Sdk.Requests
 
         /// <summary>Optional key/value tags attached to every chunk and to the link's source graph node.</summary>
         public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>Minutes between scheduled refresh checks: null follows the subject's default, 0 is off, otherwise 60 to 525600.</summary>
+        public int? RefreshIntervalMinutes { get; set; } = null;
     }
 }

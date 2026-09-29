@@ -60,6 +60,9 @@ namespace Pneuma.Core.Ingestion.Models
         /// <summary>Overall job status.</summary>
         public IngestionStatusEnum Status { get; set; } = IngestionStatusEnum.Queued;
 
+        /// <summary>What created the job. Set at creation and never changed.</summary>
+        public IngestionTriggerEnum Trigger { get; set; } = IngestionTriggerEnum.Submit;
+
         /// <summary>Current (or failed) pipeline stage.</summary>
         public IngestionStageEnum Stage { get; set; } = IngestionStageEnum.Pending;
 
@@ -72,6 +75,22 @@ namespace Pneuma.Core.Ingestion.Models
 
         /// <summary>Last error message, if failed.</summary>
         public string? Error { get; set; } = null;
+
+        /// <summary>Why the job failed, or null when it has not failed.</summary>
+        public IngestionFailureCategoryEnum? FailureCategory { get; set; } = null;
+
+        /// <summary>
+        /// Warnings describing work the job dropped but completed without (a failed classification batch, a failed
+        /// summary, a cell node that could not be created). Empty for a complete ingest.
+        /// </summary>
+        public List<string> Warnings { get; set; } = new List<string>();
+
+        /// <summary>Counts of what each stage received and produced.</summary>
+        public IngestionCompleteness Completeness
+        {
+            get { return _Completeness; }
+            set { _Completeness = value ?? new IngestionCompleteness(); }
+        }
 
         /// <summary>
         /// Transient (not persisted): set when the pipeline has already recorded this job's terminal failure
@@ -127,6 +146,7 @@ namespace Pneuma.Core.Ingestion.Models
         private string _SubjectId = String.Empty;
         private string _LinkId = String.Empty;
         private int _AttemptCount = 0;
+        private IngestionCompleteness _Completeness = new IngestionCompleteness();
 
         #endregion
     }

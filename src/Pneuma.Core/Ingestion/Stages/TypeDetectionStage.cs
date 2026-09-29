@@ -48,6 +48,14 @@ namespace Pneuma.Core.Ingestion.Stages
         {
             IngestionJob job = context.Job;
 
+            // Pushed content declares its type (Markdown, Json, Html, Text); trust it rather than guess.
+            if (!String.IsNullOrEmpty(context.DeclaredDocumentType))
+            {
+                job.DocumentType = context.DeclaredDocumentType;
+                context.Message = "Type detection skipped: the content was submitted as " + context.DeclaredDocumentType + ".";
+                return;
+            }
+
             TypeDetectResult detected = await _Deps.DocumentAtom.DetectTypeAsync(context.SourceBytes, token).ConfigureAwait(false);
 
             // The detector reports some genuine text (e.g. markdown full of box-drawing characters) as an unknown
@@ -58,7 +66,7 @@ namespace Pneuma.Core.Ingestion.Stages
                 _Deps.Logging.Info("[TypeDetectionStage] job " + job.Id + ": detector returned Unknown for valid UTF-8 text; ingesting as Text.");
             }
 
-            if (detected.IsUnknown) throw new IngestionHardFailException(IngestionStageEnum.TypeDetection, "Unknown or unsupported document type.");
+            if (detected.IsUnknown) throw new IngestionHardFailException(IngestionStageEnum.TypeDetection, IngestionFailureCategoryEnum.UnsupportedType, "Unknown or unsupported document type.");
 
             job.DocumentType = detected.Type;
             context.Message = "Type detection complete — detected document type: " + detected.Type + " (" + detected.MimeType + ").";

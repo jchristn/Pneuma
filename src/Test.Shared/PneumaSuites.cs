@@ -33,7 +33,17 @@ namespace Test.Shared
                     GraphTenancySuite.Build(),
                     ChunkingSuite.Build(),
                     SubjectPromptSuite.Build(),
-                    ConcurrencyOverridesSuite.Build()
+                    ConcurrencyOverridesSuite.Build(),
+                    IngestionReliabilitySuite.Build(),
+                    FetchSafetySuite.Build(),
+                    ModelRetrySuite.Build(),
+                    VersionReplacementSuite.Build(),
+                    ChunkContextSuite.Build(),
+                    InlineContentSuite.Build(),
+                    CrawlFrameworkSuite.Build(),
+                    CrawlApiSuite.Build(),
+                    CrawlersSuite.Build(),
+                    LinkRefreshSuite.Build()
                 };
             }
         }

@@ -5,6 +5,7 @@ import { normalizeList } from '../utils/api';
 import Modal from './Modal';
 import StatusPill, { toneForStatus } from './StatusPill';
 import CopyButton from './CopyButton';
+import JobDiagnostics from './JobDiagnostics';
 import { formatDateTime, formatDuration } from '../i18n/formatters';
 import { stageLabel } from '../utils/ingestionActivity';
 import './IngestionLog.css';
@@ -58,7 +59,7 @@ function StepTimeline({ events }) {
   );
 }
 
-function IngestionRun({ run, index, total }) {
+function IngestionRun({ run, index, total, currentJobId }) {
   const { t } = useTranslation();
   const job = run.job || {};
   const events = Array.isArray(run.events) ? run.events : [];
@@ -68,6 +69,12 @@ function IngestionRun({ run, index, total }) {
     <div className="ilog-run">
       <div className="ilog-run-header">
         <span className="ilog-run-title">{runLabel}</span>
+        {currentJobId && job.id === currentJobId && (
+          <span title={t('ingestionLog.currentVersionTip')}><StatusPill label={t('ingestionLog.currentVersion')} tone="success" /></span>
+        )}
+        {currentJobId && job.id !== currentJobId && String(job.status || '').toLowerCase() === 'completed' && (
+          <span title={t('ingestionLog.supersededTip')}><StatusPill label={t('ingestionLog.superseded')} tone="neutral" /></span>
+        )}
         {job.documentType && <span className="ilog-doctype">{job.documentType}</span>}
         <StatusPill label={job.status} tone={toneForStatus(job.status)} />
         <span className="ilog-run-times">
@@ -76,6 +83,7 @@ function IngestionRun({ run, index, total }) {
         </span>
       </div>
       {job.error && <div className="ilog-error">{job.error}</div>}
+      <JobDiagnostics job={job} attempts={run.attempts} />
       {events.length > 0
         ? <StepTimeline events={events} />
         : <div className="ilog-empty">{t('ingestionLog.emptyQueued')}</div>}
@@ -137,7 +145,7 @@ function IngestionLogModal({ link, onClose }) {
         <div className="ilog-empty">{t('ingestionLog.emptyNoRuns')}</div>
       )}
       {!loading && !error && runs.map((run, idx) => (
-        <IngestionRun key={idx} run={run} index={idx} total={runs.length} />
+        <IngestionRun key={idx} run={run} index={idx} total={runs.length} currentJobId={link.currentJobId} />
       ))}
     </Modal>
   );

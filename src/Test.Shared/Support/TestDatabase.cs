@@ -27,7 +27,10 @@ namespace Test.Shared.Support
         {
             DatabaseSettings settings = await BuildSettingsAsync(token).ConfigureAwait(false);
             DatabaseDriverBase driver = await DatabaseDriverFactory.CreateAndInitializeAsync(settings, token).ConfigureAwait(false);
-            await FirstBootSeeder.SeedAsync(driver, new SeedOptions(), new Pneuma.Core.Security.Aes256Cipher("pneuma-test-signing-key-0001"), token).ConfigureAwait(false);
+            // Seed model runners at an address nothing listens on, so no test ever reaches a real local model server
+            // (a live Ollama on the default port made ingestion tests non-deterministic). Tests that need a working
+            // model start a StubModelServer and point a runner at it.
+            await FirstBootSeeder.SeedAsync(driver, new SeedOptions { OllamaBaseUrl = "http://127.0.0.1:9" }, new Pneuma.Core.Security.Aes256Cipher("pneuma-test-signing-key-0001"), token).ConfigureAwait(false);
             return driver;
         }
 

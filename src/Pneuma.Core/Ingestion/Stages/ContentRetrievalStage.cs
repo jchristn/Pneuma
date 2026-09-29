@@ -51,15 +51,19 @@ namespace Pneuma.Core.Ingestion.Stages
         {
             IngestionJob job = context.Job;
 
-            byte[] data = await _Deps.Fetcher.FetchAsync(job.SourceUrl, token).ConfigureAwait(false);
+            // Content comes from where the link says: a URL (through the fetch-safety policy), pushed content in the blob
+            // store, or a crawl plan's crawler.
+            SubjectLink? existingLink = await _Deps.Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
+            ResolvedContent resolved = await _Deps.Resolver.ResolveAsync(existingLink, job.SourceUrl, token).ConfigureAwait(false);
+            byte[] data = resolved.Bytes;
             context.SourceBytes = data;
+            context.DeclaredDocumentType = resolved.DeclaredDocumentType;
             await _Deps.Journal.TryStoreAsync("source", () => _Deps.Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
 
             // Delta detection: hash the fetched bytes and, if identical to what the link last ingested successfully,
             // signal the orchestrator to complete immediately and skip the expensive downstream work. Re-processing
             // identical content is deterministic, so skipping is safe. A previously-failed link has no stored hash.
             context.ContentHash = ComputeContentHash(data);
-            SubjectLink? existingLink = await _Deps.Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
             if (existingLink != null
                 && existingLink.Status == SubjectLinkStatusEnum.Ingested
                 && !String.IsNullOrEmpty(existingLink.ContentHash)

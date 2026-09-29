@@ -12,7 +12,10 @@ namespace Pneuma.Core.Integrations.Implementations
     /// JavaScript-rendered pages are captured as fully-rendered HTML. Non-HTML resources (PDFs,
     /// images, office documents, ...) are returned as their raw bytes. On any browser failure the
     /// fetch falls back to the supplied <see cref="IContentFetcher"/> (typically a plain HTTP GET).
-    /// The browser is launched lazily and shared across fetches.
+    /// The browser is launched lazily and shared across fetches. Every fetch goes through a
+    /// <see cref="FetchSafetyPolicy"/>: the page URL is resolved and checked before navigation, every request the page
+    /// makes is intercepted and refused when its host is not allowed, certificates are validated unless the policy
+    /// allows invalid ones, and the captured content is held to the download limit.
     /// </summary>
     public class PlaywrightContentFetcher : IContentFetcher, IAsyncDisposable
     {
@@ -21,6 +24,7 @@ namespace Pneuma.Core.Integrations.Implementations
         private readonly IContentFetcher? _Fallback;
         private readonly int _NavigationTimeoutMs;
         private readonly string _UserAgent;
+        private readonly FetchSafetyPolicy _Policy;
         private readonly SemaphoreSlim _InitLock = new SemaphoreSlim(1, 1);
         private IPlaywright? _Playwright;
         private IBrowser? _Browser;
@@ -34,8 +38,10 @@ namespace Pneuma.Core.Integrations.Implementations
         /// <param name="fallback">Fetcher used when the browser is unavailable or navigation fails. May be null.</param>
         /// <param name="navigationTimeoutMs">Navigation timeout in milliseconds (minimum 1000).</param>
         /// <param name="userAgent">User-Agent header presented by the browser; falls back to <see cref="HttpContentFetcher.DefaultUserAgent"/> when null or empty.</param>
-        public PlaywrightContentFetcher(IContentFetcher? fallback = null, int navigationTimeoutMs = 60000, string? userAgent = null)
+        /// <param name="policy">Fetch-safety policy; null uses the default (secure) policy.</param>
+        public PlaywrightContentFetcher(IContentFetcher? fallback = null, int navigationTimeoutMs = 60000, string? userAgent = null, FetchSafetyPolicy? policy = null)
         {
+            _Policy = policy ?? new FetchSafetyPolicy();
             _Fallback = fallback;
             _NavigationTimeoutMs = navigationTimeoutMs < 1000 ? 60000 : navigationTimeoutMs;
             _UserAgent = String.IsNullOrWhiteSpace(userAgent) ? HttpContentFetcher.DefaultUserAgent : userAgent!;
@@ -52,19 +58,35 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             if (String.IsNullOrWhiteSpace(url)) throw new ArgumentNullException(nameof(url));
 
+            // Refusals are final: the HTTP fallback would refuse the same URL, so they are thrown rather than retried.
+            await _Policy.EnsureAllowedAsync(url, token).ConfigureAwait(false);
+
             try
             {
                 IBrowser browser = await GetBrowserAsync(token).ConfigureAwait(false);
+                using (IDisposable lease = await _Policy.HostLimiter.AcquireAsync(url, token).ConfigureAwait(false))
                 await using (IBrowserContext context = await browser.NewContextAsync(new BrowserNewContextOptions
                 {
                     UserAgent = _UserAgent,
-                    IgnoreHTTPSErrors = true,
+                    IgnoreHTTPSErrors = _Policy.Settings.AllowInvalidCertificates,
                     // A real desktop viewport/locale so responsive sites render their full content rather
                     // than a minimal/mobile variant.
                     ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
                     Locale = "en-US"
                 }).ConfigureAwait(false))
                 {
+                    // Every request the page makes (redirects, frames, scripts, XHR) is checked the same way as the page
+                    // itself, so a page cannot pull content from an internal address into what is ingested.
+                    await context.RouteAsync("**/*", async route =>
+                    {
+                        string requestUrl = route.Request.Url;
+                        bool local = requestUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                            || requestUrl.StartsWith("blob:", StringComparison.OrdinalIgnoreCase)
+                            || requestUrl.StartsWith("about:", StringComparison.OrdinalIgnoreCase);
+                        if (local || await _Policy.IsAllowedAsync(requestUrl, CancellationToken.None).ConfigureAwait(false)) await route.ContinueAsync().ConfigureAwait(false);
+                        else await route.AbortAsync("blockedbyclient").ConfigureAwait(false);
+                    }).ConfigureAwait(false);
+
                     IPage page = await context.NewPageAsync().ConfigureAwait(false);
                     IResponse? response = await page.GotoAsync(url, new PageGotoOptions
                     {
@@ -91,17 +113,31 @@ namespace Pneuma.Core.Integrations.Implementations
                         await RevealContentAsync(page, token).ConfigureAwait(false);
 
                         string html = await page.ContentAsync().ConfigureAwait(false);
-                        return Encoding.UTF8.GetBytes(html);
+                        byte[] rendered = Encoding.UTF8.GetBytes(html);
+                        _Policy.EnsureWithinLimit(rendered.Length, url);
+                        return rendered;
                     }
 
                     if (response != null)
                     {
                         byte[] body = await response.BodyAsync().ConfigureAwait(false);
-                        if (body != null && body.Length > 0) return body;
+                        if (body != null && body.Length > 0)
+                        {
+                            _Policy.EnsureWithinLimit(body.Length, url);
+                            return body;
+                        }
                     }
                 }
             }
             catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (FetchBlockedException)
+            {
+                throw;
+            }
+            catch (ContentTooLargeException)
             {
                 throw;
             }

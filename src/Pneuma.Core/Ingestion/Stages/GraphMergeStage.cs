@@ -2,6 +2,7 @@ namespace Pneuma.Core.Ingestion.Stages
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
@@ -10,6 +11,7 @@ namespace Pneuma.Core.Ingestion.Stages
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Merges the candidate subgraph into the tenant's knowledge graph: creates and links the Source node, does
@@ -96,11 +98,20 @@ namespace Pneuma.Core.Ingestion.Stages
                         continue;
                     }
                     string cellNodeId = await CreateCellNodeAsync(job, graph, createdSource.Id, cell.Text, token).ConfigureAwait(false);
+                    if (String.IsNullOrEmpty(cellNodeId)) job.Completeness.IncrementCellNodesFailed();
+                    else job.Completeness.IncrementCellNodesCreated();
                     cellNodeIds.Add(cellNodeId);
                     if (!String.IsNullOrEmpty(cellNodeId)) merge.NodeIds.Add(cellNodeId);
                 }
             }
             merge.CellNodeIds = cellNodeIds;
+            if (job.Completeness.CellNodesFailed > 0)
+            {
+                // Chunks of a cell without a node fall back to the Source node, so the text stays searchable; only
+                // its cell-level provenance is lost.
+                context.AddWarning(job.Completeness.CellNodesFailed.ToString(CultureInfo.InvariantCulture) + " cell node(s) could not be created; their chunks are linked to the source node instead.");
+                PneumaMetrics.RecordIngestionPartial("GraphMerge", "cell_node");
+            }
 
             context.Merge = merge;
             job.GraphNodeIds = merge.NodeIds;

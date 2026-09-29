@@ -5,11 +5,12 @@ namespace Pneuma.Core.Ingestion.Deletion
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Helpers;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
-    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Storage;
 
     /// <summary>
@@ -97,6 +98,9 @@ namespace Pneuma.Core.Ingestion.Deletion
                 jobIds.Add(job.Id);
             }
             await TryExternalAsync(() => _Artifacts.DeleteAllForLinkAsync(linkId, token)).ConfigureAwait(false);
+
+            // Pushed content lives in the blob store under the link; remove it with the link (a no-op for other links).
+            await TryExternalAsync(() => _Blobs.DeleteAsync(InlineContentKeys.KeyFor(tenantId, linkId), token)).ConfigureAwait(false);
 
             // The jobs, their events, and the link row are removed in one transaction.
             return await _Db.SubjectLinks.DeleteWithJobsAsync(tenantId, linkId, jobIds, token).ConfigureAwait(false);

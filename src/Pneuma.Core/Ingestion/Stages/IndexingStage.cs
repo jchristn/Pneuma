@@ -54,7 +54,7 @@ namespace Pneuma.Core.Ingestion.Stages
             MergeResult merge = context.Merge;
             List<SemanticChunk> chunks = context.Chunks;
 
-            if (String.IsNullOrEmpty(job.CollectionId)) throw new IngestionHardFailException(IngestionStageEnum.Indexing, "Ingestion job " + job.Id + " has no target collection assigned.");
+            if (String.IsNullOrEmpty(job.CollectionId)) throw new IngestionHardFailException(IngestionStageEnum.Indexing, IngestionFailureCategoryEnum.Configuration, "Ingestion job " + job.Id + " has no target collection assigned.");
 
             string sourceNodeId = merge.NodeIds.Count > 0 ? merge.NodeIds[0] : String.Empty;
             List<ChunkDocument> documents = new List<ChunkDocument>();
@@ -109,6 +109,8 @@ namespace Pneuma.Core.Ingestion.Stages
             {
                 await _Deps.Vectors.StoreChunksAsync(job.TenantId, job.CollectionId, documents, token).ConfigureAwait(false);
             }
+
+            job.Completeness.ChunksIndexed = documents.Count;
 
             context.Message = "Search indexing complete — stored " + documents.Count + " chunk document(s) in collection " + job.CollectionId + ", each linked back to its knowledge-graph node.";
         }

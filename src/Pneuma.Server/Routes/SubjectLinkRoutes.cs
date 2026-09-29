@@ -2,23 +2,28 @@ namespace Pneuma.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
+    using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
-    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Helpers;
-    using Pneuma.Core.Integrations.Abstractions;
-    using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Configuration;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Ingestion.Refresh;
+    using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Implementations;
+    using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -34,6 +39,8 @@ namespace Pneuma.Server.Routes
         private readonly AuthorizationService _Authz;
         private readonly IArtifactStore _Artifacts;
         private readonly ICollectionStore _Collections;
+        private readonly FetchSafetyPolicy _FetchPolicy;
+        private readonly ContentSubmissionService? _Content;
 
         #endregion
 
@@ -45,8 +52,13 @@ namespace Pneuma.Server.Routes
         /// <param name="artifacts">Per-stage S3 artifact store used by the artifact-view endpoints.</param>
         /// <param name="collections">Collection store, used to validate the target collection at submit time.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, ICollectionStore collections)
+        /// <param name="fetchPolicy">Fetch-safety policy used to reject unsafe URLs at submission; null uses the default policy.</param>
+        /// <param name="blobs">Blob store holding pushed content; null disables the content push routes (501).</param>
+        /// <param name="ingestion">Ingestion settings (content size limit); null uses the defaults.</param>
+        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, ICollectionStore collections, FetchSafetyPolicy? fetchPolicy = null, IBlobStore? blobs = null, IngestionSettings? ingestion = null)
         {
+            _FetchPolicy = fetchPolicy ?? new FetchSafetyPolicy();
+            _Content = blobs == null ? null : new ContentSubmissionService(db ?? throw new ArgumentNullException(nameof(db)), blobs, ingestion ?? new IngestionSettings());
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
@@ -71,6 +83,10 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Submit a content link for ingestion", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitLinkRequest>("Content link to submit for ingestion")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/links/bulk", BulkSubmitAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Submit multiple content links for ingestion", "Subjects").WithRequestBody(OpenApiBodies.Json<BulkSubmitLinkRequest>("Content links to submit for ingestion")));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/content", SubmitContentAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Push content (text, Markdown, HTML, or JSON) to a subject for ingestion; an externalKey upserts", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitContentRequest>("Content to ingest")));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/content/batch", SubmitContentBatchAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Push up to 100 content items to a subject for ingestion, with a result per item", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitContentBatchRequest>("Content items to ingest")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{subjectId}/links", ListBySubjectAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List a subject's links", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/links", ListAsync, RouteHelper.ExceptionAsync,
@@ -224,6 +240,7 @@ namespace Pneuma.Server.Routes
                 SourceUrl = link.Url,
                 Labels = link.Labels,
                 Tags = link.Tags,
+                Trigger = IngestionTriggerEnum.Reingest,
                 Status = IngestionStatusEnum.Queued,
                 Stage = IngestionStageEnum.Pending,
                 EmbeddingEndpointId = subject.EmbeddingModel,
@@ -261,6 +278,126 @@ namespace Pneuma.Server.Routes
             return true;
         }
 
+        // Reject a URL the fetch-safety policy would refuse (not http or https, not absolute, or an IP literal or
+        // localhost that is not allow-listed) with a 400, and audit it. Host names are resolved at fetch time instead.
+        private async Task<bool> EnsureSafeUrlAsync(HttpContextBase ctx, RequestContext rc, string url)
+        {
+            string? reason = _FetchPolicy.CheckUrlShape(url);
+            if (reason == null) return true;
+
+            try
+            {
+                AuditRecord record = new AuditRecord
+                {
+                    EventType = AuditEventTypeEnum.FetchBlocked,
+                    TenantId = rc.TenantId,
+                    UserId = rc.UserId,
+                    HttpMethod = ctx.Request.Method.ToString(),
+                    UrlPath = ctx.Request.Url.RawWithoutQuery,
+                    SourceIp = ctx.Request.Source?.IpAddress,
+                    DenialReason = reason + ": " + url
+                };
+                await _Db.Audit.CreateAsync(record, ctx.Token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                // Audit is best-effort; the refusal stands either way.
+            }
+
+            string message = reason == "scheme"
+                ? "Only http and https URLs can be ingested: " + url
+                : reason == "private-address"
+                    ? "The URL " + url + " points at a private or internal address, which is blocked. An administrator can allow the host in Ingestion.FetchSafety.AllowedPrivateHosts."
+                    : "The URL is not a valid absolute http or https URL: " + url;
+            await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", message).ConfigureAwait(false);
+            return false;
+        }
+
+        private async Task SubmitContentAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Write).ConfigureAwait(false)) return;
+            Subject? subject = await ReadContentSubjectAsync(ctx, rc).ConfigureAwait(false);
+            if (subject == null) return;
+
+            SubmitContentRequest? request = RouteHelper.ReadBody<SubmitContentRequest>(ctx);
+            if (request == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A content body is required.").ConfigureAwait(false);
+                return;
+            }
+
+            ContentSubmitResult result = await _Content!.SubmitAsync(rc.UserId, subject, request, 0, ctx.Token).ConfigureAwait(false);
+            if (result.Error != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, result.StatusCode, result.StatusCode == 413 ? "PayloadTooLarge" : "BadRequest", result.Error).ConfigureAwait(false);
+                return;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, result.StatusCode, result).ConfigureAwait(false);
+        }
+
+        private async Task SubmitContentBatchAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Write).ConfigureAwait(false)) return;
+            Subject? subject = await ReadContentSubjectAsync(ctx, rc).ConfigureAwait(false);
+            if (subject == null) return;
+
+            SubmitContentBatchRequest? request = RouteHelper.ReadBody<SubmitContentBatchRequest>(ctx);
+            if (request?.Items == null || request.Items.Count == 0)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "At least one content item is required.").ConfigureAwait(false);
+                return;
+            }
+
+            if (request.Items.Count > _Content!.MaxBatchItems)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "A batch holds at most " + _Content.MaxBatchItems + " items; got " + request.Items.Count + ".").ConfigureAwait(false);
+                return;
+            }
+
+            // Every item is attempted and reported; an invalid item never stops the rest.
+            ContentBatchResponse response = new ContentBatchResponse();
+            for (int i = 0; i < request.Items.Count; i++)
+            {
+                ContentSubmitResult result = await _Content!.SubmitAsync(rc.UserId, subject, request.Items[i] ?? new SubmitContentRequest(), i, ctx.Token).ConfigureAwait(false);
+                response.Results.Add(result);
+                if (result.Error == null) response.Accepted++;
+                else response.Rejected++;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
+        }
+
+        // Resolve and check the subject for a content push: the tenant, the subject, its models and collection, and a
+        // configured blob store. Sends the error response and returns null when any is missing.
+        private async Task<Subject?> ReadContentSubjectAsync(HttpContextBase ctx, RequestContext rc)
+        {
+            if (_Content == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 501, "NotImplemented", "Content push is not available: no blob store is configured.").ConfigureAwait(false);
+                return null;
+            }
+
+            string tenantId = rc.TenantId ?? String.Empty;
+            if (String.IsNullOrEmpty(tenantId))
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false);
+                return null;
+            }
+
+            Subject? subject = await _Db.Subjects.ReadAsync(tenantId, RouteHelper.Param(ctx, "subjectId"), ctx.Token).ConfigureAwait(false);
+            if (subject == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Subject not found.").ConfigureAwait(false);
+                return null;
+            }
+
+            if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return null;
+            return subject;
+        }
+
         private async Task SubmitAsync(HttpContextBase ctx)
         {
             RequestContext rc = RouteHelper.Context(ctx);
@@ -288,9 +425,17 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
+            if (!await EnsureSafeUrlAsync(ctx, rc, request.Url).ConfigureAwait(false)) return;
+
             // Models and collection are owned by the subject; the link body carries the URL/title plus optional
             // labels/tags that are stamped onto every chunk (RecallDB) and the link's source graph node (LiteGraph).
             if (!await RequireSubjectConfiguredAsync(ctx, tenantId, subject).ConfigureAwait(false)) return;
+            string? refreshProblem = LinkRefreshSchedule.Validate(request.RefreshIntervalMinutes, "refreshIntervalMinutes");
+            if (refreshProblem != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", refreshProblem).ConfigureAwait(false);
+                return;
+            }
 
             List<string> labels = NormalizeLabels(request.Labels);
             Dictionary<string, string> tags = NormalizeTags(request.Tags);
@@ -304,8 +449,10 @@ namespace Pneuma.Server.Routes
                 Labels = labels,
                 Tags = tags,
                 SubmittedByUserId = rc.UserId,
-                Status = SubjectLinkStatusEnum.Submitted
+                Status = SubjectLinkStatusEnum.Submitted,
+                RefreshIntervalMinutes = request.RefreshIntervalMinutes
             };
+            LinkRefreshService.Reschedule(link, subject);
             IngestionJob job = new IngestionJob
             {
                 TenantId = tenantId,
@@ -371,6 +518,19 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
+            // The whole batch is refused when any URL is unsafe, so a caller never ends up with half a batch submitted.
+            foreach (string url in urls)
+            {
+                if (!await EnsureSafeUrlAsync(ctx, rc, url).ConfigureAwait(false)) return;
+            }
+
+            string? refreshProblem = LinkRefreshSchedule.Validate(request.RefreshIntervalMinutes, "refreshIntervalMinutes");
+            if (refreshProblem != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", refreshProblem).ConfigureAwait(false);
+                return;
+            }
+
             List<string> labels = NormalizeLabels(request.Labels);
             Dictionary<string, string> tags = NormalizeTags(request.Tags);
 
@@ -386,8 +546,10 @@ namespace Pneuma.Server.Routes
                     Labels = new List<string>(labels),
                     Tags = new Dictionary<string, string>(tags),
                     SubmittedByUserId = rc.UserId,
-                    Status = SubjectLinkStatusEnum.Submitted
+                    Status = SubjectLinkStatusEnum.Submitted,
+                    RefreshIntervalMinutes = request.RefreshIntervalMinutes
                 };
+                LinkRefreshService.Reschedule(link, subject);
                 IngestionJob job = new IngestionJob
                 {
                     TenantId = tenantId,
@@ -468,8 +630,7 @@ namespace Pneuma.Server.Routes
             List<IngestionJobDetail> log = new List<IngestionJobDetail>();
             foreach (IngestionJob job in jobs)
             {
-                List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(tenantId, job.Id, ctx.Token).ConfigureAwait(false);
-                log.Add(new IngestionJobDetail { Job = job, Events = events });
+                log.Add(await IngestionJobDetailBuilder.BuildAsync(_Db, tenantId, job, ctx.Token).ConfigureAwait(false));
             }
             await RouteHelper.SendJsonAsync(ctx, 200, log).ConfigureAwait(false);
         }

@@ -210,6 +210,79 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF COL_LENGTH('dbo.ingestiontuning', 'classificationbatchoverlap') IS NULL ALTER TABLE dbo.ingestiontuning ADD classificationbatchoverlap INT NOT NULL DEFAULT 3;",
                     "IF COL_LENGTH('dbo.ingestiontuning', 'classificationbatchconcurrency') IS NULL ALTER TABLE dbo.ingestiontuning ADD classificationbatchconcurrency INT NOT NULL DEFAULT 4;"
                 }));
+                list.Add(new SchemaMigration(28, "Add ingestion failure categories, warnings, completeness counters, and job attempts", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'failurecategory') IS NULL ALTER TABLE dbo.ingestionjobs ADD failurecategory NVARCHAR(256);",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'warningsjson') IS NULL ALTER TABLE dbo.ingestionjobs ADD warningsjson NVARCHAR(MAX);",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'cellsextracted') IS NULL ALTER TABLE dbo.ingestionjobs ADD cellsextracted INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'classificationbatches') IS NULL ALTER TABLE dbo.ingestionjobs ADD classificationbatches INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'classificationbatchesfailed') IS NULL ALTER TABLE dbo.ingestionjobs ADD classificationbatchesfailed INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'cellnodescreated') IS NULL ALTER TABLE dbo.ingestionjobs ADD cellnodescreated INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'cellnodesfailed') IS NULL ALTER TABLE dbo.ingestionjobs ADD cellnodesfailed INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'summariesattempted') IS NULL ALTER TABLE dbo.ingestionjobs ADD summariesattempted INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'summariesfailed') IS NULL ALTER TABLE dbo.ingestionjobs ADD summariesfailed INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'chunksproduced') IS NULL ALTER TABLE dbo.ingestionjobs ADD chunksproduced INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'chunksembedded') IS NULL ALTER TABLE dbo.ingestionjobs ADD chunksembedded INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'chunksindexed') IS NULL ALTER TABLE dbo.ingestionjobs ADD chunksindexed INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'failurecategory') IS NULL ALTER TABLE dbo.subjectlinks ADD failurecategory NVARCHAR(256);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'warningcount') IS NULL ALTER TABLE dbo.subjectlinks ADD warningcount INT NOT NULL DEFAULT 0;",
+                    "IF OBJECT_ID(N'dbo.ingestionjobattempts', N'U') IS NULL CREATE TABLE dbo.ingestionjobattempts (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, jobid NVARCHAR(64) NOT NULL, attemptnumber INT NOT NULL DEFAULT 1, succeeded INT NOT NULL DEFAULT 0, stage NVARCHAR(256), failurecategory NVARCHAR(256), message NVARCHAR(MAX), startedutc NVARCHAR(32) NOT NULL, endedutc NVARCHAR(32) NOT NULL, createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ingestionjobattempts_tenant_job' AND object_id = OBJECT_ID(N'dbo.ingestionjobattempts')) CREATE INDEX idx_ingestionjobattempts_tenant_job ON dbo.ingestionjobattempts (tenantid, jobid, attemptnumber);"
+                }));
+                list.Add(new SchemaMigration(29, "Add model runner maximum retries", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.modelrunners', 'maxretries') IS NULL ALTER TABLE dbo.modelrunners ADD maxretries INT NOT NULL DEFAULT 5;"
+                }));
+                list.Add(new SchemaMigration(30, "Add link current job id", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'currentjobid') IS NULL ALTER TABLE dbo.subjectlinks ADD currentjobid NVARCHAR(64);"
+                }));
+                list.Add(new SchemaMigration(31, "Add model runner maximum input tokens and subject chunk headers", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.modelrunners', 'maxinputtokens') IS NULL ALTER TABLE dbo.modelrunners ADD maxinputtokens INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.subjects', 'chunkheaders') IS NULL ALTER TABLE dbo.subjects ADD chunkheaders NVARCHAR(256) DEFAULT 'None';"
+                }));
+                list.Add(new SchemaMigration(32, "Add link source kind, external key, content type, size, and crawl plan", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'sourcekind') IS NULL ALTER TABLE dbo.subjectlinks ADD sourcekind NVARCHAR(256) NOT NULL DEFAULT 'Url';",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'externalkey') IS NULL ALTER TABLE dbo.subjectlinks ADD externalkey NVARCHAR(256);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'contenttype') IS NULL ALTER TABLE dbo.subjectlinks ADD contenttype NVARCHAR(256);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'sizebytes') IS NULL ALTER TABLE dbo.subjectlinks ADD sizebytes BIGINT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'crawlplanid') IS NULL ALTER TABLE dbo.subjectlinks ADD crawlplanid NVARCHAR(64);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectlinks_tenant_crawlplan' AND object_id = OBJECT_ID(N'dbo.subjectlinks')) CREATE INDEX idx_subjectlinks_tenant_crawlplan ON dbo.subjectlinks (tenantid, crawlplanid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectlinks_tenant_subject_externalkey' AND object_id = OBJECT_ID(N'dbo.subjectlinks')) CREATE UNIQUE INDEX idx_subjectlinks_tenant_subject_externalkey ON dbo.subjectlinks (tenantid, subjectid, externalkey) WHERE externalkey IS NOT NULL;"
+                }));
+                list.Add(new SchemaMigration(33, "Add crawl plans, settings, secrets, objects, operations, and operation objects", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.crawlplans', N'U') IS NULL CREATE TABLE dbo.crawlplans (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, name NVARCHAR(256) NOT NULL, plantype NVARCHAR(256) NOT NULL, enabled INT NOT NULL DEFAULT 1, status NVARCHAR(256) NOT NULL DEFAULT 'Idle', filterminsizebytes BIGINT NOT NULL DEFAULT 0, filtermaxsizebytes BIGINT NOT NULL DEFAULT 0, filtermaxobjects INT NOT NULL DEFAULT 0, scheduletype NVARCHAR(256) NOT NULL DEFAULT 'Manual', scheduleintervalminutes INT NOT NULL DEFAULT 1440, schedulecron NVARCHAR(256), scheduletimezone NVARCHAR(256) NOT NULL DEFAULT 'UTC', processadditions INT NOT NULL DEFAULT 1, processupdates INT NOT NULL DEFAULT 1, processdeletions INT NOT NULL DEFAULT 0, maxdeletionfraction FLOAT NOT NULL DEFAULT 0.2, retryfailedobjects INT NOT NULL DEFAULT 1, operationretentiondays INT NOT NULL DEFAULT 30, lastoperationid NVARCHAR(64), lastrunutc NVARCHAR(32), lastsuccessutc NVARCHAR(32), nextrunutc NVARCHAR(32), claimtoken NVARCHAR(64), claimexpiresutc NVARCHAR(32), createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlplans_tenant_subject' AND object_id = OBJECT_ID(N'dbo.crawlplans')) CREATE INDEX idx_crawlplans_tenant_subject ON dbo.crawlplans (tenantid, subjectid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlplans_nextrun' AND object_id = OBJECT_ID(N'dbo.crawlplans')) CREATE INDEX idx_crawlplans_nextrun ON dbo.crawlplans (nextrunutc);",
+                    "IF OBJECT_ID(N'dbo.crawlplansettings', N'U') IS NULL CREATE TABLE dbo.crawlplansettings (tenantid NVARCHAR(64) NOT NULL, planid NVARCHAR(64) NOT NULL, name NVARCHAR(256) NOT NULL, ordinal INT NOT NULL DEFAULT 0, settingvalue NVARCHAR(MAX));",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlplansettings_plan_name_ordinal' AND object_id = OBJECT_ID(N'dbo.crawlplansettings')) CREATE UNIQUE INDEX idx_crawlplansettings_plan_name_ordinal ON dbo.crawlplansettings (tenantid, planid, name, ordinal);",
+                    "IF OBJECT_ID(N'dbo.crawlplansecrets', N'U') IS NULL CREATE TABLE dbo.crawlplansecrets (tenantid NVARCHAR(64) NOT NULL, planid NVARCHAR(64) NOT NULL, name NVARCHAR(256) NOT NULL, ciphertext NVARCHAR(MAX) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlplansecrets_plan_name' AND object_id = OBJECT_ID(N'dbo.crawlplansecrets')) CREATE UNIQUE INDEX idx_crawlplansecrets_plan_name ON dbo.crawlplansecrets (tenantid, planid, name);",
+                    "IF OBJECT_ID(N'dbo.crawlobjects', N'U') IS NULL CREATE TABLE dbo.crawlobjects (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, planid NVARCHAR(64) NOT NULL, externalkey NVARCHAR(MAX) NOT NULL, linkid NVARCHAR(64), versiontoken NVARCHAR(MAX), sizebytes BIGINT NOT NULL DEFAULT 0, contenttype NVARCHAR(256), status NVARCHAR(256) NOT NULL DEFAULT 'Active', lasterror NVARCHAR(MAX), lastoperationid NVARCHAR(64), firstseenutc NVARCHAR(32) NOT NULL, lastseenutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlobjects_tenant_plan' AND object_id = OBJECT_ID(N'dbo.crawlobjects')) CREATE INDEX idx_crawlobjects_tenant_plan ON dbo.crawlobjects (tenantid, planid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawlobjects_tenant_link' AND object_id = OBJECT_ID(N'dbo.crawlobjects')) CREATE INDEX idx_crawlobjects_tenant_link ON dbo.crawlobjects (tenantid, linkid);",
+                    "IF OBJECT_ID(N'dbo.crawloperations', N'U') IS NULL CREATE TABLE dbo.crawloperations (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, planid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, triggeredby NVARCHAR(256) NOT NULL DEFAULT 'Manual', status NVARCHAR(256) NOT NULL DEFAULT 'Running', enumerated INT NOT NULL DEFAULT 0, added INT NOT NULL DEFAULT 0, updated INT NOT NULL DEFAULT 0, retried INT NOT NULL DEFAULT 0, unchanged INT NOT NULL DEFAULT 0, deleted INT NOT NULL DEFAULT 0, missing INT NOT NULL DEFAULT 0, skipped INT NOT NULL DEFAULT 0, failed INT NOT NULL DEFAULT 0, bytesenumerated BIGINT NOT NULL DEFAULT 0, helddeletions INT NOT NULL DEFAULT 0, error NVARCHAR(MAX), startedutc NVARCHAR(32) NOT NULL, enumeratedutc NVARCHAR(32), dispatchedutc NVARCHAR(32), finishedutc NVARCHAR(32));",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawloperations_tenant_plan' AND object_id = OBJECT_ID(N'dbo.crawloperations')) CREATE INDEX idx_crawloperations_tenant_plan ON dbo.crawloperations (tenantid, planid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawloperations_status' AND object_id = OBJECT_ID(N'dbo.crawloperations')) CREATE INDEX idx_crawloperations_status ON dbo.crawloperations (status);",
+                    "IF OBJECT_ID(N'dbo.crawloperationobjects', N'U') IS NULL CREATE TABLE dbo.crawloperationobjects (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, operationid NVARCHAR(64) NOT NULL, externalkey NVARCHAR(MAX) NOT NULL, crawlaction NVARCHAR(256) NOT NULL, succeeded INT, linkid NVARCHAR(64), jobid NVARCHAR(64), detail NVARCHAR(MAX), createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawloperationobjects_tenant_operation' AND object_id = OBJECT_ID(N'dbo.crawloperationobjects')) CREATE INDEX idx_crawloperationobjects_tenant_operation ON dbo.crawloperationobjects (tenantid, operationid);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_crawloperationobjects_job' AND object_id = OBJECT_ID(N'dbo.crawloperationobjects')) CREATE INDEX idx_crawloperationobjects_job ON dbo.crawloperationobjects (jobid);"
+                }));
+                list.Add(new SchemaMigration(34, "Add scheduled link refresh (link interval, next refresh, source ETag and Last-Modified; subject default) and job trigger", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'refreshintervalminutes') IS NULL ALTER TABLE dbo.subjectlinks ADD refreshintervalminutes INT;",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'nextrefreshutc') IS NULL ALTER TABLE dbo.subjectlinks ADD nextrefreshutc NVARCHAR(32);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'lastrefreshutc') IS NULL ALTER TABLE dbo.subjectlinks ADD lastrefreshutc NVARCHAR(32);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'refreshfailures') IS NULL ALTER TABLE dbo.subjectlinks ADD refreshfailures INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'sourceetag') IS NULL ALTER TABLE dbo.subjectlinks ADD sourceetag NVARCHAR(256);",
+                    "IF COL_LENGTH('dbo.subjectlinks', 'sourcelastmodifiedutc') IS NULL ALTER TABLE dbo.subjectlinks ADD sourcelastmodifiedutc NVARCHAR(32);",
+                    "IF COL_LENGTH('dbo.subjects', 'defaultrefreshintervalminutes') IS NULL ALTER TABLE dbo.subjects ADD defaultrefreshintervalminutes INT NOT NULL DEFAULT 0;",
+                    "IF COL_LENGTH('dbo.ingestionjobs', 'triggeredby') IS NULL ALTER TABLE dbo.ingestionjobs ADD triggeredby NVARCHAR(256) NOT NULL DEFAULT 'Submit';",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectlinks_nextrefresh' AND object_id = OBJECT_ID(N'dbo.subjectlinks')) CREATE INDEX idx_subjectlinks_nextrefresh ON dbo.subjectlinks (nextrefreshutc);"
+                }));
                 return list;
             }
         }

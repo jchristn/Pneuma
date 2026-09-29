@@ -11,6 +11,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
 import { stageLabel } from '../components/IngestionLogModal';
 import StatusPill from '../components/StatusPill';
+import JobDiagnostics from '../components/JobDiagnostics';
 import CopyableId from '../components/CopyableId';
 import JsonViewer from '../components/JsonViewer';
 import './Ingestion.css';
@@ -31,6 +32,10 @@ function isFailed(status) {
   const s = (status || '').toLowerCase();
   return s === 'failed' || s === 'error';
 }
+
+// Failure categories the server assigns to failed jobs (IngestionFailureCategoryEnum), for the category filter.
+const FAILURE_CATEGORIES = ['Fetch', 'Blocked', 'TooLarge', 'UnsupportedType', 'Extraction', 'NoContent',
+  'ModelUnavailable', 'ModelRejected', 'Configuration', 'Storage', 'Timeout', 'PartialLoss', 'WorkerLost', 'Cancelled', 'Internal'];
 
 // Default table ordering: jobs that need attention or are in flight (anything NOT completed or queued)
 // sort to the top; completed and queued jobs sink to the bottom. Lower rank sorts first.
@@ -136,6 +141,8 @@ function IngestionView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [warningsFilter, setWarningsFilter] = useState('');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -147,14 +154,18 @@ function IngestionView() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiClient.getJobs(statusFilter ? { status: statusFilter, maxResults: 1000 } : { maxResults: 1000 });
+      const query = { maxResults: 1000 };
+      if (statusFilter) query.status = statusFilter;
+      if (categoryFilter) query.failureCategory = categoryFilter;
+      if (warningsFilter) query.hasWarnings = warningsFilter;
+      const res = await apiClient.getJobs(query);
       setJobs(asArray(res, 'jobs'));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [apiClient, statusFilter]);
+  }, [apiClient, statusFilter, categoryFilter, warningsFilter]);
 
   useEffect(() => {
     load();
@@ -254,7 +265,24 @@ function IngestionView() {
     {
       key: 'status',
       label: t('common.status'),
-      render: (v) => <StatusPill status={v} />
+      render: (v, row) => {
+        const warningCount = Array.isArray(row?.warnings) ? row.warnings.length : 0;
+        return (
+          <span className="status-with-badges">
+            <StatusPill status={v} />
+            {row?.failureCategory && (
+              <span className="status-pill pill-danger" title={t(`failureCategories.${row.failureCategory}.remediation`, '')}>
+                {t(`failureCategories.${row.failureCategory}.label`, row.failureCategory)}
+              </span>
+            )}
+            {warningCount > 0 && (
+              <span className="status-pill pill-warning" title={row.warnings.join('\n')}>
+                {t('ingestion.warningCount', { count: warningCount })}
+              </span>
+            )}
+          </span>
+        );
+      }
     },
     {
       key: 'createdUtc',
@@ -298,6 +326,21 @@ function IngestionView() {
             {s || t('common.all')}
           </option>
         ))}
+      </select>
+      <label htmlFor="ingestion-category-filter">{t('ingestion.filterCategory')}:</label>
+      <select id="ingestion-category-filter" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+        title={t('ingestion.categoryFilterTip')}>
+        <option value="">{t('common.all')}</option>
+        {FAILURE_CATEGORIES.map((c) => (
+          <option key={c} value={c}>{t(`failureCategories.${c}.label`, c)}</option>
+        ))}
+      </select>
+      <label htmlFor="ingestion-warnings-filter">{t('ingestion.filterWarnings')}:</label>
+      <select id="ingestion-warnings-filter" value={warningsFilter} onChange={(e) => setWarningsFilter(e.target.value)}
+        title={t('ingestion.warningsFilterTip')}>
+        <option value="">{t('common.all')}</option>
+        <option value="true">{t('ingestion.withWarnings')}</option>
+        <option value="false">{t('ingestion.withoutWarnings')}</option>
       </select>
     </div>
   );
@@ -367,6 +410,8 @@ function IngestionView() {
                 </span>
               </div>
             </div>
+
+            <JobDiagnostics job={detailJob} attempts={detail.attempts} />
 
             <h4 style={{ marginBottom: 14 }}>{t('ingestion.stages')}</h4>
             <StageTimeline events={detail.events} />

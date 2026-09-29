@@ -5,15 +5,16 @@ namespace Pneuma.Server.Mcp
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Security;
     using Pneuma.Core.Serialization;
+    using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using Pneuma.Server.Settings;
     using SyslogLogging;
     using WatsonWebserver.Core;
@@ -27,6 +28,20 @@ namespace Pneuma.Server.Mcp
     /// </summary>
     public class McpToolInvoker
     {
+        #region Public-Members
+
+        /// <summary>Crawl plan and crawl operation tools; null disables them.</summary>
+        public McpCrawlTools? Crawl { get; set; } = null;
+
+        /// <summary>Link refresh service for <c>pneuma_set_link_refresh</c>'s "refresh now"; null checks nothing.</summary>
+        public Pneuma.Core.Ingestion.Refresh.LinkRefreshService? LinkRefresh
+        {
+            get { return _Entities.LinkRefresh; }
+            set { _Entities.LinkRefresh = value; }
+        }
+
+        #endregion
+
         #region Private-Members
 
         private readonly AuthorizationService _Authz;
@@ -53,7 +68,8 @@ namespace Pneuma.Server.Mcp
         /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
         /// <param name="health">Model health monitor providing per-endpoint status.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency)
+        /// <param name="blobs">Blob store for pushed content; null disables the content push tool.</param>
+        public McpToolInvoker(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency, IBlobStore? blobs = null)
         {
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
@@ -67,6 +83,7 @@ namespace Pneuma.Server.Mcp
             if (health == null) throw new ArgumentNullException(nameof(health));
             _Authz = authz;
             _Entities = new McpEntityTools(db, concurrency);
+            if (blobs != null) _Entities.ContentSubmission = new ContentSubmissionService(db, blobs, settings.Ingestion);
             _GraphTools = new McpGraphTools(search, collections, defaultCollectionId, graphFactory, query);
             _Management = new McpManagementTools(db, query, logging);
             _Ops = new McpOpsTools(db, settings, health);
@@ -138,8 +155,64 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_ingestion_summary":
                     toolResult = await _Entities.IngestionSummaryAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
                     break;
+                case "pneuma_submit_content":
+                    toolResult = await _Entities.SubmitContentAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_crawl_plans":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.EnumeratePlansAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.GetPlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_create_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.CreatePlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_update_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.UpdatePlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_test_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.TestPlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_preview_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.PreviewPlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_start_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.StartPlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_stop_crawl_plan":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.StopPlanAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_crawl_operations":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.EnumerateOperationsAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_crawl_operation":
+                    if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Crawl.GetOperationAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
                 case "pneuma_enumerate_links":
                     toolResult = await _Entities.EnumerateLinksAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_set_link_refresh":
+                    toolResult = await _Entities.SetLinkRefreshAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_get_link":
                     toolResult = await _Entities.GetLinkAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);

@@ -4,9 +4,9 @@ namespace Pneuma.Core.Models
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Helpers;
     using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
-    using Pneuma.Core.Helpers;
 
     /// <summary>
     /// A subject archive owned by a tenant. Its knowledge graph is rooted at a LiteGraph node.
@@ -145,6 +145,14 @@ namespace Pneuma.Core.Models
             set { _ChunkOverlapTokens = Math.Clamp(value, 0, 4096); }
         }
 
+        /// <summary>
+        /// Context prepended to each chunk's text before it is embedded: none, the document title, or the title and the
+        /// section heading path. The stored and returned chunk text is unchanged. Defaults to TitleAndHeadings for new
+        /// subjects; subjects that existed before the setting was added keep None until changed, so their collections
+        /// are not mixed.
+        /// </summary>
+        public ChunkHeaderModeEnum ChunkHeaders { get; set; } = ChunkHeaderModeEnum.TitleAndHeadings;
+
         /// <summary>Default <see cref="RerankingPrompt"/>, applied at creation when none is supplied.</summary>
         public const string DefaultRerankingPrompt = "Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.";
 
@@ -185,6 +193,12 @@ namespace Pneuma.Core.Models
 
         /// <summary>Whether the subject archive is enabled.</summary>
         public bool Active { get; set; } = true;
+
+        /// <summary>
+        /// Minutes between scheduled refreshes for this subject's URL links that do not set their own interval. 0 (the
+        /// default) turns refresh off; otherwise 60 to 525600.
+        /// </summary>
+        public int DefaultRefreshIntervalMinutes { get; set; } = 0;
 
         /// <summary>
         /// Whether this subject is published to the end-user (consumer) chat experience. When false, the subject

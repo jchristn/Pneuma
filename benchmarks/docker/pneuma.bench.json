@@ -47,6 +47,15 @@
     "pruneIntervalMinutes": 60
   },
   "ingestion": {
+    "fetchSafety": {
+      "blockPrivateAddresses": true,
+      "allowedPrivateHosts": [
+        "127.0.0.1"
+      ],
+      "maxDownloadBytes": 104857600,
+      "allowInvalidCertificates": false,
+      "maxRequestsPerHost": 2
+    },
     "maxConcurrentTasks": 8,
     "pollIntervalMs": 1000,
     "maxAttempts": 6,
@@ -159,5 +168,17 @@
     "ollamaBaseUrl": "http://127.0.0.1:11434",
     "openAiBaseUrl": "https://api.openai.com/v1",
     "geminiBaseUrl": "https://generativelanguage.googleapis.com/v1beta"
+  },
+  "crawling": {
+    "schedulerEnabled": true,
+    "schedulerIntervalSeconds": 15,
+    "maxConcurrentOperations": 2,
+    "claimMinutes": 30,
+    "allowedLocalRoots": []
+  },
+  "linkRefresh": {
+    "enabled": true,
+    "intervalSeconds": 60,
+    "batchSize": 50
   }
 }

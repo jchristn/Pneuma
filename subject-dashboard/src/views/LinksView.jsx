@@ -14,7 +14,9 @@ import IngestionLogModal from '../components/IngestionLogModal';
 import LinkSubmitModal from '../components/LinkSubmitModal';
 import LinkBulkSubmitModal from '../components/LinkBulkSubmitModal';
 import LinkDetailModal from '../components/LinkDetailModal';
+import AddTextModal from '../components/AddTextModal';
 import { toLabelTagPayload } from '../components/LabelTagEditor';
+import LinkRefreshModal, { isRefreshable } from '../components/LinkRefreshModal';
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -30,6 +32,7 @@ function isFailed(status) {
 
 function LinksView() {
   const { apiClient } = useAuth();
+  const [addTextOpen, setAddTextOpen] = useState(false);
   const { t } = useTranslation();
 
   const [links, setLinks] = useState([]);
@@ -57,6 +60,8 @@ function LinksView() {
   const [deleting, setDeleting] = useState(false);
   const [reingestTarget, setReingestTarget] = useState(null);
   const [reingesting, setReingesting] = useState(false);
+  // Links whose scheduled refresh is being set (one from the row menu, several from the bulk bar).
+  const [refreshTargets, setRefreshTargets] = useState(null);
 
   const loadRef = useRef();
 
@@ -252,12 +257,43 @@ function LinksView() {
     }
   };
 
+  const saveRefresh = async (body) => {
+    const targets = refreshTargets || [];
+    if (targets.length === 1) await apiClient.setLinkRefresh(targets[0].id, body);
+    else {
+      const result = await apiClient.bulkSetLinkRefresh(targets.map((l) => l.id), body);
+      setNotice(t('links.refreshBulkUpdated', { count: typeof result?.updated === 'number' ? result.updated : targets.length }));
+      clear();
+    }
+    setRefreshTargets(null);
+    await load(false);
+  };
+
+  // Check a link for changes now and report the outcome (unchanged, re-ingest queued, failed, or busy).
+  const handleRefreshNow = async (link) => {
+    setError('');
+    setNotice('');
+    try {
+      const result = await apiClient.refreshLinkNow(link.id);
+      const outcome = String(result?.outcome || '');
+      const message = t(`links.refreshOutcome.${outcome}`, { defaultValue: result?.message || outcome });
+      if (outcome === 'Failed') setError(message);
+      else setNotice(message);
+      await load(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const refreshableSelected = selectedItems.filter(isRefreshable);
+
   const bulkBar = (
     <BulkActionBar
       count={selectedItems.length}
       onClear={clear}
       actions={[
         { key: 'reingest', label: t('links.reingestMultiple', 'Reingest Links'), onClick: () => setBulkReingestOpen(true) },
+        { key: 'refresh', label: t('links.setRefresh'), disabled: refreshableSelected.length === 0, onClick: () => setRefreshTargets(refreshableSelected) },
         { key: 'delete', label: t('common.delete'), danger: true, onClick: () => setBulkDeleteOpen(true) }
       ]}
     />
@@ -306,6 +342,16 @@ function LinksView() {
         )
     },
     {
+      key: 'nextRefreshUtc',
+      label: t('links.nextRefresh'),
+      sortAccessor: (row) => row.nextRefreshUtc || '',
+      render: (v, row) => {
+        if (!isRefreshable(row)) return '-';
+        if (!v) return <span style={{ color: 'var(--text-muted)' }}>{t('links.refreshOff')}</span>;
+        return <span title={row.refreshFailures > 0 ? t('links.refreshFailures', { count: row.refreshFailures }) : formatDateTime(v)}>{formatDateTime(v)}</span>;
+      }
+    },
+    {
       key: 'lastError',
       label: t('links.lastError'),
       sortable: false,
@@ -323,6 +369,10 @@ function LinksView() {
             { label: t('common.view'), onClick: () => setDetail(row) },
             { label: t('links.viewIngestionLog'), onClick: () => setLogTarget(row) },
             { label: t('links.reingest', 'Reingest Link'), onClick: () => setReingestTarget(row) },
+            ...(isRefreshable(row) ? [
+              { label: t('links.setRefresh'), onClick: () => setRefreshTargets([row]) },
+              { label: t('links.refreshNow'), onClick: () => handleRefreshNow(row) }
+            ] : []),
             { label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(row) }
           ]}
         />
@@ -352,6 +402,9 @@ function LinksView() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" onClick={openBulk} disabled={subjects.length === 0}>
               {t('links.addMultiple')}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setAddTextOpen(true)} disabled={subjects.length === 0} title={t('addText.buttonTip')}>
+              {t('addText.button')}
             </button>
             <button className="btn btn-primary" onClick={openSubmit} disabled={subjects.length === 0}>
               {t('links.submit')}
@@ -417,6 +470,20 @@ function LinksView() {
       />
 
       <LinkDetailModal detail={detail} subjectName={subjectName} onClose={() => setDetail(null)} />
+
+      <LinkRefreshModal
+        isOpen={!!refreshTargets}
+        links={refreshTargets}
+        onSave={saveRefresh}
+        onClose={() => setRefreshTargets(null)}
+      />
+
+      <AddTextModal
+        isOpen={addTextOpen}
+        onClose={() => setAddTextOpen(false)}
+        subjects={subjects}
+        onSubmitted={(message) => { setNotice(message); load(); }}
+      />
 
       <IngestionLogModal
         isOpen={!!logTarget}

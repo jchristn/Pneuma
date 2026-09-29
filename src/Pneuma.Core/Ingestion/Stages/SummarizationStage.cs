@@ -2,12 +2,14 @@ namespace Pneuma.Core.Ingestion.Stages
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Observability;
 
     /// <summary>
     /// Summarizes each substantive cell with bounded per-job concurrency. Short fragments (below the effective
@@ -67,6 +69,8 @@ namespace Pneuma.Core.Ingestion.Stages
             }
 
             List<CellSummary> summaries = new List<CellSummary>();
+            job.Completeness.SummariesAttempted = targets.Count;
+            string? firstSummaryError = null;
             if (targets.Count > 0)
             {
                 // Summarize with bounded per-job concurrency (Task.WhenAll gated by a semaphore) so one document does
@@ -102,6 +106,8 @@ namespace Pneuma.Core.Ingestion.Stages
                             catch (Exception e)
                             {
                                 _Deps.Logging.Warn("[SummarizationStage] summarization of a cell failed (skipped): " + e.Message);
+                                job.Completeness.IncrementSummariesFailed();
+                                Interlocked.CompareExchange(ref firstSummaryError, e.Message, null);
                             }
                             finally
                             {
@@ -116,6 +122,13 @@ namespace Pneuma.Core.Ingestion.Stages
                 {
                     if (summary != null) summaries.Add(summary);
                 }
+            }
+
+            if (job.Completeness.SummariesFailed > 0)
+            {
+                context.AddWarning(job.Completeness.SummariesFailed.ToString(CultureInfo.InvariantCulture) + " of " + targets.Count.ToString(CultureInfo.InvariantCulture) +
+                    " cell summaries failed and were skipped (first error: " + firstSummaryError + ").");
+                PneumaMetrics.RecordIngestionPartial("Summarization", "summary");
             }
 
             context.Summaries = summaries;

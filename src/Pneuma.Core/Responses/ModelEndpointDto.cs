@@ -75,6 +75,12 @@ namespace Pneuma.Core.Responses
         /// <summary>Maximum number of requests that may queue for a slot once the concurrency limit is reached.</summary>
         public int MaxQueueDepth { get; set; } = 0;
 
+        /// <summary>Retries of a transient failure before a call fails (0 to 10).</summary>
+        public int MaxRetries { get; set; } = 5;
+
+        /// <summary>Largest embedding input in the model's tokens; 0 uses the known limit for the model family.</summary>
+        public int MaxInputTokens { get; set; } = 0;
+
         /// <summary>Completion model context window in tokens (0 = unset). Drives automatic chat compression.</summary>
         public int ContextSize { get; set; } = 0;
 

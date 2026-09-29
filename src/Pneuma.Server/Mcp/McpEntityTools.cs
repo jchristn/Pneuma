@@ -3,21 +3,24 @@ namespace Pneuma.Server.Mcp
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Helpers;
-    using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Ingestion.Refresh;
+    using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using WatsonWebserver.Core;
 
     /// <summary>
@@ -434,9 +437,27 @@ namespace Pneuma.Server.Mcp
         public async Task<object> EnumerateJobsAsync(RequestContext rc, JsonElement arguments, CancellationToken token)
         {
             string tenantId = rc.TenantId ?? String.Empty;
+            IngestionStatusEnum? status = null;
+            string statusText = McpJsonRpc.GetStringArgument(arguments, "status");
+            if (!String.IsNullOrEmpty(statusText) && Enum.TryParse<IngestionStatusEnum>(statusText, true, out IngestionStatusEnum parsedStatus)) status = parsedStatus;
+
             List<IngestionJob> jobs = String.IsNullOrEmpty(tenantId)
                 ? new List<IngestionJob>()
-                : await _Db.IngestionJobs.EnumerateAsync(tenantId, null, token).ConfigureAwait(false);
+                : await _Db.IngestionJobs.EnumerateAsync(tenantId, status, token).ConfigureAwait(false);
+
+            string categoryText = McpJsonRpc.GetStringArgument(arguments, "failureCategory");
+            if (!String.IsNullOrEmpty(categoryText) && Enum.TryParse<IngestionFailureCategoryEnum>(categoryText, true, out IngestionFailureCategoryEnum category))
+            {
+                jobs = jobs.Where(j => j.FailureCategory == category).ToList();
+            }
+
+            if (arguments.ValueKind == JsonValueKind.Object
+                && arguments.TryGetProperty("hasWarnings", out JsonElement warningsElement)
+                && (warningsElement.ValueKind == JsonValueKind.True || warningsElement.ValueKind == JsonValueKind.False))
+            {
+                bool wantWarnings = warningsElement.ValueKind == JsonValueKind.True;
+                jobs = jobs.Where(j => (j.Warnings.Count > 0) == wantWarnings).ToList();
+            }
 
             EnumerationQuery query = McpJsonRpc.QueryFromArguments(arguments);
             EnumerationResult<IngestionJob> page = EnumerationHelper.Paginate(jobs, query, j => j.CreatedUtc, j => j.SourceUrl);
@@ -444,10 +465,88 @@ namespace Pneuma.Server.Mcp
             List<object> summaries = new List<object>();
             foreach (IngestionJob job in page.Objects)
             {
-                summaries.Add(new { id = job.Id, status = job.Status.ToString(), stage = job.Stage.ToString(), sourceUrl = job.SourceUrl, documentType = job.DocumentType });
+                summaries.Add(new
+                {
+                    id = job.Id,
+                    status = job.Status.ToString(),
+                    stage = job.Stage.ToString(),
+                    sourceUrl = job.SourceUrl,
+                    documentType = job.DocumentType,
+                    failureCategory = job.FailureCategory?.ToString(),
+                    warningCount = job.Warnings.Count
+                });
             }
 
             return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
+        }
+
+        /// <summary>Stores and queues pushed content for <c>pneuma_submit_content</c>; null disables the tool.</summary>
+        public ContentSubmissionService? ContentSubmission { get; set; } = null;
+
+        /// <summary>Push content to a subject (<c>pneuma_submit_content</c>).</summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result, or null when an error response was already sent.</returns>
+        public async Task<object?> SubmitContentAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            if (ContentSubmission == null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Content push is not available: no blob store is configured.").ConfigureAwait(false);
+                return null;
+            }
+
+            string tenantId = rc.TenantId ?? String.Empty;
+            string subjectId = McpJsonRpc.GetStringArgument(arguments, "subjectId");
+            Subject? subject = String.IsNullOrEmpty(tenantId) || String.IsNullOrEmpty(subjectId) ? null : await _Db.Subjects.ReadAsync(tenantId, subjectId, token).ConfigureAwait(false);
+            if (subject == null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Subject not found.").ConfigureAwait(false);
+                return null;
+            }
+
+            if (String.IsNullOrEmpty(subject.EmbeddingModel) || String.IsNullOrEmpty(subject.InferenceModel) || String.IsNullOrEmpty(subject.Collection))
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "The subject needs an embedding model, an inference model, and a collection before content can be added.").ConfigureAwait(false);
+                return null;
+            }
+
+            SubmitContentRequest request = new SubmitContentRequest
+            {
+                Content = McpJsonRpc.GetStringArgument(arguments, "content"),
+                ContentType = McpJsonRpc.GetStringArgument(arguments, "contentType"),
+                Title = McpJsonRpc.GetStringArgument(arguments, "title"),
+                ExternalKey = McpJsonRpc.GetStringArgument(arguments, "externalKey"),
+                Labels = new List<string>(),
+                Tags = new Dictionary<string, string>(StringComparer.Ordinal)
+            };
+
+            if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("labels", out JsonElement labels) && labels.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement label in labels.EnumerateArray())
+                {
+                    if (label.ValueKind == JsonValueKind.String) request.Labels.Add(label.GetString() ?? String.Empty);
+                }
+            }
+
+            if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("tags", out JsonElement tags) && tags.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty tag in tags.EnumerateObject())
+                {
+                    request.Tags[tag.Name] = tag.Value.ValueKind == JsonValueKind.String ? (tag.Value.GetString() ?? String.Empty) : tag.Value.GetRawText();
+                }
+            }
+
+            ContentSubmitResult result = await ContentSubmission.SubmitAsync(rc.UserId, subject, request, 0, token).ConfigureAwait(false);
+            if (result.Error != null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: " + result.Error).ConfigureAwait(false);
+                return null;
+            }
+
+            return new { linkId = result.Link?.Id, jobId = result.JobId, replaced = result.Replaced, status = result.Replaced ? "replaced" : "created" };
         }
 
         /// <summary>Fetch a single full ingestion job by id.</summary>
@@ -546,6 +645,66 @@ namespace Pneuma.Server.Mcp
             }
 
             return BuildPage(page.MaxResults, page.Skip, page.TotalRecords, page.RecordsRemaining, page.EndOfResults, summaries);
+        }
+
+        /// <summary>Checks links for changes for <c>pneuma_set_link_refresh</c>; null disables the tool.</summary>
+        public LinkRefreshService? LinkRefresh { get; set; } = null;
+
+        /// <summary>
+        /// Set a link's refresh interval and optionally check it now (<c>pneuma_set_link_refresh</c>).
+        /// </summary>
+        /// <param name="ctx">HTTP context (for error responses).</param>
+        /// <param name="rc">Request context.</param>
+        /// <param name="id">JSON-RPC request id.</param>
+        /// <param name="arguments">Tool arguments: id, refreshIntervalMinutes, useSubjectDefault, refreshNow.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result, or null when an error response was already sent.</returns>
+        public async Task<object?> SetLinkRefreshAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
+        {
+            string linkId = McpJsonRpc.GetStringArgument(arguments, "id");
+            SubjectLink? link = String.IsNullOrEmpty(linkId) || String.IsNullOrEmpty(rc.TenantId) ? null : await _Db.SubjectLinks.ReadAsync(rc.TenantId!, linkId, token).ConfigureAwait(false);
+            if (link == null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32004, "Link not found.").ConfigureAwait(false);
+                return null;
+            }
+            if (!LinkRefreshSchedule.IsRefreshable(link))
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: only active URL links that no crawl plan manages can be refreshed.").ConfigureAwait(false);
+                return null;
+            }
+
+            bool useDefault = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("useSubjectDefault", out JsonElement d) && d.ValueKind == JsonValueKind.True;
+            int? minutes = null;
+            if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("refreshIntervalMinutes", out JsonElement m) && m.ValueKind == JsonValueKind.Number && m.TryGetInt32(out int parsed)) minutes = parsed;
+            if (!useDefault && minutes == null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: set refreshIntervalMinutes (0 for off) or useSubjectDefault.").ConfigureAwait(false);
+                return null;
+            }
+            string? problem = useDefault ? null : LinkRefreshSchedule.Validate(minutes, "refreshIntervalMinutes");
+            if (problem != null)
+            {
+                await McpJsonRpc.SendErrorAsync(ctx, id, -32602, "Invalid params: " + problem).ConfigureAwait(false);
+                return null;
+            }
+
+            link.RefreshIntervalMinutes = useDefault ? null : minutes;
+            Subject? subject = await _Db.Subjects.ReadAsync(link.TenantId, link.SubjectId, token).ConfigureAwait(false);
+            LinkRefreshService.Reschedule(link, subject);
+            await _Db.SubjectLinks.UpdateRefreshStateAsync(link, token).ConfigureAwait(false);
+
+            bool refreshNow = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("refreshNow", out JsonElement n) && n.ValueKind == JsonValueKind.True;
+            LinkRefreshResult? check = null;
+            if (refreshNow && LinkRefresh != null) check = await LinkRefresh.RefreshNowAsync(link, token).ConfigureAwait(false);
+            return new
+            {
+                linkId = link.Id,
+                refreshIntervalMinutes = link.RefreshIntervalMinutes,
+                effectiveIntervalMinutes = LinkRefreshSchedule.EffectiveInterval(link, subject),
+                nextRefreshUtc = check?.NextRefreshUtc ?? link.NextRefreshUtc,
+                check = check == null ? null : new { outcome = check.Outcome.ToString(), jobId = check.JobId, message = check.Message }
+            };
         }
 
         /// <summary>Fetch a single full content link by id.</summary>

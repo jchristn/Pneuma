@@ -58,6 +58,12 @@ const TIP_BY_PATH = {
   'ingestion.useHeadlessBrowser': 'Render pages in a headless browser before extraction so JavaScript-heavy sites ingest correctly.',
   'ingestion.browserNavigationTimeoutMs': 'Headless-browser page-navigation timeout (ms) before it falls back to a plain fetch or fails.',
   'ingestion.userAgent': 'User-Agent header sent when fetching source URLs.',
+  'ingestion.partialLossPolicy': "What happens when a job completes but dropped work (a failed classification batch, summary, or cell node). 'Warn' completes the job and records warnings; 'Fail' fails it with category PartialLoss so it is retried. Restart required.",
+  'ingestion.fetchSafety.blockPrivateAddresses': 'Refuse to fetch URLs that resolve to loopback, private, link-local (including cloud metadata), or other internal addresses. Leave on unless every user is trusted with the server\'s network position; prefer the allow-list below. Restart required.',
+  'ingestion.fetchSafety.allowedPrivateHosts': "Internal hosts that may still be fetched: host names (wiki.corp.local), wildcards (*.corp.local), IP addresses, or CIDR ranges (10.0.0.0/8). Restart required.",
+  'ingestion.fetchSafety.maxDownloadBytes': 'Largest response one fetch may download, in bytes. Larger responses are abandoned mid-stream and the job fails with category TooLarge. Default 104857600 (100 MB). Restart required.',
+  'ingestion.fetchSafety.allowInvalidCertificates': 'Accept TLS certificates that fail validation (self-signed or internal PKI). Every fetch becomes open to interception, so enable only for internal sources. Restart required.',
+  'ingestion.fetchSafety.maxRequestsPerHost': 'Most requests that may run against one host at once, across all fetchers and crawlers, so ingestion cannot overwhelm a site. Default 2. Restart required.',
 
   'ingestion.stageConcurrency.contentRetrieval': 'Max source fetches running at once across all jobs.',
   'ingestion.stageConcurrency.typeDetection': 'Max document type-detection calls running at once across all jobs.',

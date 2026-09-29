@@ -5,7 +5,7 @@ namespace Pneuma.Core.Ingestion.Enums
     /// <summary>
     /// Lifecycle state of an ingestion job's tracked cascade deletion. A job that is not being deleted is
     /// <see cref="None"/>; deletion runs asynchronously in the background and records progress/errors so it is
-    /// durable across restarts (mirrors <see cref="LinkDeletionStatusEnum"/>).
+    /// durable across restarts (mirrors <see cref="Pneuma.Core.Enums.LinkDeletionStatusEnum"/>).
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum JobDeletionStatusEnum

@@ -116,6 +116,26 @@ namespace Pneuma.Core.Helpers
         /// <returns>Eval result identifier.</returns>
         public static string GenerateEvalResultId() => Generate(Constants.EvalResultPrefix);
 
+        /// <summary>Generate an ingestion job attempt identifier.</summary>
+        /// <returns>Job attempt identifier.</returns>
+        public static string GenerateJobAttemptId() => Generate(Constants.JobAttemptPrefix);
+
+        /// <summary>Generate a crawl plan identifier.</summary>
+        /// <returns>Crawl plan identifier.</returns>
+        public static string GenerateCrawlPlanId() => Generate(Constants.CrawlPlanPrefix);
+
+        /// <summary>Generate a crawl operation identifier.</summary>
+        /// <returns>Crawl operation identifier.</returns>
+        public static string GenerateCrawlOperationId() => Generate(Constants.CrawlOperationPrefix);
+
+        /// <summary>Generate a crawl object identifier.</summary>
+        /// <returns>Crawl object identifier.</returns>
+        public static string GenerateCrawlObjectId() => Generate(Constants.CrawlObjectPrefix);
+
+        /// <summary>Generate a crawl operation object identifier.</summary>
+        /// <returns>Crawl operation object identifier.</returns>
+        public static string GenerateCrawlOperationObjectId() => Generate(Constants.CrawlOperationObjectPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

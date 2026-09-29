@@ -18,7 +18,9 @@ export const WORKSPACE_TABS = {
   ingestion: [
     { key: 'live', view: 'ingestion-live', labelKey: 'nav.ingestionLive' },
     { key: 'queue', view: 'jobs', labelKey: 'nav.jobs' },
-    { key: 'jobs', view: 'ingestion-jobs', labelKey: 'nav.ingestionJobs' }
+    { key: 'jobs', view: 'ingestion-jobs', labelKey: 'nav.ingestionJobs' },
+    { key: 'crawl-plans', view: 'crawl-plans', labelKey: 'nav.crawlPlans' },
+    { key: 'crawl-operations', view: 'crawl-operations', labelKey: 'nav.crawlOperations' }
   ],
   assistant: [
     { key: 'ask', view: 'ask', labelKey: 'nav.ask' },
@@ -56,7 +58,7 @@ export const NAV_GROUPS = [
     items: [
       { section: 'home', labelKey: 'nav.home', icon: 'home', tip: 'Dashboard overview: key counts, recent activity, and system health at a glance.' },
       { section: 'knowledge', labelKey: 'nav.knowledge', icon: 'database', tip: 'The knowledge base: subjects and their source links, the retrieval collections, and full-text search.' },
-      { section: 'ingestion', labelKey: 'nav.ingestion', icon: 'queue', tip: 'The ingestion pipeline: the live view, the queue, and full job history.' },
+      { section: 'ingestion', labelKey: 'nav.ingestion', icon: 'queue', tip: 'The ingestion pipeline: the live view, the queue, full job history, and the crawl plans that keep subjects in sync with their sources.' },
       { section: 'assistant', labelKey: 'nav.assistant', icon: 'chat', tip: 'Chat with the corpus, browse conversations and history, review feedback, and evaluate answer quality.' }
     ]
   },

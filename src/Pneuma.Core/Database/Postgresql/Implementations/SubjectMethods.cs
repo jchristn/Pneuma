@@ -9,8 +9,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
     using Pneuma.Core.Database.Interfaces;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
-    using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Models;
 
     /// <summary>PostgreSQL subject methods.</summary>
     internal class SubjectMethods : PostgresqlMethodsBase, ISubjectMethods
@@ -25,17 +25,17 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, concurrencyoverridesjson, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, chunkheaders, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, concurrencyoverridesjson, isprotected, defaultrefreshintervalminutes, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
                 Sanitizer.Str(subject.UrlSlug) + ", " + Sanitizer.Bit(subject.ThinkingEnabled) + ", " +
                 Sanitizer.Str(subject.SystemPrompt) + ", " + Sanitizer.Str(subject.OntologyClassifyPrompt) + ", " +
                 Sanitizer.Str(subject.OntologyDefinitionPrompt) + ", " +
-                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.RerankerType.ToString()) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.ChunkStrategy) + ", " + Sanitizer.Num(subject.ChunkMaxTokens) + ", " + Sanitizer.Num(subject.ChunkOverlapTokens) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
+                Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.RerankerType.ToString()) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.ChunkStrategy) + ", " + Sanitizer.Num(subject.ChunkMaxTokens) + ", " + Sanitizer.Num(subject.ChunkOverlapTokens) + ", " + Sanitizer.Str(subject.ChunkHeaders.ToString()) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
                 Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
                 Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
-                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Str(subject.ConcurrencyOverridesJson) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " +
+                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Str(subject.ConcurrencyOverridesJson) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " + Sanitizer.Num(subject.DefaultRefreshIntervalMinutes) + ", " +
                 Sanitizer.Ts(subject.CreatedUtc) + ", " + Sanitizer.Ts(subject.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return subject;
@@ -128,6 +128,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 ", chunkstrategy = " + Sanitizer.Str(subject.ChunkStrategy) +
                 ", chunkmaxtokens = " + Sanitizer.Num(subject.ChunkMaxTokens) +
                 ", chunkoverlaptokens = " + Sanitizer.Num(subject.ChunkOverlapTokens) +
+                ", chunkheaders = " + Sanitizer.Str(subject.ChunkHeaders.ToString()) +
+                ", defaultrefreshintervalminutes = " + Sanitizer.Num(subject.DefaultRefreshIntervalMinutes) +
                 ", rerankingprompt = " + Sanitizer.Str(subject.RerankingPrompt) +
                 ", promptrewriteprompt = " + Sanitizer.Str(subject.PromptRewritePrompt) +
                 ", retrievalfilterjson = " + Sanitizer.Str(subject.RetrievalFilterJson) +
@@ -155,12 +157,14 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
             DataTable existing = await Query(ExistsSql(tenantId, subjectId), token).ConfigureAwait(false);
 
             List<string> statements = new List<string>();
+            statements.AddRange(CrawlPlanMethods.DeleteBySubjectSql(tenantId, subjectId));
             if (jobIds != null)
             {
                 foreach (string jobId in jobIds)
                 {
                     if (String.IsNullOrEmpty(jobId)) continue;
                     statements.Add(IngestionJobEventMethods.DeleteByJobSql(tenantId, jobId));
+                    statements.Add(IngestionJobAttemptMethods.DeleteByJobSql(tenantId, jobId));
                     statements.Add(IngestionJobMethods.DeleteByIdSql(tenantId, jobId));
                 }
             }
@@ -213,6 +217,8 @@ namespace Pneuma.Core.Database.Postgresql.Implementations
                 ChunkStrategy = RowReader.GetNullableString(row, "chunkstrategy"),
                 ChunkMaxTokens = RowReader.GetInt(row, "chunkmaxtokens"),
                 ChunkOverlapTokens = RowReader.GetInt(row, "chunkoverlaptokens"),
+                ChunkHeaders = RowReader.GetEnum<ChunkHeaderModeEnum>(row, "chunkheaders", ChunkHeaderModeEnum.None),
+                DefaultRefreshIntervalMinutes = RowReader.GetInt(row, "defaultrefreshintervalminutes"),
                 RerankingPrompt = RowReader.GetNullableString(row, "rerankingprompt"),
                 PromptRewritePrompt = RowReader.GetNullableString(row, "promptrewriteprompt"),
                 RetrievalFilterJson = RowReader.GetNullableString(row, "retrievalfilterjson"),

@@ -11,6 +11,7 @@ import BulkAddLinksModal from '../components/BulkAddLinksModal';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
 import JsonViewer from '../components/JsonViewer';
+import LinkRefreshModal, { isRefreshable } from '../components/LinkRefreshModal';
 import { formatDateTime } from '../i18n/formatters';
 
 // A link whose most recent ingestion failed can have its job restarted, mirroring the Ingestion Queue.
@@ -28,6 +29,9 @@ function LinksView() {
   const [showBulk, setShowBulk] = useState(false);
   const [bulkCreated, setBulkCreated] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Crawl plan filter: '' any source, '__none' links no crawl plan manages, or a plan id.
+  const [crawlPlanFilter, setCrawlPlanFilter] = useState('');
+  const [crawlPlans, setCrawlPlans] = useState([]);
   // Pipeline-artifact modals: { title, data } for the JSON viewer, a string
   // notice for the "not available yet" message, and a flag while a fetch runs.
   const [artifact, setArtifact] = useState(null);
@@ -37,6 +41,8 @@ function LinksView() {
   const [restartTarget, setRestartTarget] = useState(null);
   // The link whose ingestion is pending a reingest confirmation (available for any link, not just failed).
   const [reingestTarget, setReingestTarget] = useState(null);
+  // Links whose scheduled refresh is being set (one from the row menu, several from the bulk bar).
+  const [refreshTargets, setRefreshTargets] = useState(null);
 
   // Load the subject list once for the filter dropdown and the create form.
   useEffect(() => {
@@ -45,6 +51,10 @@ function LinksView() {
       .then((resp) => { if (!cancelled) setSubjects(normalizeList(resp).items); })
       .catch(() => { if (!cancelled) setSubjects([]); });
     return () => { cancelled = true; };
+  }, [apiClient]);
+
+  useEffect(() => {
+    apiClient.listCrawlPlans().then((resp) => setCrawlPlans(normalizeList(resp).items)).catch(() => setCrawlPlans([]));
   }, [apiClient]);
 
   // Keep local selection in sync when arriving via a subjectId query param.
@@ -66,7 +76,17 @@ function LinksView() {
     { key: 'subjectId', label: 'Subject', render: (r) => (
       <span title={r.subjectId}>{subjectName(r.subjectId) || <CopyableId value={r.subjectId} truncateLen={12} />}</span>
     ) },
+    { key: 'crawlPlanId', label: t('crawl.crawlPlan'), render: (r) => {
+      if (!r.crawlPlanId) return '-';
+      const plan = crawlPlans.find((p) => p.id === r.crawlPlanId);
+      return <span title={r.crawlPlanId}>{plan ? plan.name : <CopyableId value={r.crawlPlanId} truncateLen={12} />}</span>;
+    } },
     { key: 'lastIngestedUtc', label: 'Last Ingested', render: (r) => formatDateTime(r.lastIngestedUtc) },
+    { key: 'nextRefreshUtc', label: t('links.nextRefresh'), render: (r) => {
+      if (!isRefreshable(r)) return '-';
+      if (!r.nextRefreshUtc) return t('links.refreshOff');
+      return <span title={r.refreshFailures > 0 ? t('links.refreshFailures', { count: r.refreshFailures }) : undefined}>{formatDateTime(r.nextRefreshUtc)}</span>;
+    } },
     { key: 'lastError', label: 'Last Error', cellClass: 'wrap', sortable: false, render: (r) => r.lastError || '—' }
   ];
 
@@ -87,11 +107,15 @@ function LinksView() {
     });
 
   // Server-side filtering via the subject's links endpoint when a subject is chosen.
-  const fetcher = useCallback((client) => (
-    selectedSubjectId
-      ? client.list(`subjects/${encodeURIComponent(selectedSubjectId)}/links`)
-      : client.list('links')
-  ), [selectedSubjectId]);
+  const fetcher = useCallback(async (client) => {
+    const resp = selectedSubjectId
+      ? await client.list(`subjects/${encodeURIComponent(selectedSubjectId)}/links`)
+      : await client.list('links');
+    if (!crawlPlanFilter) return resp;
+    const keep = (l) => (crawlPlanFilter === '__none' ? !l.crawlPlanId : l.crawlPlanId === crawlPlanFilter);
+    const items = normalizeList(resp).items.filter(keep);
+    return Array.isArray(resp) ? items : { ...resp, objects: items, totalRecords: items.length };
+  }, [selectedSubjectId, crawlPlanFilter]);
 
   const onFilterChange = (value) => {
     setSelectedSubjectId(value);
@@ -178,9 +202,37 @@ function LinksView() {
     await apiClient.bulkReingestLinks(items.map((link) => link.id));
   }, [apiClient]);
 
+  // Check a link for changes now and report the outcome (unchanged, re-ingest queued, failed, or busy).
+  const refreshNow = useCallback(async (link) => {
+    try {
+      const result = await apiClient.refreshLinkNow(link.id);
+      const outcome = String(result?.outcome || '');
+      setArtifactNotice(t(`links.refreshOutcome.${outcome}`, { defaultValue: result?.message || outcome }));
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setArtifactNotice(err?.message || t('links.refreshSaveFailed'));
+    }
+  }, [apiClient, t]);
+
+  const saveRefresh = useCallback(async (body) => {
+    const targets = refreshTargets || [];
+    if (targets.length === 1) await apiClient.setLinkRefresh(targets[0].id, body);
+    else await apiClient.bulkSetLinkRefresh(targets.map((l) => l.id), body);
+    setRefreshTargets(null);
+    setRefreshKey((k) => k + 1);
+  }, [apiClient, refreshTargets]);
+
   const linkBulkActions = useCallback((selectedItems) => {
     const failedCount = selectedItems.filter(isLinkFailed).length;
+    const refreshable = selectedItems.filter(isRefreshable);
     return [
+      {
+        key: 'refresh',
+        label: t('links.setRefresh'),
+        disabled: refreshable.length === 0,
+        tip: refreshable.length === 0 ? t('links.refreshNone') : t('links.refreshBulkSubtitle', { count: refreshable.length }),
+        run: async () => { setRefreshTargets(refreshable); }
+      },
       {
         key: 'reingest',
         label: t('links.reingestMultiple', 'Reingest Links'),
@@ -220,6 +272,14 @@ function LinksView() {
           ))}
         </select>
       </div>
+      <div className="field">
+        <label htmlFor="links-crawl-filter">{t('crawl.crawlPlan')}</label>
+        <select id="links-crawl-filter" value={crawlPlanFilter} onChange={(e) => setCrawlPlanFilter(e.target.value)}>
+          <option value="">{t('crawl.allCrawlPlans')}</option>
+          <option value="__none">{t('crawl.noCrawlPlan')}</option>
+          {crawlPlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
     </div>
   );
 
@@ -248,6 +308,8 @@ function LinksView() {
         extraActions={[
           { key: 'reingest', label: t('links.reingest', 'Reingest Link'), tip: 'Re-run this link’s ingestion pipeline from the beginning.', onClick: (item) => setReingestTarget(item) },
           { key: 'restartJob', label: t('links.restartJob', 'Restart Job'), tip: 'Re-run this failed link’s ingestion job from the beginning.', hidden: (item) => !isLinkFailed(item), onClick: (item) => setRestartTarget(item) },
+          { key: 'setRefresh', label: t('links.setRefresh'), tip: t('links.refreshTip'), hidden: (item) => !isRefreshable(item), onClick: (item) => setRefreshTargets([item]) },
+          { key: 'refreshNow', label: t('links.refreshNow'), tip: t('links.refreshNowTip'), hidden: (item) => !isRefreshable(item), onClick: (item) => refreshNow(item) },
           { key: 'ingestionLog', label: t('links.viewIngestionLog'), onClick: (item) => setLogLink(item) },
           { key: 'viewSource', label: t('links.viewSource'), onClick: (item) => openSource(item) },
           { key: 'viewAtoms', label: t('links.viewAtoms'), onClick: (item) => openArtifact(item, 'atoms', t('links.artifactAtoms')) },
@@ -257,6 +319,7 @@ function LinksView() {
         ]}
       />
       {logLink && <IngestionLogModal link={logLink} onClose={() => setLogLink(null)} />}
+      {refreshTargets && <LinkRefreshModal links={refreshTargets} onSave={saveRefresh} onClose={() => setRefreshTargets(null)} />}
       {restartTarget && (
         <ConfirmModal
           title={t('jobs.restart', 'Restart')}

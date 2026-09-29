@@ -14,6 +14,7 @@ namespace Pneuma.Core.Ingestion.Stages
     using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Serialization;
 
     /// <summary>
@@ -63,7 +64,7 @@ namespace Pneuma.Core.Ingestion.Stages
             // The classification model comes from the job's chosen completion runner in the model-endpoint store;
             // its key is decrypted here for the direct provider call. No endpoint is a deterministic hard failure.
             ModelRunner? runner = await ResolveCompletionEndpointAsync(job, token).ConfigureAwait(false);
-            if (runner == null) throw new IngestionHardFailException(IngestionStageEnum.Classification, "No completion model endpoint is available for classification.");
+            if (runner == null) throw new IngestionHardFailException(IngestionStageEnum.Classification, IngestionFailureCategoryEnum.Configuration, "No completion model endpoint is available for classification.");
 
             string? apiKey = null;
             if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
@@ -90,13 +91,27 @@ namespace Pneuma.Core.Ingestion.Stages
             CandidateSubgraph subgraph;
             if (cells.Count <= batchSize)
             {
-                subgraph = await _Deps.Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, context.SubjectName, token).ConfigureAwait(false);
+                job.Completeness.ClassificationBatches = 1;
+                try
+                {
+                    subgraph = await _Deps.Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, context.SubjectName, token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (!(e is OperationCanceledException))
+                {
+                    // The document still ingests (its cells become searchable Cell nodes) but its entities and
+                    // relationships are missing from the graph, which the warning makes visible.
+                    _Deps.Logging.Warn("[ClassificationStage] classification failed (skipped): " + e.Message);
+                    job.Completeness.IncrementClassificationBatchesFailed();
+                    context.AddWarning("Classification failed and the document's entities were left out of the graph: " + e.Message);
+                    PneumaMetrics.RecordIngestionPartial("Classification", "classification_batch");
+                    subgraph = new CandidateSubgraph();
+                }
             }
             else
             {
                 int overlap = _Deps.Concurrency.EffectiveClassificationBatchOverlap(job.SubjectId);
                 int batchConcurrency = _Deps.Concurrency.EffectiveClassificationBatchConcurrency(job.SubjectId);
-                subgraph = await ClassifyInBatchesAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, context.SubjectName, batchSize, overlap, batchConcurrency, token).ConfigureAwait(false);
+                subgraph = await ClassifyInBatchesAsync(context, systemPrompt, ontologyDefinition, runner, apiKey, batchSize, overlap, batchConcurrency, token).ConfigureAwait(false);
             }
 
             await _Deps.Journal.TryStoreAsync("subgraph", () => _Deps.Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
@@ -118,19 +133,21 @@ namespace Pneuma.Core.Ingestion.Stages
         /// batch's Refs are namespaced before concatenation to keep every edge pointing at its own nodes.
         /// </summary>
         private async Task<CandidateSubgraph> ClassifyInBatchesAsync(
-            List<ExtractedCell> cells,
+            StageContext context,
             string systemPrompt,
             string ontologyDefinition,
             ModelRunner runner,
             string? apiKey,
-            string subjectName,
             int batchSize,
             int overlap,
             int batchConcurrency,
             CancellationToken token)
         {
+            List<ExtractedCell> cells = context.Cells;
+            string subjectName = context.SubjectName;
             List<int> starts = new List<int>();
             for (int start = 0; start < cells.Count; start += batchSize) starts.Add(start);
+            context.Job.Completeness.ClassificationBatches = starts.Count;
 
             CandidateSubgraph?[] parts = new CandidateSubgraph?[starts.Count];
             using (SemaphoreSlim gate = new SemaphoreSlim(batchConcurrency, batchConcurrency))
@@ -161,6 +178,10 @@ namespace Pneuma.Core.Ingestion.Stages
                             // not fail the whole document — the successful batches still merge. Cancellation (operator
                             // stop / stage timeout) is rethrown so the stage fails as a unit.
                             _Deps.Logging.Warn("[ClassificationStage] classification of a cell batch failed (skipped): " + e.Message);
+                            context.Job.Completeness.IncrementClassificationBatchesFailed();
+                            context.AddWarning("Classification of cells " + (ownedStart + 1).ToString(CultureInfo.InvariantCulture) + " to " +
+                                ownedEnd.ToString(CultureInfo.InvariantCulture) + " failed and those cells were left out of the graph: " + e.Message);
+                            PneumaMetrics.RecordIngestionPartial("Classification", "classification_batch");
                         }
                         finally
                         {

@@ -4,15 +4,16 @@ namespace Pneuma.Server.Routes
     using System.Text.Json;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Interfaces;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Security;
+    using Pneuma.Core.Storage;
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using Pneuma.Server.Settings;
     using SyslogLogging;
     using WatsonWebserver;
@@ -49,10 +50,15 @@ namespace Pneuma.Server.Routes
         /// <param name="logging">Logging module (used by the eval management tools).</param>
         /// <param name="settings">Live application settings (returned redacted by the settings tool).</param>
         /// <param name="health">Model health monitor providing per-endpoint status.</param>
+        /// <param name="blobs">Blob store for pushed content; null disables the content push tool.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
-        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency)
+        /// <param name="crawl">Crawl plan tools; null disables them.</param>
+        /// <param name="linkRefresh">Link refresh service for "refresh now"; null checks nothing.</param>
+        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency, IBlobStore? blobs = null, McpCrawlTools? crawl = null, Pneuma.Core.Ingestion.Refresh.LinkRefreshService? linkRefresh = null)
         {
-            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate, logging, settings, health, concurrency);
+            _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate, logging, settings, health, concurrency, blobs);
+            _Invoker.Crawl = crawl;
+            _Invoker.LinkRefresh = linkRefresh;
         }
 
         #endregion

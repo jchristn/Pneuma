@@ -25,7 +25,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
             runner.LastUpdateUtc = runner.CreatedUtc;
 
             string sql =
-                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, deployment, apiversion, region, project, accesskeyid, sessiontokenencrypted, contextsize, maxconcurrentrequests, maxqueuedepth, maximumtimeoutms, healthcheckenabled, healthcheckurl, healthcheckmethod, healthcheckintervalms, healthchecktimeoutms, healthcheckexpectedstatuscode, healthythreshold, unhealthythreshold, healthcheckuseauth, active, isprotected, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO modelrunners (id, tenantid, name, provider, baseurl, apitype, authmaterialencrypted, capabilities, runnerusage, defaultmodel, defaultembeddingmodel, deployment, apiversion, region, project, accesskeyid, sessiontokenencrypted, contextsize, maxconcurrentrequests, maxqueuedepth, maximumtimeoutms, maxretries, maxinputtokens, healthcheckenabled, healthcheckurl, healthcheckmethod, healthcheckintervalms, healthchecktimeoutms, healthcheckexpectedstatuscode, healthythreshold, unhealthythreshold, healthcheckuseauth, active, isprotected, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(runner.Id) + ", " + Sanitizer.Str(runner.TenantId) + ", " +
                 Sanitizer.Str(runner.Name) + ", " + Sanitizer.Str(runner.Provider.ToString()) + ", " +
                 Sanitizer.Str(runner.BaseUrl) + ", " + Sanitizer.Str(runner.ApiType) + ", " +
@@ -36,7 +36,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Str(runner.Region) + ", " + Sanitizer.Str(runner.Project) + ", " +
                 Sanitizer.Str(runner.AccessKeyId) + ", " + Sanitizer.Str(runner.SessionTokenEncrypted) + ", " +
                 Sanitizer.Num(runner.ContextSize) + ", " +
-                Sanitizer.Num(runner.MaxConcurrentRequests) + ", " + Sanitizer.Num(runner.MaxQueueDepth) + ", " + Sanitizer.Num(runner.MaximumTimeoutMs) + ", " +
+                Sanitizer.Num(runner.MaxConcurrentRequests) + ", " + Sanitizer.Num(runner.MaxQueueDepth) + ", " + Sanitizer.Num(runner.MaximumTimeoutMs) + ", " + Sanitizer.Num(runner.MaxRetries) + ", " + Sanitizer.Num(runner.MaxInputTokens) + ", " +
                 Sanitizer.Bit(runner.HealthCheckEnabled) + ", " + Sanitizer.Str(runner.HealthCheckUrl) + ", " + Sanitizer.Str(runner.HealthCheckMethod) + ", " +
                 Sanitizer.Num(runner.HealthCheckIntervalMs) + ", " + Sanitizer.Num(runner.HealthCheckTimeoutMs) + ", " + Sanitizer.Num(runner.HealthCheckExpectedStatusCode) + ", " +
                 Sanitizer.Num(runner.HealthyThreshold) + ", " + Sanitizer.Num(runner.UnhealthyThreshold) + ", " + Sanitizer.Bit(runner.HealthCheckUseAuth) + ", " +
@@ -117,6 +117,8 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ", sessiontokenencrypted = " + Sanitizer.Str(runner.SessionTokenEncrypted) +
                 ", contextsize = " + Sanitizer.Num(runner.ContextSize) +
                 ", maxconcurrentrequests = " + Sanitizer.Num(runner.MaxConcurrentRequests) +
+                ", maxretries = " + Sanitizer.Num(runner.MaxRetries) +
+                ", maxinputtokens = " + Sanitizer.Num(runner.MaxInputTokens) +
                 ", maxqueuedepth = " + Sanitizer.Num(runner.MaxQueueDepth) +
                 ", maximumtimeoutms = " + Sanitizer.Num(runner.MaximumTimeoutMs) +
                 ", healthcheckenabled = " + Sanitizer.Bit(runner.HealthCheckEnabled) +
@@ -184,6 +186,8 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 SessionTokenEncrypted = RowReader.GetNullableString(row, "sessiontokenencrypted"),
                 ContextSize = RowReader.GetInt(row, "contextsize"),
                 MaxConcurrentRequests = RowReader.GetInt(row, "maxconcurrentrequests"),
+                MaxRetries = RowReader.GetInt(row, "maxretries"),
+                MaxInputTokens = RowReader.GetInt(row, "maxinputtokens"),
                 MaxQueueDepth = RowReader.GetInt(row, "maxqueuedepth"),
                 MaximumTimeoutMs = RowReader.GetInt(row, "maximumtimeoutms"),
                 HealthCheckEnabled = RowReader.GetBool(row, "healthcheckenabled"),

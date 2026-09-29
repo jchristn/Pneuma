@@ -25,6 +25,10 @@ namespace Pneuma.Core.Enums
         /// <summary>Authorization was bypassed through an approved administrative path.</summary>
         AuthorizationBypass,
         /// <summary>A role, permission, or assignment changed.</summary>
-        RoleChanged
+        RoleChanged,
+        /// <summary>A URL was refused by the fetch-safety policy (a disallowed scheme or a private address).</summary>
+        FetchBlocked,
+        /// <summary>A crawl plan's credentials or security-relevant settings changed.</summary>
+        CrawlPlanSecurityChanged
     }
 }

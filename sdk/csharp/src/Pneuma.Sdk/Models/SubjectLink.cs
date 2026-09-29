@@ -42,6 +42,48 @@ namespace Pneuma.Sdk.Models
         /// <summary>Last error message, if the most recent ingestion failed.</summary>
         public string? LastError { get; set; } = null;
 
+        /// <summary>Where the content comes from: Url, Inline (pushed content), or Crawl.</summary>
+        public string SourceKind { get; set; } = "Url";
+
+        /// <summary>Caller-chosen key identifying pushed or crawled content within the subject, or null.</summary>
+        public string? ExternalKey { get; set; } = null;
+
+        /// <summary>Content type the content was pushed or found with, or null.</summary>
+        public string? ContentType { get; set; } = null;
+
+        /// <summary>Size of pushed or crawled content in bytes; 0 when unknown.</summary>
+        public long SizeBytes { get; set; } = 0;
+
+        /// <summary>The crawl plan that owns this link, or null.</summary>
+        public string? CrawlPlanId { get; set; } = null;
+
+        /// <summary>Minutes between scheduled refresh checks: null follows the subject's default, 0 is off.</summary>
+        public int? RefreshIntervalMinutes { get; set; } = null;
+
+        /// <summary>When the link is next checked for changes, or null when its refresh is off.</summary>
+        public DateTime? NextRefreshUtc { get; set; } = null;
+
+        /// <summary>When the link was last checked for changes.</summary>
+        public DateTime? LastRefreshUtc { get; set; } = null;
+
+        /// <summary>Failed checks in a row; checks back off while this is above zero.</summary>
+        public int RefreshFailures { get; set; } = 0;
+
+        /// <summary>The source's ETag at the last check, sent as If-None-Match.</summary>
+        public string? SourceETag { get; set; } = null;
+
+        /// <summary>The source's Last-Modified at the last check, sent as If-Modified-Since.</summary>
+        public DateTime? SourceLastModifiedUtc { get; set; } = null;
+
+        /// <summary>The job whose output is the link's live version, or null until the link is first ingested.</summary>
+        public string? CurrentJobId { get; set; } = null;
+
+        /// <summary>Why the most recent ingestion failed, or null when it did not fail.</summary>
+        public IngestionFailureCategoryEnum? FailureCategory { get; set; } = null;
+
+        /// <summary>Number of warnings the most recent successful ingestion recorded.</summary>
+        public int WarningCount { get; set; } = 0;
+
         /// <summary>Whether the link is active.</summary>
         public bool Active { get; set; } = true;
 

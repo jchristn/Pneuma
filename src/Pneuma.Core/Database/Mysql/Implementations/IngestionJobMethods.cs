@@ -37,6 +37,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
             List<string> statements = new List<string>
             {
                 IngestionJobEventMethods.DeleteByJobSql(tenantId, id),
+                IngestionJobAttemptMethods.DeleteByJobSql(tenantId, id),
                 DeleteByIdSql(tenantId, id)
             };
             await QueryTransaction(statements, token).ConfigureAwait(false);
@@ -46,7 +47,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
         internal static string InsertSql(IngestionJob job)
         {
             return
-                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, labelsjson, tagsjson, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, deletionstatus, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO ingestionjobs (id, tenantid, subjectid, linkid, sourceurl, labelsjson, tagsjson, status, stage, attemptcount, error, documenttype, blobkey, embeddingendpointid, completionendpointid, graphnodeids, collectionid, startedutc, completedutc, deletionstatus, triggeredby, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(job.Id) + ", " + Sanitizer.Str(job.TenantId) + ", " +
                 Sanitizer.Str(job.SubjectId) + ", " + Sanitizer.Str(job.LinkId) + ", " +
                 Sanitizer.Str(job.SourceUrl) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.Labels)) + ", " +
@@ -56,7 +57,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 Sanitizer.Str(job.BlobKey) + ", " + Sanitizer.Str(job.EmbeddingEndpointId) + ", " +
                 Sanitizer.Str(job.CompletionEndpointId) + ", " + Sanitizer.Str(JsonColumn.FromStrings(job.GraphNodeIds)) + ", " +
                 Sanitizer.Str(job.CollectionId) + ", " + Sanitizer.Ts(job.StartedUtc) + ", " +
-                Sanitizer.Ts(job.CompletedUtc) + ", " + Sanitizer.Str(job.DeletionStatus.ToString()) + ", " + Sanitizer.Ts(job.CreatedUtc) + ", " +
+                Sanitizer.Ts(job.CompletedUtc) + ", " + Sanitizer.Str(job.DeletionStatus.ToString()) + ", " + Sanitizer.Str(job.Trigger.ToString()) + ", " + Sanitizer.Ts(job.CreatedUtc) + ", " +
                 Sanitizer.Ts(job.LastUpdateUtc) + ");";
         }
 
@@ -155,6 +156,18 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", startedutc = " + Sanitizer.Ts(job.StartedUtc) +
                 ", completedutc = " + Sanitizer.Ts(job.CompletedUtc) +
                 ", deletionstatus = " + Sanitizer.Str(job.DeletionStatus.ToString()) +
+                ", failurecategory = " + Sanitizer.Str(job.FailureCategory?.ToString()) +
+                ", warningsjson = " + Sanitizer.Str(JsonColumn.FromStrings(job.Warnings)) +
+                ", cellsextracted = " + job.Completeness.CellsExtracted.ToString(CultureInfo.InvariantCulture) +
+                ", classificationbatches = " + job.Completeness.ClassificationBatches.ToString(CultureInfo.InvariantCulture) +
+                ", classificationbatchesfailed = " + job.Completeness.ClassificationBatchesFailed.ToString(CultureInfo.InvariantCulture) +
+                ", cellnodescreated = " + job.Completeness.CellNodesCreated.ToString(CultureInfo.InvariantCulture) +
+                ", cellnodesfailed = " + job.Completeness.CellNodesFailed.ToString(CultureInfo.InvariantCulture) +
+                ", summariesattempted = " + job.Completeness.SummariesAttempted.ToString(CultureInfo.InvariantCulture) +
+                ", summariesfailed = " + job.Completeness.SummariesFailed.ToString(CultureInfo.InvariantCulture) +
+                ", chunksproduced = " + job.Completeness.ChunksProduced.ToString(CultureInfo.InvariantCulture) +
+                ", chunksembedded = " + job.Completeness.ChunksEmbedded.ToString(CultureInfo.InvariantCulture) +
+                ", chunksindexed = " + job.Completeness.ChunksIndexed.ToString(CultureInfo.InvariantCulture) +
                 ", lastupdateutc = " + Sanitizer.Ts(job.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(job.TenantId) + " AND id = " + Sanitizer.Str(job.Id) + ";";
             await Query(sql, token).ConfigureAwait(false);
@@ -191,6 +204,22 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 StartedUtc = RowReader.GetNullableDateTime(row, "startedutc"),
                 CompletedUtc = RowReader.GetNullableDateTime(row, "completedutc"),
                 DeletionStatus = RowReader.GetEnum<JobDeletionStatusEnum>(row, "deletionstatus", JobDeletionStatusEnum.None),
+                FailureCategory = RowReader.GetNullableEnum<IngestionFailureCategoryEnum>(row, "failurecategory"),
+                Trigger = RowReader.GetEnum<IngestionTriggerEnum>(row, "triggeredby", IngestionTriggerEnum.Submit),
+                Warnings = RowReader.GetStringList(row, "warningsjson"),
+                Completeness = new IngestionCompleteness
+                {
+                    CellsExtracted = RowReader.GetInt(row, "cellsextracted"),
+                    ClassificationBatches = RowReader.GetInt(row, "classificationbatches"),
+                    ClassificationBatchesFailed = RowReader.GetInt(row, "classificationbatchesfailed"),
+                    CellNodesCreated = RowReader.GetInt(row, "cellnodescreated"),
+                    CellNodesFailed = RowReader.GetInt(row, "cellnodesfailed"),
+                    SummariesAttempted = RowReader.GetInt(row, "summariesattempted"),
+                    SummariesFailed = RowReader.GetInt(row, "summariesfailed"),
+                    ChunksProduced = RowReader.GetInt(row, "chunksproduced"),
+                    ChunksEmbedded = RowReader.GetInt(row, "chunksembedded"),
+                    ChunksIndexed = RowReader.GetInt(row, "chunksindexed")
+                },
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")
             };

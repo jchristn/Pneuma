@@ -90,7 +90,7 @@ namespace Test.Shared.Suites
                         executeAsync: async ct =>
                         {
                             string text = String.Concat(Enumerable.Range(0, 120).Select(i => "Status " + i + " \U0001F680\U0001F389 ok. "));
-                            foreach (string model in new[] { null, "all-minilm" })
+                            foreach (string? model in new string?[] { null, "all-minilm" })
                             {
                                 List<SemanticChunk> chunks = await ChunkAsync(text, new ChunkingOptions { Strategy = "FixedTokenCount", MaxTokens = 16, OverlapCount = 0, ModelId = model }, ct);
                                 string joined = String.Concat(chunks.Select(c => c.Text));

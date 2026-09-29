@@ -1,13 +1,15 @@
 namespace Pneuma.Core.Ingestion.Pipeline
 {
     using System;
+    using System.Collections.Generic;
+    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
-    using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Models;
     using Pneuma.Core.Observability;
     using SyslogLogging;
 
@@ -106,12 +108,18 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// When non-null and the status is <see cref="SubjectLinkStatusEnum.Ingested"/>, records the source
         /// content hash on the link for future delta detection. Left unchanged otherwise.
         /// </param>
-        public async Task UpdateLinkAsync(IngestionJob job, SubjectLinkStatusEnum status, string? error, CancellationToken token, string? contentHash = null)
+        /// <param name="failureCategory">The failure category for a failed link; null otherwise.</param>
+        /// <param name="warningCount">The number of warnings the ingestion recorded. Minimum 0.</param>
+        /// <param name="currentJobId">When set, the job whose output is now the link's live version.</param>
+        public async Task UpdateLinkAsync(IngestionJob job, SubjectLinkStatusEnum status, string? error, CancellationToken token, string? contentHash = null, IngestionFailureCategoryEnum? failureCategory = null, int warningCount = 0, string? currentJobId = null)
         {
             SubjectLink? link = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
             if (link == null) return;
             link.Status = status;
             link.LastError = error;
+            link.FailureCategory = status == SubjectLinkStatusEnum.Failed ? failureCategory : null;
+            link.WarningCount = warningCount;
+            if (!String.IsNullOrEmpty(currentJobId)) link.CurrentJobId = currentJobId;
             if (status == SubjectLinkStatusEnum.Ingested)
             {
                 link.LastIngestedUtc = DateTime.UtcNow;
@@ -124,7 +132,8 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="job">The job.</param>
         /// <param name="token">Cancellation token.</param>
         /// <param name="contentHash">Hash of the ingested source bytes, recorded on the link for delta detection; may be null.</param>
-        public async Task CompleteAsync(IngestionJob job, CancellationToken token, string? contentHash = null)
+        /// <param name="wroteVersion">True when the job indexed a new version (the link's current job becomes this job); false when it completed early because the content was unchanged.</param>
+        public async Task CompleteAsync(IngestionJob job, CancellationToken token, string? contentHash = null, bool wroteVersion = true)
         {
             job.Status = IngestionStatusEnum.Completed;
             job.Stage = IngestionStageEnum.Done;
@@ -134,9 +143,14 @@ namespace Pneuma.Core.Ingestion.Pipeline
             // Phase-boundary markers (e.g. "Ingestion started", "Hydration started") are recorded as Processing
             // while the job runs; on completion resolve any that are still non-terminal so a completed job's log
             // reads as a clean sequence of finished steps rather than showing lingering "Processing" rows.
+            job.FailureCategory = null;
+            await UpdateJobAsync(job, token).ConfigureAwait(false);
             await ResolveDanglingEventsAsync(job, token).ConfigureAwait(false);
-            await RecordEventAsync(job, IngestionStageEnum.Done, IngestionStatusEnum.Completed, "Ingestion complete.", 0, token).ConfigureAwait(false);
-            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token, contentHash).ConfigureAwait(false);
+            string completion = job.Warnings.Count == 0
+                ? "Ingestion complete."
+                : "Ingestion complete with " + job.Warnings.Count.ToString(CultureInfo.InvariantCulture) + " warning(s): " + String.Join(" ", job.Warnings);
+            await RecordEventAsync(job, IngestionStageEnum.Done, IngestionStatusEnum.Completed, completion, 0, token).ConfigureAwait(false);
+            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token, contentHash, null, job.Warnings.Count, wroteVersion ? job.Id : null).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionCompleted();
             PneumaMetrics.RecordIngestionJob("completed");
         }
@@ -160,11 +174,13 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// <param name="stage">The stage the failure occurred in.</param>
         /// <param name="error">The failure message.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task FailAsync(IngestionJob job, IngestionStageEnum stage, string error, CancellationToken token)
+        /// <param name="category">The failure category. Defaults to <see cref="IngestionFailureCategoryEnum.Internal"/>.</param>
+        public async Task FailAsync(IngestionJob job, IngestionStageEnum stage, string error, CancellationToken token, IngestionFailureCategoryEnum category = IngestionFailureCategoryEnum.Internal)
         {
             job.Status = IngestionStatusEnum.Failed;
             job.Stage = stage;
             job.Error = error;
+            job.FailureCategory = category;
             job.CompletedUtc = DateTime.UtcNow;
             await UpdateJobAsync(job, token).ConfigureAwait(false);
             if (job.StageFailureRecorded)
@@ -177,9 +193,43 @@ namespace Pneuma.Core.Ingestion.Pipeline
             {
                 await RecordEventAsync(job, stage, IngestionStatusEnum.Failed, error, 0, token).ConfigureAwait(false);
             }
-            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, error, token).ConfigureAwait(false);
+            await UpdateLinkAsync(job, SubjectLinkStatusEnum.Failed, error, token, null, category, 0).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionFailed();
             PneumaMetrics.RecordIngestionJob("failed");
+            PneumaMetrics.RecordIngestionFailure(category.ToString());
+        }
+
+        /// <summary>Record one attempt at running a job. Best-effort: a write failure is logged and never fails the job.</summary>
+        /// <param name="job">The job.</param>
+        /// <param name="attemptNumber">The 1-based attempt number.</param>
+        /// <param name="succeeded">True when the attempt completed the job.</param>
+        /// <param name="stage">The stage the attempt ended in.</param>
+        /// <param name="category">The failure category, or null for a successful attempt.</param>
+        /// <param name="message">The failure message, or null.</param>
+        /// <param name="startedUtc">When the attempt started.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task RecordAttemptAsync(IngestionJob job, int attemptNumber, bool succeeded, IngestionStageEnum stage, IngestionFailureCategoryEnum? category, string? message, DateTime startedUtc, CancellationToken token)
+        {
+            try
+            {
+                IngestionJobAttempt attempt = new IngestionJobAttempt
+                {
+                    TenantId = job.TenantId,
+                    JobId = job.Id,
+                    AttemptNumber = attemptNumber,
+                    Succeeded = succeeded,
+                    Stage = stage,
+                    FailureCategory = category,
+                    Message = message,
+                    StartedUtc = startedUtc,
+                    EndedUtc = DateTime.UtcNow
+                };
+                await _Db.IngestionJobAttempts.CreateAsync(attempt, token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                _Logging.Warn("[IngestionJournal] failed to record attempt " + attemptNumber + " of job " + job.Id + ": " + e.Message);
+            }
         }
 
         /// <summary>Persist an artifact best-effort; a storage failure is logged but never fails the job.</summary>

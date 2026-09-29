@@ -91,6 +91,21 @@ namespace Pneuma.Core
         /// <summary>Evaluation result identifier prefix.</summary>
         public const string EvalResultPrefix = "eres_";
 
+        /// <summary>Ingestion job attempt identifier prefix.</summary>
+        public const string JobAttemptPrefix = "jatt_";
+
+        /// <summary>Crawl plan identifier prefix.</summary>
+        public const string CrawlPlanPrefix = "cpl_";
+
+        /// <summary>Crawl operation identifier prefix.</summary>
+        public const string CrawlOperationPrefix = "cop_";
+
+        /// <summary>Crawl object identifier prefix (one object a crawl plan has seen).</summary>
+        public const string CrawlObjectPrefix = "cob_";
+
+        /// <summary>Crawl operation object identifier prefix (one object's outcome within one operation).</summary>
+        public const string CrawlOperationObjectPrefix = "coo_";
+
         #endregion
 
         #region General

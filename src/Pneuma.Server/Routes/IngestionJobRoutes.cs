@@ -3,22 +3,23 @@ namespace Pneuma.Server.Routes
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
-    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Helpers;
-    using Pneuma.Core.Models;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Models;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -106,6 +107,11 @@ namespace Pneuma.Server.Routes
             return null;
         }
 
+        private Task<IngestionJobDetail> BuildDetailAsync(string tenantId, IngestionJob job, CancellationToken token)
+        {
+            return IngestionJobDetailBuilder.BuildAsync(_Db, tenantId, job, token);
+        }
+
         private async Task ListAsync(HttpContextBase ctx)
         {
             RequestContext rc = RouteHelper.Context(ctx);
@@ -119,7 +125,33 @@ namespace Pneuma.Server.Routes
                 status = parsed;
             }
 
+            IngestionFailureCategoryEnum? failureCategory = null;
+            string? categoryText = RouteHelper.Query(ctx, "failureCategory");
+            if (!String.IsNullOrEmpty(categoryText))
+            {
+                if (!Enum.TryParse<IngestionFailureCategoryEnum>(categoryText, true, out IngestionFailureCategoryEnum parsedCategory) || !Enum.IsDefined(typeof(IngestionFailureCategoryEnum), parsedCategory))
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Unknown failureCategory '" + categoryText + "'.").ConfigureAwait(false);
+                    return;
+                }
+                failureCategory = parsedCategory;
+            }
+
+            bool? hasWarnings = null;
+            string? warningsText = RouteHelper.Query(ctx, "hasWarnings");
+            if (!String.IsNullOrEmpty(warningsText))
+            {
+                if (!Boolean.TryParse(warningsText, out bool parsedWarnings))
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "hasWarnings must be true or false.").ConfigureAwait(false);
+                    return;
+                }
+                hasWarnings = parsedWarnings;
+            }
+
             List<IngestionJob> jobs = await _Db.IngestionJobs.EnumerateAsync(tenantId, status, ctx.Token).ConfigureAwait(false);
+            if (failureCategory != null) jobs = jobs.Where(j => j.FailureCategory == failureCategory).ToList();
+            if (hasWarnings != null) jobs = jobs.Where(j => (j.Warnings.Count > 0) == hasWarnings.Value).ToList();
 
             // Optional subject filter, applied before pagination so the counts reflect the filtered set.
             string? subjectFilter = RouteHelper.Query(ctx, "subjectId");
@@ -252,8 +284,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
-            IngestionJobDetail detail = new IngestionJobDetail { Job = job, Events = events };
+            IngestionJobDetail detail = await BuildDetailAsync(tenantId, job, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, detail).ConfigureAwait(false);
         }
 
@@ -335,8 +366,7 @@ namespace Pneuma.Server.Routes
                 return;
             }
 
-            List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(tenantId, id, ctx.Token).ConfigureAwait(false);
-            IngestionJobDetail detail = new IngestionJobDetail { Job = job, Events = events };
+            IngestionJobDetail detail = await BuildDetailAsync(tenantId, job, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, detail).ConfigureAwait(false);
         }
 

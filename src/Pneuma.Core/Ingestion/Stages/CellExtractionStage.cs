@@ -49,11 +49,12 @@ namespace Pneuma.Core.Ingestion.Stages
         {
             IngestionJob job = context.Job;
 
-            List<ExtractedCell> cells = await _Deps.DocumentAtom.ExtractCellsAsync(job.DocumentType, context.SourceBytes, token).ConfigureAwait(false);
+            List<ExtractedCell> cells = await _Deps.DocumentAtom.ExtractCellsAsync(job.DocumentType ?? "Text", context.SourceBytes, token).ConfigureAwait(false);
             job.BlobKey = await _Deps.Blobs.WriteAsync(job.Id, context.SourceBytes, token).ConfigureAwait(false);
             await _Deps.Journal.TryStoreAsync("atoms", () => _Deps.Artifacts.PutAtomsAsync(job.LinkId, Json.Serialize(cells), token), token).ConfigureAwait(false);
 
-            if (cells.Count == 0) throw new IngestionHardFailException(IngestionStageEnum.CellExtraction, "No semantic cells extracted.");
+            job.Completeness.CellsExtracted = cells.Count;
+            if (cells.Count == 0) throw new IngestionHardFailException(IngestionStageEnum.CellExtraction, IngestionFailureCategoryEnum.NoContent, "No semantic cells extracted.");
 
             context.Cells = cells;
             context.Message = "Semantic cell extraction complete — extracted " + cells.Count + " cell(s).";

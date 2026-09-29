@@ -7,16 +7,17 @@ namespace Test.Shared.Support
     using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Crawling;
     using Pneuma.Core.Database;
     using Pneuma.Core.Enums;
+    using Pneuma.Core.Ingestion.Deletion;
     using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Observability;
     using Pneuma.Core.Storage;
     using Pneuma.Server;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
-    using Pneuma.Core.Observability;
     using Pneuma.Server.Settings;
     using SyslogLogging;
 
@@ -36,6 +37,10 @@ namespace Test.Shared.Support
 
         /// <summary>The in-memory RecallDB fake the server is wired to (tenants, collections, documents).</summary>
         public FakeRecallDbClient Recall { get; private set; } = null!;
+
+        public CrawlerFactory Crawlers => _Server.Crawlers;
+
+        public CrawlSchedulerService CrawlScheduler => _Server.CrawlScheduler;
 
         #endregion
 

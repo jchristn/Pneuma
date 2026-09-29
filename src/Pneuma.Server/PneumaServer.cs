@@ -3,7 +3,13 @@ namespace Pneuma.Server
     using System;
     using System.Threading;
     using System.Threading.Tasks;
+    using Pneuma.Core.Crawling;
+    using Pneuma.Core.Crawling.Crawlers;
     using Pneuma.Core.Database;
+    using Pneuma.Core.Ingestion.Deletion;
+    using Pneuma.Core.Ingestion.Pipeline;
+    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Ingestion.Refresh;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
@@ -12,9 +18,6 @@ namespace Pneuma.Server
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Routes;
     using Pneuma.Server.Services;
-    using Pneuma.Core.Ingestion.Pipeline;
-    using Pneuma.Core.Ingestion.Deletion;
-    using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Server.Settings;
     using SyslogLogging;
     using WatsonWebserver;
@@ -49,6 +52,13 @@ namespace Pneuma.Server
         private readonly Webserver _Server;
         private readonly CancellationTokenSource _Lifetime = new CancellationTokenSource();
         private EvalWorkerService? _EvalWorker;
+        private readonly CrawlerFactory _Crawlers = new CrawlerFactory();
+        private readonly CrawlPlanService _CrawlPlans;
+        private readonly CrawlSyncService _CrawlSync;
+        private readonly CrawlSchedulerService _CrawlScheduler;
+        private readonly CrawlContentSource _CrawlContent;
+        private readonly CrawlHttpClient _CrawlHttp;
+        private readonly LinkRefreshService _LinkRefresh;
         private readonly string _Header = "[PneumaServer] ";
 
         #endregion
@@ -122,6 +132,26 @@ namespace Pneuma.Server
             _Logging = logging;
             _Telemetry = telemetry;
 
+            // Built-in connectors. Web and sitemap fetches go through the fetch-safety policy; bucket and share reads
+            // are capped at the same download limit.
+            _CrawlHttp = new CrawlHttpClient(new FetchSafetyPolicy(_Settings.Ingestion.FetchSafety), _Settings.Ingestion.UserAgent);
+            long maxDownload = _Settings.Ingestion.FetchSafety.MaxDownloadBytes;
+            _Crawlers.Register(new WebSiteCrawler(_CrawlHttp, _Logging));
+            _Crawlers.Register(new SitemapCrawler(_CrawlHttp));
+            _Crawlers.Register(new S3Crawler(maxDownload));
+            _Crawlers.Register(new CifsCrawler(maxDownload));
+            _Crawlers.Register(new NfsCrawler(maxDownload));
+            _Crawlers.Register(new GitHubRepositoryCrawler(_CrawlHttp.Policy));
+            _Crawlers.Register(new AzureBlobCrawler(maxDownload));
+            _Crawlers.Register(new GoogleCloudCrawler(maxDownload));
+            // Local folders read the server's own disk, so the type exists only when an administrator allows roots.
+            if (_Settings.Crawling.AllowedLocalRoots.Count > 0) _Crawlers.Register(new LocalFolderCrawler(_Settings.Crawling.AllowedLocalRoots, maxDownload));
+            _CrawlPlans = new CrawlPlanService(_Database, _Authentication.Cipher, _Crawlers);
+            _CrawlSync = new CrawlSyncService(_Database, _Crawlers, _Logging, _Telemetry);
+            _CrawlScheduler = new CrawlSchedulerService(_Database, _CrawlPlans, _CrawlSync, _Settings.Crawling, _Logging);
+            _CrawlContent = new CrawlContentSource(_Database, _CrawlPlans, _Crawlers);
+            _LinkRefresh = new LinkRefreshService(_Database, _CrawlHttp, _Settings.LinkRefresh, _Logging);
+
             WebserverSettings webserverSettings = new WebserverSettings(
                 _Settings.Rest.Hostname,
                 _Settings.Rest.Port,
@@ -137,6 +167,18 @@ namespace Pneuma.Server
         /// <summary>The authorization service, exposed for route registrars.</summary>
         public AuthorizationService Authorization { get { return _Authorization; } }
 
+        /// <summary>The registered crawlers; register a crawler here to make its plan type available.</summary>
+        public CrawlerFactory Crawlers { get { return _Crawlers; } }
+
+        /// <summary>Opens crawled links' content; set it on the ingestion processor's content resolver.</summary>
+        public CrawlContentSource CrawlContent { get { return _CrawlContent; } }
+
+        /// <summary>Scheduled link refresh (passes and "refresh now").</summary>
+        public LinkRefreshService LinkRefresh { get { return _LinkRefresh; } }
+
+        /// <summary>The crawl scheduler (start, stop, and scheduler passes).</summary>
+        public CrawlSchedulerService CrawlScheduler { get { return _CrawlScheduler; } }
+
         #endregion
 
         #region Public-Methods
@@ -149,6 +191,10 @@ namespace Pneuma.Server
             _Server.Start();
             // Background eval worker: processes queued (Pending) evaluation runs off the request path.
             _EvalWorker?.Start(_Lifetime.Token);
+            // Crawl scheduler: runs due plans, finishes operations whose jobs are done, and recovers interrupted runs.
+            _CrawlScheduler.Start(_Lifetime.Token);
+            // Scheduled link refresh: conditional checks of due URL links, re-ingesting only what changed.
+            _LinkRefresh.Start(_Lifetime.Token);
             _Logging.Info(_Header + "listening on " + _Settings.Rest.Hostname + ":" + _Settings.Rest.Port);
         }
 
@@ -156,6 +202,8 @@ namespace Pneuma.Server
         public void Stop()
         {
             _Lifetime.Cancel();
+            _CrawlScheduler.Dispose();
+            _CrawlHttp.Dispose();
             _Server.Stop();
             _ModelRunnerGate.Dispose();
             _Telemetry.Dispose();
@@ -194,8 +242,10 @@ namespace Pneuma.Server
             CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs, _Collections, cascadeLiteGraphAdmin);
             new SubjectRoutes(_Database, _Authorization, cascade, _Concurrency).Register(_Server);
             new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
-            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections).Register(_Server);
+            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections, new FetchSafetyPolicy(_Settings.Ingestion.FetchSafety), _Blobs, _Settings.Ingestion).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization).Register(_Server);
+            new LinkRefreshRoutes(_Database, _Authorization, _LinkRefresh).Register(_Server);
+            new CrawlPlanRoutes(_Database, _Authorization, _Collections, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler).Register(_Server);
             new IngestionEndpointRoutes(_Database, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);
             HttpCrossEncoderReranker crossEncoderReranker = new HttpCrossEncoderReranker(
@@ -215,7 +265,7 @@ namespace Pneuma.Server
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency, _Blobs, new McpCrawlTools(_Database, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler), _LinkRefresh).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _Concurrency);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);

@@ -1045,3 +1045,11 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 
 /* Compact monospace conversation ID cell in the Conversations table. */
 .mono-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--color-text-secondary); }
+.status-with-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+
+/* Crawl plans: count tiles on operation and preview modals. */
+.crawl-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--spacing-sm); margin: 0.5rem 0 1rem; }
+.crawl-count { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.5rem 0.6rem; background: var(--color-surface-alt); }
+.crawl-count-value { font-size: 1.25rem; font-weight: 700; }
+.crawl-count-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.crawl-connectivity { margin-top: 0.25rem; }

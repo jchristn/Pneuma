@@ -71,8 +71,8 @@ namespace Pneuma.Core.Integrations.Implementations
             string systemPrompt = String.IsNullOrWhiteSpace(summarizationPrompt) ? "Summarize the following content concisely." : summarizationPrompt!;
             ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.1, MaxTokens = _SummaryMaxTokens, SystemPrompt = systemPrompt };
             ChatResponse response = await client.ChatAsync(text, options, token).ConfigureAwait(false);
-            if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text)) return response.Text.Trim();
-            return String.Empty;
+            if (response == null || !response.Success) throw ModelResponseErrors.ToException("summarization", response?.Error);
+            return String.IsNullOrWhiteSpace(response.Text) ? String.Empty : response.Text.Trim();
         }
 
         /// <inheritdoc />
@@ -85,20 +85,41 @@ namespace Pneuma.Core.Integrations.Implementations
 
             // Overlap must stay below the chunk size, or no window could advance.
             int overlap = effective.OverlapCount < effective.MaxTokens ? effective.OverlapCount : effective.MaxTokens / 4;
+            string? header = String.IsNullOrWhiteSpace(effective.ContextHeader) ? null : effective.ContextHeader!.Trim() + "\n\n";
             TextChunker.Models.ChunkingOptions chunkerOptions = new TextChunker.Models.ChunkingOptions
             {
                 Strategy = MapStrategy(effective.Strategy),
                 MaxTokens = effective.MaxTokens,
                 OverlapCount = overlap,
                 ModelId = String.IsNullOrWhiteSpace(effective.ModelId) ? null : effective.ModelId,
-                ComputeHashes = false
+                ComputeHashes = false,
+                ComputeOffsets = true,
+                // A small margin under the model's input limit, because the endpoint's tokenizer can count a few more
+                // tokens than the local one; the header's tokens come out of the same budget.
+                SafetyMarginPercentage = effective.SafetyMarginPercentage,
+                SafetyMarginTokens = effective.SafetyMarginTokens,
+                EffectiveInputBudget = effective.EffectiveInputBudget,
+                ContextPrefix = header
             };
 
             Chunker chunker = new Chunker();
             await foreach (TextChunker.Models.Chunk chunk in chunker.ChunkText(text, chunkerOptions, token).ConfigureAwait(false))
             {
                 if (String.IsNullOrWhiteSpace(chunk.Text)) continue;
-                chunks.Add(new SemanticChunk { Text = chunk.Text });
+                if (header == null)
+                {
+                    chunks.Add(new SemanticChunk { Text = chunk.Text });
+                    continue;
+                }
+
+                // Store the chunk without its header; embed it with the header.
+                string stored = chunk.StartOffset >= 0 && chunk.EndOffset > chunk.StartOffset && chunk.EndOffset <= text.Length
+                    ? text.Substring(chunk.StartOffset, chunk.EndOffset - chunk.StartOffset)
+                    : (chunk.Text.StartsWith(header, StringComparison.Ordinal) ? chunk.Text.Substring(header.Length) : chunk.Text);
+                stored = stored.Trim();
+                if (String.IsNullOrWhiteSpace(stored)) continue;
+                string embedded = chunk.Text.StartsWith(header, StringComparison.Ordinal) ? chunk.Text : header + stored;
+                chunks.Add(new SemanticChunk { Text = stored, EmbeddingText = embedded, Header = effective.ContextHeader });
             }
 
             return chunks;
@@ -122,8 +143,10 @@ namespace Pneuma.Core.Integrations.Implementations
                 token.ThrowIfCancellationRequested();
                 int count = Math.Min(_EmbedBatchSize, texts.Count - offset);
                 List<string> batch = texts.GetRange(offset, count);
-                EmbeddingResponse response = await EmbedWithRetryAsync(client, batch, embeddingOptions, token).ConfigureAwait(false);
-                if (response == null || !response.Success) throw new InvalidOperationException("Embedding request failed: " + (response?.Error ?? "no response") + ".");
+                // Transient failures (429, 5xx) are retried by the model client's TransientRetryHandler; what reaches here
+                // failed for good, and the typed exception tells the pipeline whether to retry the job later.
+                EmbeddingResponse response = await client.EmbedAsync(batch, embeddingOptions, token).ConfigureAwait(false);
+                if (response == null || !response.Success) throw ModelResponseErrors.ToException("embedding", response?.Error);
                 if (response.Embeddings.Count != batch.Count) throw new InvalidOperationException("Embedding provider returned " + response.Embeddings.Count + " vectors for " + batch.Count + " inputs.");
 
                 List<List<float>> ordered = OrderVectors(response.Embeddings, batch.Count);
@@ -199,33 +222,6 @@ namespace Pneuma.Core.Integrations.Implementations
             if (String.Equals(strategy, "ParagraphBased", StringComparison.OrdinalIgnoreCase)) return ChunkStrategyEnum.ParagraphBased;
             if (String.Equals(strategy, "Recursive", StringComparison.OrdinalIgnoreCase)) return ChunkStrategyEnum.Recursive;
             return ChunkStrategyEnum.FixedTokenCount;
-        }
-
-        /// <summary>
-        /// Embed a batch, retrying rate limiting (429) and transient server errors (5xx) with exponential backoff
-        /// (1, 2, 4, 8, 16 s). A shared or hosted model endpoint answers "at capacity" under load; without a retry
-        /// here one such response failed the whole ingestion stage.
-        /// </summary>
-        private static async Task<EmbeddingResponse> EmbedWithRetryAsync(CompletionClientBase client, List<string> batch, EmbeddingOptions options, CancellationToken token)
-        {
-            EmbeddingResponse response = await client.EmbedAsync(batch, options, token).ConfigureAwait(false);
-            for (int attempt = 1; attempt <= 5 && IsTransientFailure(response); attempt++)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), token).ConfigureAwait(false);
-                response = await client.EmbedAsync(batch, options, token).ConfigureAwait(false);
-            }
-
-            return response;
-        }
-
-        private static bool IsTransientFailure(EmbeddingResponse? response)
-        {
-            if (response == null) return true;
-            if (response.Success) return false;
-            string error = response.Error ?? String.Empty;
-            return error.Contains("429", StringComparison.Ordinal) || error.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase)
-                || error.Contains("HTTP 5", StringComparison.Ordinal) || error.Contains("502", StringComparison.Ordinal)
-                || error.Contains("503", StringComparison.Ordinal) || error.Contains("504", StringComparison.Ordinal);
         }
 
         private static List<List<float>> OrderVectors(List<EmbeddingResult> embeddings, int count)

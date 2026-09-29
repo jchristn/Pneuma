@@ -1390,3 +1390,22 @@ select {
 
 /* Compact monospace conversation ID cell in the Conversations table. */
 .mono-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--text-secondary); }
+.status-with-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+
+/* Crawl plans (Crawlers view and its modals). */
+.form-grid { display: flex; flex-direction: column; gap: 12px; }
+.form-grid.form-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.form-grid.form-grid-2col .field-full { grid-column: 1 / -1; }
+@media (max-width: 720px) { .form-grid.form-grid-2col { grid-template-columns: 1fr; } }
+.form-section-heading { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); padding-bottom: 4px; margin-top: 6px; }
+.checkbox-field { display: flex; align-items: center; gap: 8px; }
+.checkbox-field input { width: auto; }
+.password-field { display: flex; align-items: center; gap: 8px; }
+.password-field input { flex: 1 1 auto; min-width: 0; }
+.kv-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
+.kv-grid dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); font-weight: 600; }
+.crawl-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 8px 0 16px; }
+.crawl-count { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px 10px; background: var(--bg-tertiary); }
+.crawl-count-value { font-size: 1.25rem; font-weight: 700; }
+.crawl-count-label { font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }

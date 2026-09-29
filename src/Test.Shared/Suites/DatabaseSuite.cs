@@ -602,7 +602,7 @@ namespace Test.Shared.Suites
                             // Progress updates land while Running.
                             run.PassCount = 1;
                             await db.EvalRuns.UpdateProgressAsync(run, ct);
-                            EvalRun afterProgress = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct)!;
+                            EvalRun afterProgress = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct) ?? throw new Exception("run should exist after progress");
                             if (afterProgress.PassCount != 1 || afterProgress.Status != EvalRunStatusEnum.Running) throw new Exception("progress should persist while Running");
 
                             // An operator cancel sets the status out-of-band...
@@ -613,7 +613,7 @@ namespace Test.Shared.Suites
                             // ...after which a stray progress write is a no-op (guarded by status = Running).
                             run.PassCount = 2;
                             await db.EvalRuns.UpdateProgressAsync(run, ct);
-                            EvalRun afterCancel = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct)!;
+                            EvalRun afterCancel = await db.EvalRuns.ReadAsync(t.Id, run.Id, ct) ?? throw new Exception("run should exist after cancel");
                             if (afterCancel.Status != EvalRunStatusEnum.Cancelled) throw new Exception("cancel must stick");
                             if (afterCancel.PassCount != 1) throw new Exception("progress must not clobber a cancelled run's tallies, got " + afterCancel.PassCount);
 

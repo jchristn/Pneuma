@@ -4,8 +4,9 @@ namespace Pneuma.Core.Integrations
     using System.Net.Http;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
-    using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Integrations.Implementations;
+    using Pneuma.Core.Models;
     using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using SyslogLogging;
@@ -54,8 +55,12 @@ namespace Pneuma.Core.Integrations
             if (logging == null) throw new ArgumentNullException(nameof(logging));
 
             // Fresh HttpClient per client (pooled through the shared handler) so each endpoint's Authorization
-            // header is isolated from the others.
-            HttpClient http = new HttpClient(_Handler, disposeHandler: false);
+            // header is isolated from the others. Every request goes through the retry handler, which retries the
+            // endpoint's transient failures and holds a slot on the endpoint's process-wide concurrency limit. The
+            // retry handler wraps the shared handler, so neither is disposed with the client.
+            TransientRetryHandler retry = new TransientRetryHandler(_Handler, runner.MaxRetries, String.IsNullOrWhiteSpace(runner.Name) ? runner.Id : runner.Name,
+                EndpointConcurrencyLimiter.Shared, runner.Id, runner.MaxConcurrentRequests);
+            HttpClient http = new HttpClient(retry, disposeHandler: false);
             string? endpointOrNull = String.IsNullOrWhiteSpace(runner.BaseUrl) ? null : runner.BaseUrl;
 
             CompletionClientBase client;

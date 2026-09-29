@@ -12,6 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="OpenCIFS.Server" Version="0.1.1" />
+    <PackageReference Include="OpenNFS.Server" Version="0.1.1" />
+    <PackageReference Include="Blobject.Disk" Version="6.0.0" />
     <PackageReference Include="Touchstone.Core" Version="0.1.12" />
   </ItemGroup>
 

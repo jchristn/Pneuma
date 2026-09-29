@@ -62,6 +62,17 @@ namespace Pneuma.Core.Requests
         public int MaxConcurrentRequests { get; set; } = 2;
 
         /// <summary>
+        /// Retries of a transient failure (408, 429, 502, 503, 504) before a call fails. Default 5; clamped to [0, 10].
+        /// </summary>
+        public int MaxRetries { get; set; } = 5;
+
+        /// <summary>
+        /// Largest embedding input the endpoint accepts, in the model's tokens. 0 (the default) uses the known limit for
+        /// the model family. Chunks are sized to fit it with a small safety margin.
+        /// </summary>
+        public int MaxInputTokens { get; set; } = 0;
+
+        /// <summary>
         /// Maximum number of requests that may wait for a concurrency slot once <see cref="MaxConcurrentRequests"/>
         /// upstream calls are in flight. Minimum 0 (clamped). Default 0 — over-limit requests are rejected
         /// immediately rather than queued.

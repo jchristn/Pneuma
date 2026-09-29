@@ -283,8 +283,10 @@ function ModelRunnersView() {
     { name: '__sec_request', type: 'section', label: t('modelRunners.sectionRequest') },
     { name: 'active', label: t('modelRunners.active'), type: 'checkbox', default: true, omitIfEmpty: false, tip: t('modelRunners.activeTip') },
     { name: 'maxConcurrentRequests', label: t('modelRunners.maxConcurrency'), type: 'number', default: 2, min: 1, placeholder: '2', tip: t('modelRunners.maxConcurrencyTip') },
+    { name: 'maxRetries', label: t('modelRunners.maxRetries'), type: 'number', default: 5, min: 0, max: 10, placeholder: '5', tip: t('modelRunners.maxRetriesTip') },
     { name: 'maxQueueDepth', label: t('modelRunners.maxQueueDepth'), type: 'number', default: 0, min: 0, placeholder: '0', tip: t('modelRunners.maxQueueDepthTip') },
     { name: 'maximumTimeoutMs', label: t('modelRunners.requestTimeout'), type: 'number', default: 60000, min: 1000, step: 1000, placeholder: '60000', tip: t('modelRunners.requestTimeoutTip') },
+    { name: 'maxInputTokens', label: t('modelRunners.maxInputTokens'), type: 'number', default: 0, min: 0, placeholder: '0', tip: t('modelRunners.maxInputTokensTip') },
     { name: 'contextSize', label: t('modelRunners.contextSize'), type: 'number', default: 0, min: 0, placeholder: '8192', tip: t('modelRunners.contextSizeTip') },
 
     { name: '__sec_health', type: 'section', label: t('modelRunners.sectionHealth') },

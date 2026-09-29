@@ -109,6 +109,11 @@ namespace Pneuma.Core.Security
                             ResourceTypeEnum.SearchIndex, ResourceTypeEnum.Source, ResourceTypeEnum.Prompt
                         },
                         new List<OperationTypeEnum> { OperationTypeEnum.Read, OperationTypeEnum.Write }));
+                    // Editors keep their subjects in sync with crawl plans: manage plans and start or stop runs.
+                    specs.Add(new PermissionSpec(
+                        PermissionTypeEnum.Permit,
+                        new List<ResourceTypeEnum> { ResourceTypeEnum.CrawlPlan, ResourceTypeEnum.CrawlOperation },
+                        new List<OperationTypeEnum> { OperationTypeEnum.Read, OperationTypeEnum.Write, OperationTypeEnum.Execute }));
                     break;
 
                 case Viewer:

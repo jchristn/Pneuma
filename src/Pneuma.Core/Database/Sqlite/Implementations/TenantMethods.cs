@@ -101,6 +101,13 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
             List<string> statements = new List<string>
             {
                 "DELETE FROM ingestionjobevents WHERE tenantid = " + t + ";",
+                "DELETE FROM ingestionjobattempts WHERE tenantid = " + t + ";",
+                "DELETE FROM crawloperationobjects WHERE tenantid = " + t + ";",
+                "DELETE FROM crawloperations WHERE tenantid = " + t + ";",
+                "DELETE FROM crawlobjects WHERE tenantid = " + t + ";",
+                "DELETE FROM crawlplansecrets WHERE tenantid = " + t + ";",
+                "DELETE FROM crawlplansettings WHERE tenantid = " + t + ";",
+                "DELETE FROM crawlplans WHERE tenantid = " + t + ";",
                 "DELETE FROM ingestionjobs WHERE tenantid = " + t + ";",
                 "DELETE FROM subjectlinks WHERE tenantid = " + t + ";",
                 "DELETE FROM evalresults WHERE tenantid = " + t + ";",

@@ -41,6 +41,18 @@ namespace Pneuma.Core.Observability
         private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
         private static readonly ConcurrentDictionary<string, HistogramSeries> _RetrievalStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
         private static readonly ConcurrentDictionary<string, long> _RetrievalLegFailures = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _IngestionFailures = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _IngestionPartial = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _ModelRetries = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _IngestionRetired = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _IngestionRechunk = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, HistogramSeries> _ModelLimiterWait = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, long> _CrawlOperations = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _CrawlObjects = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _CrawlBytes = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, HistogramSeries> _CrawlDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static long _CrawlRunning = 0;
+        private static readonly ConcurrentDictionary<string, long> _LinkRefresh = new ConcurrentDictionary<string, long>();
 
         private static long _Requests2xx = 0;
         private static long _Requests4xx = 0;
@@ -79,6 +91,114 @@ namespace Pneuma.Core.Observability
         {
             string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
             Increment(_IngestionJobs, "outcome=\"" + Escape(safeOutcome) + "\"");
+        }
+
+        /// <summary>Record a failed ingestion job by its failure category.</summary>
+        /// <param name="category">The failure category name (for example Fetch, Storage, ModelUnavailable).</param>
+        public static void RecordIngestionFailure(string category)
+        {
+            string safeCategory = String.IsNullOrEmpty(category) ? "(unknown)" : category;
+            Increment(_IngestionFailures, "category=\"" + Escape(safeCategory) + "\"");
+        }
+
+        /// <summary>Record work an ingestion job dropped but completed without.</summary>
+        /// <param name="stage">The stage that dropped the work.</param>
+        /// <param name="reason">A low-cardinality reason: classification_batch, summary, cell_node.</param>
+        public static void RecordIngestionPartial(string stage, string reason)
+        {
+            string safeStage = String.IsNullOrEmpty(stage) ? "(unknown)" : stage;
+            string safeReason = String.IsNullOrEmpty(reason) ? "(unknown)" : reason;
+            Increment(_IngestionPartial, "stage=\"" + Escape(safeStage) + "\",reason=\"" + Escape(safeReason) + "\"");
+        }
+
+        /// <summary>Record output removed from an earlier version of a link (or a failed attempt).</summary>
+        /// <param name="kind">What was removed: chunk_set (one job's chunks) or node (a Source or Cell node).</param>
+        /// <param name="count">How many.</param>
+        public static void RecordIngestionRetired(string kind, int count)
+        {
+            string safeKind = String.IsNullOrEmpty(kind) ? "(unknown)" : kind;
+            string key = "kind=\"" + Escape(safeKind) + "\"";
+            long amount = Math.Max(0, count);
+            _IngestionRetired.AddOrUpdate(key, amount, (k, existing) => existing + amount);
+        }
+
+        /// <summary>Record a finished crawl operation and its duration.</summary>
+        /// <param name="type">Crawl plan type (Web, Sitemap, S3, Cifs, Nfs).</param>
+        /// <param name="outcome">Final status (Succeeded, PartiallySucceeded, Failed, Cancelled, Held).</param>
+        /// <param name="seconds">Duration from start to finish in seconds.</param>
+        public static void RecordCrawlOperation(string type, string outcome, double seconds)
+        {
+            string safeType = String.IsNullOrEmpty(type) ? "(unknown)" : type;
+            string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
+            Increment(_CrawlOperations, "type=\"" + Escape(safeType) + "\",outcome=\"" + Escape(safeOutcome) + "\"");
+            _CrawlDuration.GetOrAdd("type=\"" + Escape(safeType) + "\"", CreateHistogram).Observe(seconds);
+        }
+
+        /// <summary>Record what a crawl operation did with its objects.</summary>
+        /// <param name="type">Crawl plan type.</param>
+        /// <param name="action">Action (Add, Update, Retry, Delete, Skip, Fail, Unchanged).</param>
+        /// <param name="count">How many objects.</param>
+        public static void RecordCrawlObjects(string type, string action, int count)
+        {
+            if (count <= 0) return;
+            string safeType = String.IsNullOrEmpty(type) ? "(unknown)" : type;
+            string safeAction = String.IsNullOrEmpty(action) ? "(unknown)" : action;
+            string key = "type=\"" + Escape(safeType) + "\",action=\"" + Escape(safeAction) + "\"";
+            long amount = count;
+            _CrawlObjects.AddOrUpdate(key, amount, (k, existing) => existing + amount);
+        }
+
+        /// <summary>Record bytes a crawl operation enumerated.</summary>
+        /// <param name="type">Crawl plan type.</param>
+        /// <param name="bytes">Total size of the enumerated objects.</param>
+        public static void RecordCrawlBytes(string type, long bytes)
+        {
+            if (bytes <= 0) return;
+            string safeType = String.IsNullOrEmpty(type) ? "(unknown)" : type;
+            string key = "type=\"" + Escape(safeType) + "\"";
+            _CrawlBytes.AddOrUpdate(key, bytes, (k, existing) => existing + bytes);
+        }
+
+        /// <summary>Change the number of crawl operations enumerating on this server.</summary>
+        /// <param name="delta">+1 when one starts, -1 when it stops.</param>
+        public static void AdjustCrawlRunning(int delta)
+        {
+            Interlocked.Add(ref _CrawlRunning, delta);
+        }
+
+        /// <summary>Record a scheduled link refresh check.</summary>
+        /// <param name="outcome">Unchanged, Queued, Failed, Busy, or Skipped.</param>
+        public static void RecordLinkRefresh(string outcome)
+        {
+            string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
+            Increment(_LinkRefresh, "outcome=\"" + Escape(safeOutcome) + "\"");
+        }
+
+        /// <summary>Record a chunk re-chunked at a smaller size after the embedding model rejected it as too long.</summary>
+        /// <param name="scale">The size scale tried (0.75, 0.5, or 0.3).</param>
+        public static void RecordIngestionRechunk(string scale)
+        {
+            string safeScale = String.IsNullOrEmpty(scale) ? "(unknown)" : scale;
+            Increment(_IngestionRechunk, "scale=\"" + Escape(safeScale) + "\"");
+        }
+
+        /// <summary>Record a retried model-endpoint request.</summary>
+        /// <param name="runner">The runner name.</param>
+        /// <param name="status">The HTTP status that caused the retry.</param>
+        public static void RecordModelRetry(string runner, string status)
+        {
+            string safeRunner = String.IsNullOrEmpty(runner) ? "(unknown)" : runner;
+            string safeStatus = String.IsNullOrEmpty(status) ? "(unknown)" : status;
+            Increment(_ModelRetries, "runner=\"" + Escape(safeRunner) + "\",status=\"" + Escape(safeStatus) + "\"");
+        }
+
+        /// <summary>Record how long a request waited for a free slot on a model endpoint.</summary>
+        /// <param name="runner">The runner name.</param>
+        /// <param name="seconds">The wait in seconds.</param>
+        public static void RecordModelLimiterWait(string runner, double seconds)
+        {
+            string safeRunner = String.IsNullOrEmpty(runner) ? "(unknown)" : runner;
+            _ModelLimiterWait.GetOrAdd("runner=\"" + Escape(safeRunner) + "\"", CreateHistogram).Observe(seconds);
         }
 
         /// <summary>Record an ingestion pipeline stage result and duration.</summary>
@@ -187,6 +307,18 @@ namespace Pneuma.Core.Observability
             AppendCounterFamily(sb, "pneuma_ingestion_jobs_total", "Ingestion jobs by outcome", _IngestionJobs);
             AppendCounterFamily(sb, "pneuma_ingestion_stage_total", "Ingestion pipeline stages by stage and outcome", _IngestionStages);
             AppendHistogramFamily(sb, "pneuma_ingestion_stage_duration_seconds", "Ingestion stage duration in seconds, by stage", _IngestionStageDuration);
+            AppendCounterFamily(sb, "pneuma_ingestion_failures_total", "Failed ingestion jobs by failure category", _IngestionFailures);
+            AppendCounterFamily(sb, "pneuma_ingestion_partial_total", "Work an ingestion job dropped but completed without, by stage and reason", _IngestionPartial);
+            AppendCounterFamily(sb, "pneuma_ingestion_retired_total", "Output removed from earlier versions of links and from failed attempts, by kind", _IngestionRetired);
+            AppendCounterFamily(sb, "pneuma_ingestion_rechunk_total", "Chunks re-chunked at a smaller size after the embedding model rejected them as too long, by scale", _IngestionRechunk);
+            AppendCounterFamily(sb, "pneuma_model_retries_total", "Model-endpoint requests retried after a transient failure, by runner and status", _ModelRetries);
+            AppendHistogramFamily(sb, "pneuma_model_limiter_wait_seconds", "Time a model request waited for a free slot on its endpoint, by runner", _ModelLimiterWait);
+            AppendCounterFamily(sb, "pneuma_crawl_operations_total", "Finished crawl operations, by plan type and outcome", _CrawlOperations);
+            AppendCounterFamily(sb, "pneuma_crawl_objects_total", "Objects crawl operations acted on, by plan type and action", _CrawlObjects);
+            AppendHistogramFamily(sb, "pneuma_crawl_operation_duration_seconds", "Crawl operation duration from start to finish in seconds, by plan type", _CrawlDuration);
+            AppendCounterFamily(sb, "pneuma_crawl_bytes_total", "Bytes of objects crawl operations enumerated, by plan type", _CrawlBytes);
+            AppendGauge(sb, "pneuma_crawl_running", "Crawl operations enumerating on this server", Interlocked.Read(ref _CrawlRunning));
+            AppendCounterFamily(sb, "pneuma_link_refresh_total", "Scheduled link refresh checks, by outcome", _LinkRefresh);
 
             AppendCounterFamily(sb, "pneuma_integration_requests_total", "Integration requests by service, operation, and outcome", _IntegrationRequests);
             AppendHistogramFamily(sb, "pneuma_integration_request_duration_seconds", "Integration request duration in seconds, by service and operation", _IntegrationDuration);

@@ -8,9 +8,10 @@ namespace Pneuma.Core.Integrations
     using System.Threading.Tasks;
     using Pneuma.Core.Graph;
     using Pneuma.Core.Ingestion.Graph;
+    using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
-    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Serialization;
     using PolyPrompt.Clients;
@@ -106,8 +107,10 @@ namespace Pneuma.Core.Integrations
 
             if (response == null || !response.Success || String.IsNullOrWhiteSpace(response.Text))
             {
+                // Surface the failure rather than returning an empty subgraph: the stage counts it as a failed batch
+                // and records a warning, so a document whose classification failed is not reported as complete.
                 _Logging.Warn("[PolyPromptClassifier] classification failed: " + (response?.Error ?? "no response"));
-                return new CandidateSubgraph();
+                throw ModelResponseErrors.ToException("classification", response?.Error);
             }
 
             return Parse(response.Text);
@@ -154,10 +157,10 @@ namespace Pneuma.Core.Integrations
                 CandidateSubgraph? subgraph = Json.Deserialize<CandidateSubgraph>(json);
                 return subgraph ?? new CandidateSubgraph();
             }
-            catch (Exception e)
+            catch (Exception e) when (!(e is OperationCanceledException))
             {
                 _Logging.Warn("[PolyPromptClassifier] failed to parse subgraph JSON: " + e.Message);
-                return new CandidateSubgraph();
+                throw new InvalidOperationException("The classification response was not valid subgraph JSON: " + e.Message, e);
             }
         }
 

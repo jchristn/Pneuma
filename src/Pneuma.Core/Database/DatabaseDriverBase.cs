@@ -72,7 +72,19 @@ namespace Pneuma.Core.Database
         public IIngestionJobMethods IngestionJobs { get; protected set; } = null!;
 
         /// <summary>Ingestion job event methods.</summary>
-        public IIngestionJobEventMethods IngestionJobEvents { get; protected set; } = null!;
+        public IIngestionJobEventMethods IngestionJobEvents { get; protected set; } = null!;
+
+        /// <summary>IngestionJobAttemptMethods data access.</summary>
+        public IIngestionJobAttemptMethods IngestionJobAttempts { get; protected set; } = null!;
+
+        /// <summary>Crawl plan data access (plans, settings, secrets).</summary>
+        public ICrawlPlanMethods CrawlPlans { get; protected set; } = null!;
+
+        /// <summary>Crawl object data access (the per-plan delta baseline).</summary>
+        public ICrawlObjectMethods CrawlObjects { get; protected set; } = null!;
+
+        /// <summary>Crawl operation and operation object data access.</summary>
+        public ICrawlOperationMethods CrawlOperations { get; protected set; } = null!;
 
         /// <summary>Model runner methods.</summary>
         public IModelRunnerMethods ModelRunners { get; protected set; } = null!;

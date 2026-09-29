@@ -19,6 +19,10 @@ import { formatDateTime } from '../i18n/formatters';
 
 const STATUS_OPTIONS = ['', 'Queued', 'Processing', 'Completed', 'Failed', 'Cancelled'];
 
+// Failure categories the server assigns to failed jobs (IngestionFailureCategoryEnum), for the category filter.
+export const FAILURE_CATEGORIES = ['Fetch', 'Blocked', 'TooLarge', 'UnsupportedType', 'Extraction', 'NoContent',
+  'ModelUnavailable', 'ModelRejected', 'Configuration', 'Storage', 'Timeout', 'PartialLoss', 'WorkerLost', 'Cancelled', 'Internal'];
+
 // A job can be restarted (re-queued from the beginning) unless it already ran to completion.
 function isRestartable(job) {
   return String(job?.status || '').toLowerCase() !== 'completed';
@@ -57,6 +61,8 @@ function IngestionJobsView() {
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('');
   const [subjectId, setSubjectId] = useState('');
+  const [failureCategory, setFailureCategory] = useState('');
+  const [warnings, setWarnings] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [modal, setModal] = useState(null);
   // Brief, dismissible notice shown after a background deletion is dispatched (202 Accepted).
@@ -66,7 +72,13 @@ function IngestionJobsView() {
     setLoading(true);
     setError(null);
     try {
-      const query = { maxResults: 1000, order: 'desc', ...(subjectId ? { subjectId } : {}) };
+      const query = {
+        maxResults: 1000,
+        order: 'desc',
+        ...(subjectId ? { subjectId } : {}),
+        ...(failureCategory ? { failureCategory } : {}),
+        ...(warnings ? { hasWarnings: warnings } : {})
+      };
       const resp = await apiClient.listJobs(status || undefined, query);
       setRows(normalizeList(resp).items);
     } catch (err) {
@@ -75,7 +87,7 @@ function IngestionJobsView() {
     } finally {
       setLoading(false);
     }
-  }, [apiClient, status, subjectId]);
+  }, [apiClient, status, subjectId, failureCategory, warnings]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -174,7 +186,22 @@ function IngestionJobsView() {
       const ds = r.deletionStatus;
       if (ds === 'Pending' || ds === 'Deleting') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletingStatus', 'deleting…')}</span>;
       if (ds === 'Failed') return <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{t('jobs.deletionFailed', 'deletion failed')}</span>;
-      return <StatusPill label={r.status} tone={toneForStatus(r.status)} />;
+      const warningCount = Array.isArray(r.warnings) ? r.warnings.length : 0;
+      return (
+        <span className="status-with-badges">
+          <StatusPill label={r.status} tone={toneForStatus(r.status)} />
+          {r.failureCategory && (
+            <span title={t(`failureCategories.${r.failureCategory}.remediation`, '')}>
+              <StatusPill label={t(`failureCategories.${r.failureCategory}.label`, r.failureCategory)} tone="danger" />
+            </span>
+          )}
+          {warningCount > 0 && (
+            <span title={r.warnings.join('\n')}>
+              <StatusPill label={t('jobs.warningCount', { count: warningCount })} tone="warning" />
+            </span>
+          )}
+        </span>
+      );
     } },
     { key: 'stage', label: t('jobs.stage'), render: (r) => stageLabel(r.stage || r.currentStage) },
     { key: 'createdUtc', label: t('jobs.created'), render: (r) => formatDateTime(r.createdUtc) },
@@ -202,6 +229,23 @@ function IngestionJobsView() {
           <select id="ingestion-job-status" value={status} onChange={(e) => setStatus(e.target.value)}
             title="Filter the full job history by state. Choose all statuses to clear the filter.">
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || t('jobs.allStatuses')}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="ingestion-job-category" className="has-tip" title={t('jobs.categoryFilterTip')}>{t('jobs.failureCategory')}</label>
+          <select id="ingestion-job-category" value={failureCategory} onChange={(e) => setFailureCategory(e.target.value)}
+            title={t('jobs.categoryFilterTip')}>
+            <option value="">{t('jobs.allCategories')}</option>
+            {FAILURE_CATEGORIES.map((c) => <option key={c} value={c}>{t(`failureCategories.${c}.label`, c)}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="ingestion-job-warnings" className="has-tip" title={t('jobs.warningsFilterTip')}>{t('jobs.warnings')}</label>
+          <select id="ingestion-job-warnings" value={warnings} onChange={(e) => setWarnings(e.target.value)}
+            title={t('jobs.warningsFilterTip')}>
+            <option value="">{t('jobs.anyWarnings')}</option>
+            <option value="true">{t('jobs.withWarnings')}</option>
+            <option value="false">{t('jobs.withoutWarnings')}</option>
           </select>
         </div>
         <div className="field">

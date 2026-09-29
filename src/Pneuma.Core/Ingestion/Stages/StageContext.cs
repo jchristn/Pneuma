@@ -39,6 +39,9 @@ namespace Pneuma.Core.Ingestion.Stages
         /// <summary>The per-cell summaries produced by summarization.</summary>
         public List<CellSummary> Summaries { get; set; } = new List<CellSummary>();
 
+        /// <summary>The resolved chunking options (set by chunking; used to re-chunk a chunk the model rejects as too long).</summary>
+        public ChunkingOptions? ChunkingOptions { get; set; } = null;
+
         /// <summary>The chunks produced by chunking and (later) embedded in place.</summary>
         public List<SemanticChunk> Chunks { get; set; } = new List<SemanticChunk>();
 
@@ -58,6 +61,24 @@ namespace Pneuma.Core.Ingestion.Stages
         /// <summary>The completion message the current stage wants surfaced in the job's log.</summary>
         public string Message { get; set; } = String.Empty;
 
+        /// <summary>
+        /// The HTTP content type the source was served with, when known (for example "text/markdown"). A type
+        /// detection hint; null when the source did not declare one.
+        /// </summary>
+        public string? SourceContentType { get; set; } = null;
+
+        /// <summary>
+        /// The document type the content was declared as (pushed content with a content type), which skips type
+        /// detection; null when the type must be detected.
+        /// </summary>
+        public string? DeclaredDocumentType { get; set; } = null;
+
+        #endregion
+
+        #region Private-Members
+
+        private readonly object _WarningLock = new object();
+
         #endregion
 
         #region Constructors-and-Factories
@@ -68,6 +89,24 @@ namespace Pneuma.Core.Ingestion.Stages
         public StageContext(IngestionJob job)
         {
             Job = job ?? throw new ArgumentNullException(nameof(job));
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Record a warning about work the job dropped but can complete without. Thread-safe: stages that run
+        /// concurrent batches may call it from several tasks at once.
+        /// </summary>
+        /// <param name="warning">The warning text; blank warnings are ignored.</param>
+        public void AddWarning(string warning)
+        {
+            if (String.IsNullOrWhiteSpace(warning)) return;
+            lock (_WarningLock)
+            {
+                Job.Warnings.Add(warning);
+            }
         }
 
         #endregion

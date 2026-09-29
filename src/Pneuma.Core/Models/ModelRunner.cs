@@ -84,6 +84,27 @@ namespace Pneuma.Core.Models
         /// <summary>Maximum number of concurrent requests sent to this endpoint. Minimum 1.</summary>
         public int MaxConcurrentRequests { get; set; } = 2;
 
+        /// <summary>
+        /// Retries of a transient failure (408, 429, 502, 503, 504, or a 500 wrapping one) before the call fails, with
+        /// exponential backoff and jitter, honoring <c>Retry-After</c>. Default 5; clamped to [0, 10]. 0 disables retries.
+        /// </summary>
+        public int MaxRetries
+        {
+            get { return _MaxRetries; }
+            set { _MaxRetries = Math.Clamp(value, 0, 10); }
+        }
+
+        /// <summary>
+        /// Largest input, in the model's own tokens, the endpoint accepts for one embedding. 0 (the default) uses the
+        /// known limit for the model family, or no model-specific limit when the model is not recognized. Chunks are
+        /// sized to fit it with a small safety margin. Clamped to [0, 1000000].
+        /// </summary>
+        public int MaxInputTokens
+        {
+            get { return _MaxInputTokens; }
+            set { _MaxInputTokens = Math.Clamp(value, 0, 1000000); }
+        }
+
         /// <summary>Maximum number of requests that may queue for a concurrency slot. Minimum 0.</summary>
         public int MaxQueueDepth { get; set; } = 0;
 
@@ -132,6 +153,8 @@ namespace Pneuma.Core.Models
 
         private string _Id = IdGenerator.GenerateModelRunnerId();
         private string _Name = String.Empty;
+        private int _MaxRetries = 5;
+        private int _MaxInputTokens = 0;
 
         #endregion
     }

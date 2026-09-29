@@ -62,6 +62,73 @@ class ApiClient {
     return url.toString();
   }
 
+  // ------------------------------------------------------ Crawl plans and operations
+  listCrawlPlanTypes() {
+    return this._request('GET', '/v1.0/crawl-plan-types');
+  }
+
+  listCrawlPlans(subjectId = null, query = null) {
+    const q = { maxResults: 1000, ...(subjectId ? { subjectId } : {}), ...(query || {}) };
+    return this._request('GET', '/v1.0/crawl-plans', { query: q });
+  }
+
+  getCrawlPlan(id) {
+    return this._request('GET', `/v1.0/crawl-plans/${encodeURIComponent(id)}`);
+  }
+
+  createCrawlPlan(subjectId, body) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/crawl-plans`, { body });
+  }
+
+  updateCrawlPlan(id, body) {
+    return this._request('PUT', `/v1.0/crawl-plans/${encodeURIComponent(id)}`, { body });
+  }
+
+  deleteCrawlPlan(id, deleteLinks = false) {
+    return this._request('DELETE', `/v1.0/crawl-plans/${encodeURIComponent(id)}`, { query: deleteLinks ? { deleteLinks: 'true' } : null });
+  }
+
+  testCrawlPlanDraft(body, fromPlanId = null) {
+    return this._request('POST', '/v1.0/crawl-plans/test', { body, query: fromPlanId ? { fromPlanId } : null });
+  }
+
+  testCrawlPlan(id) {
+    return this._request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/test`);
+  }
+
+  previewCrawlPlan(id) {
+    return this._request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/preview`);
+  }
+
+  startCrawlPlan(id) {
+    return this._request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/start`);
+  }
+
+  stopCrawlPlan(id) {
+    return this._request('POST', `/v1.0/crawl-plans/${encodeURIComponent(id)}/stop`);
+  }
+
+  listCrawlPlanObjects(id, status = null) {
+    return this._request('GET', `/v1.0/crawl-plans/${encodeURIComponent(id)}/objects`, { query: { maxResults: 1000, ...(status ? { status } : {}) } });
+  }
+
+  listCrawlOperations(planId = null, status = null) {
+    const q = { maxResults: 1000, ...(planId ? { planId } : {}), ...(status ? { status } : {}) };
+    return this._request('GET', '/v1.0/crawl-operations', { query: q });
+  }
+
+  getCrawlOperation(id) {
+    return this._request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}`);
+  }
+
+  listCrawlOperationObjects(id, action = null) {
+    return this._request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}/objects`, { query: { maxResults: 1000, ...(action ? { action } : {}) } });
+  }
+
+  confirmCrawlDeletions(id) {
+    return this._request('POST', `/v1.0/crawl-operations/${encodeURIComponent(id)}/confirm-deletions`);
+  }
+
   async _request(method, path, { query = null, body = null, headers = {}, signal } = {}) {
     const url = this._buildUrl(path, query);
     const init = { method, headers: this._headers(headers), signal };
@@ -197,12 +264,22 @@ class ApiClient {
   // endpoint, a completion endpoint, and a target collection.
   // The subject owns its embedding/inference models and collection, so submission carries only url/title
   // plus optional labels/tags to attach to every produced chunk (for later retrieval scoping).
-  async submitLink(subjectId, { url, title, labels, tags }) {
+  async submitLink(subjectId, { url, title, labels, tags, refreshIntervalMinutes }) {
     const body = { url };
     if (title) body.title = title;
+    if (refreshIntervalMinutes !== undefined && refreshIntervalMinutes !== null) body.refreshIntervalMinutes = refreshIntervalMinutes;
     if (labels && labels.length) body.labels = labels;
     if (tags && Object.keys(tags).length) body.tags = tags;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, { body });
+  }
+  // Push content (text, Markdown, HTML, or JSON) into a subject; an externalKey replaces earlier content with the same key.
+  async submitContent(subjectId, { title, content, contentType, externalKey, labels, tags }) {
+    const body = { content, contentType };
+    if (title) body.title = title;
+    if (externalKey) body.externalKey = externalKey;
+    if (labels && labels.length) body.labels = labels;
+    if (tags && Object.keys(tags).length) body.tags = tags;
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content`, { body });
   }
   // Bulk submit multiple links for a subject in a single request; labels/tags apply to every URL.
   async bulkSubmitLinks(subjectId, { urls, labels, tags }) {
@@ -219,6 +296,18 @@ class ApiClient {
   // Bulk reingest: queues a fresh ingestion job per link. Returns 202 Accepted with { queued, skipped }.
   async bulkReingestLinks(ids) {
     return this._request('POST', '/v1.0/links/reingest', { body: { ids } });
+  }
+  // Set a link's scheduled refresh. body: { refreshIntervalMinutes } (0 off, 60 to 525600) or { useSubjectDefault: true }.
+  async setLinkRefresh(id, body) {
+    return this._request('PUT', `/v1.0/links/${encodeURIComponent(id)}`, { body });
+  }
+  // Set the scheduled refresh of several links. Returns { updated, skipped } (skipped lists ids that cannot be refreshed).
+  async bulkSetLinkRefresh(ids, body) {
+    return this._request('POST', '/v1.0/links/refresh-interval', { body: { ...body, ids } });
+  }
+  // Check a link for changes now (conditional GET). Returns { outcome, jobId, message, nextRefreshUtc }.
+  async refreshLinkNow(id) {
+    return this._request('POST', `/v1.0/links/${encodeURIComponent(id)}/refresh`, {});
   }
 
   // ------------------------------------------------------------------

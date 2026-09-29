@@ -24,6 +24,9 @@ namespace Pneuma.Sdk.Models
         /// <summary>The source URL being ingested.</summary>
         public string SourceUrl { get; set; } = string.Empty;
 
+        /// <summary>What created the job: Submit, Reingest, Refresh, or Crawl.</summary>
+        public IngestionTriggerEnum Trigger { get; set; } = IngestionTriggerEnum.Submit;
+
         /// <summary>Overall job status.</summary>
         public IngestionStatusEnum Status { get; set; } = IngestionStatusEnum.Queued;
 
@@ -35,6 +38,15 @@ namespace Pneuma.Sdk.Models
 
         /// <summary>Last error message, if failed.</summary>
         public string? Error { get; set; } = null;
+
+        /// <summary>Why the job failed, or null when it has not failed.</summary>
+        public IngestionFailureCategoryEnum? FailureCategory { get; set; } = null;
+
+        /// <summary>Warnings for work the job dropped but completed without. Empty for a complete ingest.</summary>
+        public List<string> Warnings { get; set; } = new List<string>();
+
+        /// <summary>Counts of what each stage received and produced.</summary>
+        public IngestionCompleteness Completeness { get; set; } = new IngestionCompleteness();
 
         /// <summary>Detected document type.</summary>
         public string? DocumentType { get; set; } = null;

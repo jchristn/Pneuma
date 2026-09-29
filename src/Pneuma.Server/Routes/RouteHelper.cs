@@ -4,6 +4,7 @@ namespace Pneuma.Server.Routes
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Security;
@@ -26,6 +27,25 @@ namespace Pneuma.Server.Routes
                 ctx.Response.StatusCode = 400;
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.Send(Json.Serialize(new ErrorResponse("BadRequest", e.Message))).ConfigureAwait(false);
+                return;
+            }
+
+            // A model endpoint that stayed rate limited or unavailable through its retries is a dependency outage the
+            // caller can retry later; a request the endpoint rejected is a bad gateway response.
+            if (e is ModelEndpointUnavailableException)
+            {
+                ctx.Response.StatusCode = 503;
+                ctx.Response.ContentType = "application/json";
+                ctx.Response.Headers.Add("Retry-After", "30");
+                await ctx.Response.Send(Json.Serialize(new ErrorResponse("ModelUnavailable", e.Message))).ConfigureAwait(false);
+                return;
+            }
+
+            if (e is ModelRequestRejectedException)
+            {
+                ctx.Response.StatusCode = 502;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.Send(Json.Serialize(new ErrorResponse("ModelRejected", e.Message))).ConfigureAwait(false);
                 return;
             }
 

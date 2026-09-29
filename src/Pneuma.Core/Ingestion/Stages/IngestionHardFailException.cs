@@ -17,16 +17,28 @@ namespace Pneuma.Core.Ingestion.Stages
         /// <summary>The stage at which the deterministic failure occurred.</summary>
         public IngestionStageEnum Stage { get; }
 
+        /// <summary>The failure category recorded on the job and link.</summary>
+        public IngestionFailureCategoryEnum Category { get; }
+
         #endregion
 
         #region Constructors-and-Factories
 
-        /// <summary>Instantiate a hard-fail for the given stage.</summary>
+        /// <summary>Instantiate a hard-fail for the given stage, categorized as <see cref="IngestionFailureCategoryEnum.Internal"/>.</summary>
         /// <param name="stage">The stage at which the failure occurred.</param>
         /// <param name="message">The failure message shown to the operator.</param>
-        public IngestionHardFailException(IngestionStageEnum stage, string message) : base(message)
+        public IngestionHardFailException(IngestionStageEnum stage, string message) : this(stage, IngestionFailureCategoryEnum.Internal, message)
+        {
+        }
+
+        /// <summary>Instantiate a categorized hard-fail for the given stage.</summary>
+        /// <param name="stage">The stage at which the failure occurred.</param>
+        /// <param name="category">The failure category.</param>
+        /// <param name="message">The failure message shown to the operator.</param>
+        public IngestionHardFailException(IngestionStageEnum stage, IngestionFailureCategoryEnum category, string message) : base(message)
         {
             Stage = stage;
+            Category = category;
         }
 
         #endregion
