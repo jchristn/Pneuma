@@ -662,6 +662,52 @@ export class PneumaClient {
         return this.request('POST', `/v1.0/links/${encodeURIComponent(id)}/refresh`);
     }
 
+    // ==================== New subject wizard ====================
+
+    /** What the wizard can do for the caller (ontology modes, limits). @returns {Promise<object>} */
+    getWizardOptions() {
+        return this.request('GET', '/v1.0/subject-wizard/options');
+    }
+
+    /**
+     * Draft one wizard step with a model. Nothing is stored.
+     * @param {'brief'|'questions'|'ontology'|'prompts'|'sources'} step
+     * @param {{draft: object, modelRunnerId?: string, guidance?: string, mode?: 'replace'|'more', count?: number}} body
+     * @returns {Promise<{value: any, model: string, modelRunnerId: string, elapsedMs: number, warnings: string[], groundingExcerpt?: string}>}
+     */
+    draftWizardStep(step, body) {
+        return this.request('POST', `/v1.0/subject-wizard/${encodeURIComponent(step)}`, { body });
+    }
+
+    /** Clean up a draft ontology and render it as the classifier will see it. @param {object} draft @returns {Promise<object>} */
+    renderWizardOntology(draft) {
+        return this.request('POST', '/v1.0/subject-wizard/render-ontology', { body: { draft } });
+    }
+
+    /**
+     * Create the subject, its starter questions, and its ontology from a finished draft.
+     * @param {{draft: object, inferenceModel?: string, embeddingModel?: string, collection?: string, ontologyMode?: 'Prompt'|'Draft'|'Approve'}} body
+     * @returns {Promise<object>}
+     */
+    commitSubjectWizard(body) {
+        return this.request('POST', '/v1.0/subject-wizard/commit', { body });
+    }
+
+    /** A subject's starter questions. @param {string} subjectId @returns {Promise<object[]>} */
+    getSubjectQuestions(subjectId) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/questions`);
+    }
+
+    /** Replace a subject's starter questions. @param {string} subjectId @param {{question: string, kind?: string}[]} questions @returns {Promise<object[]>} */
+    setSubjectQuestions(subjectId, questions) {
+        return this.request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/questions`, { body: { questions } });
+    }
+
+    /** Create up to 100 evaluation facts at once. @param {{subjectId: string, question: string, expectedAnswer: string, category?: string}[]} facts @returns {Promise<{created: number, objects: object[]}>} */
+    bulkCreateEvalFacts(facts) {
+        return this.request('POST', '/v1.0/eval/facts/bulk', { body: { facts } });
+    }
+
     /** @param {string} id @returns {Promise<null>} */
     deleteLink(id) {
         return this.request('DELETE', `/v1.0/links/${encodeURIComponent(id)}`);

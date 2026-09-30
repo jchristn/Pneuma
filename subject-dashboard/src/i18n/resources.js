@@ -4,6 +4,8 @@
  * runtime. Missing keys fall back to English.
  */
 
+import { wizardEn } from './wizard';
+import { wizardEs } from './wizard.es';
 import { ontologyEn } from './ontology';
 import { ontologyEs } from './ontology.es';
 
@@ -166,6 +168,7 @@ const en = {
       viewIngestionCta: 'View Ingestion'
     },
     ontology: ontologyEn,
+    wizard: wizardEn,
     subjects: {
       ontology: 'Ontology',
       classificationTemperature: 'Classification temperature',
@@ -815,6 +818,7 @@ const es = {
       status: 'Estado'
     },
     ontology: ontologyEs,
+    wizard: wizardEs,
     subjects: {
       ontology: 'Ontología',
       classificationTemperature: 'Temperatura de clasificación',

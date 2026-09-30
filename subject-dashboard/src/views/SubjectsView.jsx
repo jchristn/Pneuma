@@ -11,6 +11,8 @@ import SubjectOntologyModal from '../components/ontology/SubjectOntologyModal';
 import CopyableId from '../components/CopyableId';
 import FacetFilterEditor from '../components/FacetFilterEditor';
 import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
+import SubjectWizard from '../components/wizard/SubjectWizard';
+import StarterQuestionsModal from '../components/wizard/StarterQuestionsModal';
 
 
 // Sensible starter prompts pre-filled when creating a subject. Appended after the global prompts, so they
@@ -84,6 +86,8 @@ function SubjectsView() {
   const [deleting, setDeleting] = useState(false);
   const [deletingNotice, setDeletingNotice] = useState(false);
   const [ontologySubject, setOntologySubject] = useState(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [questionsSubject, setQuestionsSubject] = useState(null);
 
   const load = useCallback(async () => {
     if (!apiClient) return;
@@ -277,6 +281,7 @@ function SubjectsView() {
           actions={[
             { label: t('common.edit'), onClick: () => openEdit(row) },
             { label: t('subjects.ontology'), onClick: () => setOntologySubject(row) },
+            { label: t('wizard.entry.starterQuestions'), onClick: () => setQuestionsSubject(row) },
             { label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(row) }
           ]}
         />
@@ -290,11 +295,18 @@ function SubjectsView() {
         title={t('subjects.title')}
         subtitle={t('subjects.subtitle')}
         actions={
-          <button className="btn btn-primary" onClick={openCreate}>
-            {t('subjects.add')}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={openCreate} title={t('wizard.entry.manualTip')}>
+              {t('wizard.entry.manual')}
+            </button>
+            <button className="btn btn-primary" onClick={() => setWizardOpen(true)} title={t('wizard.entry.guidedTip')}>
+              {t('wizard.entry.guided')}
+            </button>
+          </div>
         }
       />
+      {wizardOpen && <SubjectWizard onClose={() => { setWizardOpen(false); load(); }} onCreated={() => load()} />}
+      {questionsSubject && <StarterQuestionsModal subject={questionsSubject} onClose={() => setQuestionsSubject(null)} />}
 
       {error && <div className="error-banner">{error}</div>}
 

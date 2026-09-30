@@ -28,6 +28,9 @@ namespace Test.Shared.Support
         /// <summary>Text returned by chat and generate calls. Default: an empty subgraph JSON object.</summary>
         public string ChatText { get; set; } = "{\"nodes\":[],\"edges\":[]}";
 
+        /// <summary>Chat replies to send, in order, before falling back to <see cref="ChatText"/>.</summary>
+        public System.Collections.Concurrent.ConcurrentQueue<string> ChatQueue { get; } = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
         /// <summary>Status code used for the scripted failures. Default 429.</summary>
         public int FailureStatus { get; set; } = 429;
 
@@ -153,7 +156,9 @@ namespace Test.Shared.Support
                 }
 
                 lock (_Lock) { _LastChatBody = body; }
-                string text = JsonEncodedText.Encode(ChatText).ToString();
+                string? queued;
+                string reply = ChatQueue.TryDequeue(out queued) && queued != null ? queued : ChatText;
+                string text = JsonEncodedText.Encode(reply).ToString();
                 string json = path.EndsWith("/api/generate", StringComparison.Ordinal)
                     ? "{\"model\":\"stub\",\"response\":\"" + text + "\",\"done\":true}"
                     : "{\"model\":\"stub\",\"message\":{\"role\":\"assistant\",\"content\":\"" + text + "\"},\"done\":true}";

@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import WorkspaceTabs from './WorkspaceTabs';
 import SetupWizard from './SetupWizard';
+import SubjectWizard from './wizard/SubjectWizard';
 
 import HomeView from '../views/HomeView';
 import RequestHistoryView from '../views/RequestHistoryView';
@@ -83,6 +84,7 @@ function Dashboard() {
   const isAdmin = !!authContext?.isAdmin;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [showSubjectWizard, setShowSubjectWizard] = useState(false);
 
   // An old single-view URL (e.g. /dashboard/subjects, /dashboard/jobs) redirects to its consolidated tab home,
   // preserving any query string (e.g. /dashboard/ask?thread=...).
@@ -143,7 +145,8 @@ function Dashboard() {
         {showTabs && <WorkspaceTabs tabs={tabs} activeKey={activeTab?.key} onSelect={selectTab} />}
         <ViewComponent />
       </main>
-      {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
+      {showWizard && <SetupWizard onClose={() => setShowWizard(false)} onGuidedSubject={() => setShowSubjectWizard(true)} />}
+      {showSubjectWizard && <SubjectWizard onClose={() => setShowSubjectWizard(false)} />}
     </div>
   );
 }

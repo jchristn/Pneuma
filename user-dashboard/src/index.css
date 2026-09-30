@@ -1325,3 +1325,9 @@ a.relationship-target:hover {
 .thread-viewall:hover { text-decoration: underline; }
 .conv-btn { padding: 6px 12px; font-size: 13px; }
 .header-conversations { padding: 8px 12px; }
+
+/* Starter question suggestions under the ask box (from the subject's starter questions). */
+.starter-questions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 14px auto 4px; max-width: 760px; }
+.starter-question { border: 1px solid var(--color-border); background: transparent; color: inherit; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.9rem; cursor: pointer; text-align: left; }
+.starter-question:hover:not(:disabled) { border-color: var(--color-primary); }
+.starter-question:disabled { opacity: 0.6; cursor: default; }

@@ -553,6 +553,73 @@ class ApiClient {
     return this._request('POST', `/v1.0/links/${encodeURIComponent(id)}/refresh`);
   }
 
+  // ------------------------------------------------------------- New subject wizard
+  // What the wizard can do for this caller: ontology modes, limits, and whether a completion model exists.
+  wizardOptions() {
+    return this._request('GET', '/v1.0/subject-wizard/options');
+  }
+
+  // Draft one step: brief, questions, ontology, prompts, or sources. body: { draft, modelRunnerId, guidance, mode, count }.
+  // Returns { value, model, modelRunnerId, elapsedMs, warnings, groundingExcerpt }.
+  wizardGenerate(step, body) {
+    return this._request('POST', `/v1.0/subject-wizard/${encodeURIComponent(step)}`, { body });
+  }
+
+  // Clean up a draft ontology and render it as the classifier will see it (no model call).
+  wizardRenderOntology(draft) {
+    return this._request('POST', '/v1.0/subject-wizard/render-ontology', { body: { draft } });
+  }
+
+  // Create the subject, its starter questions, and its ontology from a finished draft.
+  wizardCommit(body) {
+    return this._request('POST', '/v1.0/subject-wizard/commit', { body });
+  }
+
+  // The model endpoints, collections, and global prompts the wizard offers or shows.
+  wizardModelRunners() {
+    return this._request('GET', '/v1.0/model-runners', { query: { maxResults: 1000 } });
+  }
+
+  wizardCollections() {
+    return this._request('GET', '/v1.0/collections', { query: { maxResults: 1000 } });
+  }
+
+  wizardPrompts() {
+    return this._request('GET', '/v1.0/prompts', { query: { maxResults: 1000 } });
+  }
+
+  // Content for a newly created subject: many URLs, pasted text, and the subject's links (for progress).
+  wizardAddLinks(subjectId, urls) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links/bulk`, { body: { urls } });
+  }
+
+  wizardAddText(subjectId, title, content) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content`, { body: { title, content, contentType: 'text/plain' } });
+  }
+
+  wizardSubjectLinks(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/links`, { query: { maxResults: 1000 } });
+  }
+
+  // Ask one question against one subject (the coverage check).
+  wizardAsk(subjectId, question) {
+    return this._request('POST', '/v1.0/query', { body: { question, subjectId, maxResults: 10 } });
+  }
+
+  // A subject's starter questions, and replacing them. questions: [{ question, kind }].
+  getSubjectQuestions(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/questions`);
+  }
+
+  setSubjectQuestions(subjectId, questions) {
+    return this._request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/questions`, { body: { questions } });
+  }
+
+  // Create up to 100 evaluation facts at once. facts: [{ subjectId, question, expectedAnswer, category }].
+  bulkCreateEvalFacts(facts) {
+    return this._request('POST', '/v1.0/eval/facts/bulk', { body: { facts } });
+  }
+
   // ------------------------------------------------------------- Prompts
   // Per-subject prompt catalog: every prompt key with its effective content, the global
   // default, any subject override, the resolved source, and the override merge mode.

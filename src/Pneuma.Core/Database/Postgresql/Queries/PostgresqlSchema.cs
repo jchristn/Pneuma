@@ -284,6 +284,11 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "CREATE INDEX IF NOT EXISTS idx_subjectlinks_nextrefresh ON subjectlinks (nextrefreshutc);"
                 }));
                 list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", PostgresqlOntologySchema.Migration35()));
+                list.Add(new SchemaMigration(36, "Add subject starter questions", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS subjectquestions (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, question TEXT NOT NULL, kind TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, origin TEXT NOT NULL, createdutc TEXT NOT NULL);",
+                    "CREATE INDEX IF NOT EXISTS idx_subjectquestions_tenant_subject ON subjectquestions (tenantid, subjectid, position);"
+                }));
                 return list;
             }
         }

@@ -931,6 +931,223 @@
       ]
     },
     {
+      "name": "Subject Wizard",
+      "description": "The new subject wizard: draft a subject's brief, example questions, ontology, and prompts with a completion model, then create it. See NEW_SUBJECT_WIZARD.md.",
+      "item": [
+        {
+          "name": "Wizard Options",
+          "description": "Ontology modes the caller may use (Prompt, Draft, Approve), the default mode, question limits, the coverage cap, and whether a completion model exists.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/options"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('options returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().ontologyModes).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Draft Brief",
+          "description": "Draft the brief (display name, type, description, tagline, audience, tone) from the description. A draft.groundingUrl is read through the fetch-safety policy and returned as groundingExcerpt. Nothing is stored.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/brief",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('brief drafted', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().value.displayName).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Draft Questions",
+          "description": "Draft example questions. mode replace (default) keeps locked and user-written questions and replaces the rest; mode more adds new ones. count sets how many.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/questions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null,\n  \"mode\": \"replace\",\n  \"count\": 12\n}"
+            }
+          }
+        },
+        {
+          "name": "Draft Ontology",
+          "description": "Draft node and relationship types that answer the draft's questions, each listing the question numbers it serves. Locked types are kept verbatim; names are normalized and endpoints resolved.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/ontology",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Draft Prompts",
+          "description": "Draft the subject's additions to the answering, classification, query rewriting, and reranking prompts. Prompts listed in draft.prompts.locked are kept.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/prompts",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Suggest Sources",
+          "description": "Suggest where content for the subject might come from (Links, Text, or a crawl plan type).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/sources",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Render Ontology",
+          "description": "Clean up the draft ontology and render it as the classifier will see it. No model call.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/render-ontology",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"modelRunnerId\": null,\n  \"guidance\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Commit Subject",
+          "description": "Create the subject, its starter questions, and its ontology from a finished draft. ontologyMode Approve creates, approves, and pins a tenant ontology; Draft leaves it for an approver; Prompt stores it as the ontology prompt. The mode is lowered to what the caller may do.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subject-wizard/commit",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"draft\": {\n    \"description\": \"Charlie Parker, the bebop saxophonist. For music students.\",\n    \"brief\": {\n      \"displayName\": \"Charlie Parker\",\n      \"type\": \"Musician\"\n    },\n    \"questions\": [\n      {\n        \"question\": \"Who played on the 1945 Savoy sessions?\",\n        \"kind\": \"Relationship\",\n        \"origin\": \"Model\",\n        \"locked\": true\n      }\n    ]\n  },\n  \"ontologyMode\": \"Approve\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('subject created', function () { pm.response.to.have.status(201); pm.collectionVariables.set('subjectId', pm.response.json().subject.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Starter Questions",
+          "description": "A subject's starter questions, in order.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/questions"
+          }
+        },
+        {
+          "name": "Replace Starter Questions",
+          "description": "Replace a subject's starter questions (blank questions are skipped).",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/questions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questions\": [\n    {\n      \"question\": \"Who played on the Savoy sessions?\",\n      \"kind\": \"Relationship\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Evaluation Facts (bulk)",
+          "description": "Create up to 100 evaluation facts in one request (the wizard's coverage check saves confirmed answers this way). Every subject must exist in the tenant. Returns { created, objects }.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facts\": [\n    {\n      \"subjectId\": \"{{subjectId}}\",\n      \"question\": \"Who played on the Savoy sessions?\",\n      \"expectedAnswer\": \"Dizzy Gillespie, Miles Davis, and others.\",\n      \"category\": \"wizard\"\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/v1.0/eval/facts/bulk"
+          }
+        }
+      ]
+    },
+    {
       "name": "Search & Ask",
       "item": [
         {

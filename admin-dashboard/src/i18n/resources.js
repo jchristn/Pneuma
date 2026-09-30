@@ -1,4 +1,5 @@
 // Translation resources. English is the baseline catalog for this pass.
+import { wizardEn } from './wizard';
 import { ontologyEn } from './ontology';
 
 const en = {
@@ -886,6 +887,7 @@ const en = {
       noCrawlPlan: 'Not crawled'
     },
     ontology: ontologyEn,
+    wizard: wizardEn,
     resource: {
       addTitle: 'Create {{name}}',
       duplicateTitle: 'Duplicate {{name}}',

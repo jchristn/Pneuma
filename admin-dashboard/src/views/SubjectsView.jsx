@@ -8,6 +8,8 @@ import FacetFilterEditor from '../components/FacetFilterEditor';
 import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
 import StatusPill from '../components/StatusPill';
 import SubjectOntologyModal from '../components/ontology/SubjectOntologyModal';
+import SubjectWizard from '../components/wizard/SubjectWizard';
+import StarterQuestionsModal from '../components/wizard/StarterQuestionsModal';
 import { formatDateTime } from '../i18n/formatters';
 
 // { value, label } options from an ingestion-endpoint entry.
@@ -62,6 +64,9 @@ function SubjectsView() {
   const [collectionOptions, setCollectionOptions] = useState([]);
   const [ingestionDefaults, setIngestionDefaults] = useState(null);
   const [ontologySubject, setOntologySubject] = useState(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [questionsSubject, setQuestionsSubject] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +162,7 @@ function SubjectsView() {
   return (
     <>
     <ResourceView
+      key={refreshKey}
       resourceKey="subjects"
       singular="subject"
       title={t('nav.subjects')}
@@ -165,6 +171,13 @@ function SubjectsView() {
       formFields={formFields}
       idField="id"
       modalSize="subject"
+      addLabel={t('wizard.entry.manual')}
+      addClassName="button-secondary"
+      headerActions={(
+        <button type="button" className="button-primary" onClick={() => setWizardOpen(true)} title={t('wizard.entry.guidedTip')}>
+          {t('wizard.entry.guided')}
+        </button>
+      )}
       twoColumnForm
       duplicable
       duplicateTransform={(r) => {
@@ -174,10 +187,13 @@ function SubjectsView() {
       postDeleteNotice={t('subjects.deletingBackground', 'We are deleting this subject and everything associated with it in the background. You may close this window.')}
       extraActions={[
         { key: 'viewLinks', label: t('subjects.viewLinks'), onClick: (item) => navigate(`/dashboard/links?subjectId=${encodeURIComponent(item.id)}`) },
-        { key: 'ontology', label: t('subjects.ontology'), tip: t('subjects.ontologyTip'), onClick: (item) => setOntologySubject(item) }
+        { key: 'ontology', label: t('subjects.ontology'), tip: t('subjects.ontologyTip'), onClick: (item) => setOntologySubject(item) },
+        { key: 'starterQuestions', label: t('wizard.entry.starterQuestions'), tip: t('wizard.entry.starterQuestionsTip'), onClick: (item) => setQuestionsSubject(item) }
       ]}
     />
     {ontologySubject && <SubjectOntologyModal subject={ontologySubject} onClose={() => setOntologySubject(null)} />}
+    {questionsSubject && <StarterQuestionsModal subject={questionsSubject} onClose={() => setQuestionsSubject(null)} />}
+    {wizardOpen && <SubjectWizard onClose={() => { setWizardOpen(false); setRefreshKey((k) => k + 1); }} onCreated={() => setRefreshKey((k) => k + 1)} />}
     </>
   );
 }

@@ -219,6 +219,11 @@ class ApiClient {
     return this._request('GET', `/v1.0/subjects/by-slug/${encodeURIComponent(slug)}`);
   }
 
+  /** A subject's starter questions (shown as suggestions before the first question). */
+  async getSubjectQuestions(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/questions`);
+  }
+
   // ---- Knowledge graph -------------------------------------------------
 
   /** Node contents. */

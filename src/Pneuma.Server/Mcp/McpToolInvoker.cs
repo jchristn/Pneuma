@@ -36,6 +36,9 @@ namespace Pneuma.Server.Mcp
         /// <summary>Ontology governance tools; null disables them.</summary>
         public McpOntologyTools? Ontology { get; set; } = null;
 
+        /// <summary>New subject wizard tools; null disables them.</summary>
+        public McpWizardTools? Wizard { get; set; } = null;
+
         /// <summary>Link refresh service for <c>pneuma_set_link_refresh</c>'s "refresh now"; null checks nothing.</summary>
         public Pneuma.Core.Ingestion.Refresh.LinkRefreshService? LinkRefresh
         {
@@ -208,6 +211,16 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_get_crawl_operation":
                     if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
                     toolResult = await Crawl.GetOperationAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_draft_subject":
+                    if (Wizard == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "The subject wizard is not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Wizard.DraftSubjectAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_create_subject_from_draft":
+                    if (Wizard == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "The subject wizard is not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Wizard.CreateSubjectAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_enumerate_ontologies":

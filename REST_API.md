@@ -138,6 +138,7 @@ Each subject can **override any keyed prompt** on top of the global default, cho
 | DELETE | `/v1.0/threads/{id}` | Delete a thread and cascade its turns + tool calls. Returns 204 |
 | GET | `/v1.0/eval/facts` | List a subject's ground-truth facts (`?subjectId=` required) → `{ objects: [...] }` |
 | POST | `/v1.0/eval/facts` | Create a fact. Body `{ subjectId, question, expectedAnswer, category? }` |
+| POST | `/v1.0/eval/facts/bulk` | Create up to 100 facts. Body `{ facts: [{ subjectId, question, expectedAnswer, category? }] }` → **201** `{ created, objects }`. An empty list or more than 100 is **400**; a subject not in the tenant is **404**. |
 | DELETE | `/v1.0/eval/facts/{id}` | Delete a fact. Returns 204 |
 | GET | `/v1.0/eval/runs` | List evaluation runs, optionally `?subjectId=` → `{ objects: [...] }` |
 | POST | `/v1.0/eval/runs` | **Queue** a run. Body `{ subjectId, category? }` → returns the created run immediately with `status: "Pending"` (**non-blocking**). A background worker claims it, answers each fact through the real grounded pipeline, LLM-judges it (each fact admitted through the model-runner gate so eval yields to interactive traffic), and drives it to a terminal status (`Completed`/`Failed`/`Cancelled`). Status flow: `Pending → Running → {Completed｜Failed｜Cancelled}` |
@@ -262,6 +263,32 @@ Execute for test, preview, start, stop, and confirming deletions).
 | GET | `/v1.0/crawl-operations/{id}` | One operation: `trigger` (`Schedule`, `Manual`), `status` (`Running`, `Ingesting`, `Succeeded`, `PartiallySucceeded`, `Failed`, `Cancelled`, `Held`), counts `enumerated`, `added`, `updated`, `retried`, `unchanged`, `deleted`, `missing`, `skipped`, `failed`, `bytesEnumerated`, `heldDeletions`, `error`, and timestamps. |
 | GET | `/v1.0/crawl-operations/{id}/objects` | What the operation did with each object `{ externalKey, action, succeeded, linkId, jobId, detail }` (paginated; `action=` `Add`, `Update`, `Retry`, `Delete`, `Skip`, `Fail`). Unchanged objects are counted only. |
 | POST | `/v1.0/crawl-operations/{id}/confirm-deletions` | Run the deletions a `Held` operation is waiting on → the operation. **409** when it is not `Held`. |
+
+## Subject Wizard
+
+The new subject wizard drafts a subject with a completion model, one step at a time, and creates it once the user has
+reviewed and edited the draft. The draft lives with the caller: each drafting route receives the draft so far and returns
+a proposal, and nothing is stored until commit. The wizard's own prompts are the seeded `wizard.*` prompts (a task and an
+output format per step), overridable per tenant like any other prompt. All wizard routes need **Subject Create**.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/subject-wizard/options` | What the caller can do → `{ ontologyModes, defaultOntologyMode, defaultQuestionCount, maxQuestions, coverageMaxQuestions, groundingUrlEnabled, hasCompletionModel }`. `ontologyModes` holds `Prompt` always, `Draft` with Ontology Write, and `Approve` with Ontology Execute as well. |
+| POST | `/v1.0/subject-wizard/brief` | Draft the brief. Body `WizardGenerateRequest` `{ draft, modelRunnerId?, guidance? }` where `draft` is `{ description, groundingText?, groundingUrl?, brief?, questions, ontology?, prompts? }` and `description` is required. A `groundingUrl` is fetched through the fetch-safety policy (a private address is **400**) and returned as `groundingExcerpt` to keep as grounding text. → `WizardResult` `{ value: { displayName, type, description, tagline, audience, tone }, model, modelRunnerId, elapsedMs, warnings, groundingExcerpt }`. |
+| POST | `/v1.0/subject-wizard/questions` | Draft example questions. `mode` `replace` (default) keeps questions that are `locked` or have `origin` `User` and replaces the rest up to `count` (default 12); `more` keeps all and adds `count` new ones. → `value: [{ question, kind, origin, locked }]`, kept questions first. `kind` is Fact, Relationship, Timeline, Comparison, Reasoning, or Overview. |
+| POST | `/v1.0/subject-wizard/ontology` | Draft node and relationship types that answer the draft's questions. Locked types are kept verbatim; node names become PascalCase and relationship names UPPER_SNAKE_CASE; duplicates are dropped; endpoints that name an unknown node type are cleared with a warning; `questions` (1-based question numbers each type serves) are kept in range; a `Subject` node type is always present. **400** without questions. → `value: { nodeTypes: [{ name, description, questions, locked }], edgeTypes: [{ name, description, from, to, questions, locked }], guidance }`. |
+| POST | `/v1.0/subject-wizard/prompts` | Draft the subject's additions to the answering (`systemPrompt`), classification (`classifyPrompt`), query rewriting (`rewritePrompt`), and reranking (`rerankingPrompt`) prompts. Keys listed in `draft.prompts.locked` are kept verbatim. |
+| POST | `/v1.0/subject-wizard/sources` | Suggest where content for the subject usually lives → `value: [{ kind, title, detail }]` where `kind` is Links, Text, or a crawl plan type. |
+| POST | `/v1.0/subject-wizard/render-ontology` | Clean up `draft.ontology` as above and render it as the classifier will see it → `{ ontology, rendered, warnings }`. No model call. |
+| POST | `/v1.0/subject-wizard/commit` | Create the subject from a finished draft. Body `{ draft, inferenceModel?, embeddingModel?, collection?, ontologyMode?, publishedForChat? }`. Models default to the tenant's first active completion and embedding endpoints and the collection to the default collection. The subject gets the brief, the prompt additions (appended to the global prompts), the rendered ontology as its ontology definition prompt, and the draft's questions as starter questions. `ontologyMode` `Approve` (default) also creates a tenant ontology, approves its first version, and pins it to the subject; `Draft` creates the ontology and leaves the version for an approver; `Prompt` creates no ontology. A mode the caller may not use is lowered with a warning. Creation, approval, and pinning are audited. If a later step fails, what was created is removed. → **201** `{ subject, questions, ontologyMode, ontologyId, ontologyVersionId, renderedOntology, warnings }`. |
+| GET | `/v1.0/subjects/{id}/questions` | A subject's starter questions in order → `[{ id, question, kind, position, origin }]`. Needs Subject Read (the user dashboard shows up to four as suggestions on the ask page). |
+| PUT | `/v1.0/subjects/{id}/questions` | Replace a subject's starter questions. Body `{ questions: [{ question, kind? }] }`; blank questions are skipped; at most 40. Needs Subject Update. |
+
+Generation failures: **400** for a bad draft or no usable completion endpoint, **502** when the model's reply is not the
+expected JSON after one retry, **504** when the model does not answer within `Wizard.TimeoutSeconds`. The `Wizard` settings
+section sets `DefaultQuestionCount` (12), `MaxQuestions` (40), `MaxOntologyTypes` (60), `MaxGroundingCharacters` (12000),
+`MaxPromptCharacters` (4000), `TimeoutSeconds` (300), and `CoverageMaxQuestions` (12, the most questions the dashboards'
+coverage check asks).
 
 ## Ontologies
 

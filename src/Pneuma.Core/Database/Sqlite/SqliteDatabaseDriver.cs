@@ -80,6 +80,7 @@ namespace Pneuma.Core.Database.Sqlite
             ChatThreads = new ChatThreadMethods(this);
             ChatToolCalls = new ChatToolCallMethods(this);
             EvalFacts = new EvalFactMethods(this);
+            SubjectQuestions = new SubjectQuestionMethods(this);
             CrawlPlans = new CrawlPlanMethods(this);
             CrawlObjects = new CrawlObjectMethods(this);
             CrawlOperations = new CrawlOperationMethods(this);

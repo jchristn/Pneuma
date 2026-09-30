@@ -64,6 +64,8 @@ namespace Pneuma.Server.Routes
             if (server == null) throw new ArgumentNullException(nameof(server));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/eval/facts", ListFactsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List evaluation facts", "Eval"));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/facts/bulk", CreateFactsAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Create up to 100 evaluation facts at once", "Eval").WithRequestBody(OpenApiBodies.Json<EvalFactBulkRequest>("The facts")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/eval/facts", CreateFactAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Create an evaluation fact", "Eval").WithRequestBody(OpenApiBodies.Json<EvalFact>("Create an evaluation fact")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/eval/facts/{id}", DeleteFactAsync, RouteHelper.ExceptionAsync,
@@ -120,6 +122,41 @@ namespace Pneuma.Server.Routes
             EvalFact fact = new EvalFact { TenantId = rc.TenantId, SubjectId = body.SubjectId, Question = body.Question, ExpectedAnswer = body.ExpectedAnswer, Category = body.Category };
             EvalFact created = await _Db.EvalFacts.CreateAsync(fact, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 201, created).ConfigureAwait(false);
+        }
+
+        private async Task CreateFactsAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Update).ConfigureAwait(false)) return;
+            if (String.IsNullOrEmpty(rc.TenantId)) { await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Tenant could not be resolved.").ConfigureAwait(false); return; }
+            EvalFactBulkRequest? body = RouteHelper.ReadBody<EvalFactBulkRequest>(ctx);
+            if (body == null || body.Facts == null || body.Facts.Count == 0 || body.Facts.Count > EvalFactBulkRequest.MaxFacts)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "facts must hold 1 to " + EvalFactBulkRequest.MaxFacts + " facts.").ConfigureAwait(false);
+                return;
+            }
+            HashSet<string> subjects = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < body.Facts.Count; i++)
+            {
+                EvalFact item = body.Facts[i];
+                if (item == null || String.IsNullOrWhiteSpace(item.SubjectId) || String.IsNullOrWhiteSpace(item.Question) || String.IsNullOrWhiteSpace(item.ExpectedAnswer))
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Fact " + (i + 1) + ": subjectId, question, and expectedAnswer are required.").ConfigureAwait(false);
+                    return;
+                }
+                if (subjects.Add(item.SubjectId) && await _Db.Subjects.ReadAsync(rc.TenantId, item.SubjectId, ctx.Token).ConfigureAwait(false) == null)
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Subject " + item.SubjectId + " not found.").ConfigureAwait(false);
+                    return;
+                }
+            }
+            List<EvalFact> created = new List<EvalFact>();
+            foreach (EvalFact item in body.Facts)
+            {
+                EvalFact fact = new EvalFact { TenantId = rc.TenantId, SubjectId = item.SubjectId, Question = item.Question.Trim(), ExpectedAnswer = item.ExpectedAnswer.Trim(), Category = item.Category };
+                created.Add(await _Db.EvalFacts.CreateAsync(fact, ctx.Token).ConfigureAwait(false));
+            }
+            await RouteHelper.SendJsonAsync(ctx, 201, new { created = created.Count, objects = created }).ConfigureAwait(false);
         }
 
         private async Task DeleteFactAsync(HttpContextBase ctx)

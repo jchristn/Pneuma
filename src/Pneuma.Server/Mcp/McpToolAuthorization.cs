@@ -34,6 +34,8 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_capabilities":
                     return rc.IsAuthenticated;
                 case "pneuma_create_subject":
+                case "pneuma_draft_subject":
+                case "pneuma_create_subject_from_draft":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Create, null, token).ConfigureAwait(false);
                 case "pneuma_update_subject":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Update, null, token).ConfigureAwait(false);

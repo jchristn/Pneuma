@@ -8,6 +8,7 @@ namespace Pneuma.Server.Settings
     using Pneuma.Core.Ingestion.Refresh;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Ontologies;
+    using Pneuma.Core.Wizard;
 
     /// <summary>
     /// Root application settings.
@@ -75,6 +76,13 @@ namespace Pneuma.Server.Settings
             set { _LinkRefresh = value ?? new LinkRefreshSettings(); }
         }
 
+        /// <summary>New subject wizard limits (questions, ontology size, grounding text, prompt length, model timeout, coverage check).</summary>
+        public WizardSettings Wizard
+        {
+            get { return _Wizard; }
+            set { _Wizard = value ?? new WizardSettings(); }
+        }
+
         /// <summary>Ontology governance limits (operation worker, export and validation size, violations kept per job, proposal and drift samples, cache retention).</summary>
         public OntologySettings Ontology
         {
@@ -95,6 +103,7 @@ namespace Pneuma.Server.Settings
 
         private CrawlingSettings _Crawling = new CrawlingSettings();
         private OntologySettings _Ontology = new OntologySettings();
+        private WizardSettings _Wizard = new WizardSettings();
         private LinkRefreshSettings _LinkRefresh = new LinkRefreshSettings();
 
         #endregion

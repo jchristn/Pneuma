@@ -116,6 +116,9 @@ namespace Pneuma.Core.Database
         /// <summary>Evaluation ground-truth fact methods.</summary>
         public IEvalFactMethods EvalFacts { get; protected set; } = null!;
 
+        /// <summary>Subject starter question methods.</summary>
+        public ISubjectQuestionMethods SubjectQuestions { get; protected set; } = null!;
+
         /// <summary>Evaluation run methods.</summary>
         public IEvalRunMethods EvalRuns { get; protected set; } = null!;
 

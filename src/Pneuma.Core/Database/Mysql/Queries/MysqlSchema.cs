@@ -272,6 +272,10 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "CREATE INDEX idx_subjectlinks_nextrefresh ON subjectlinks (nextrefreshutc);"
                 }));
                 list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", MysqlOntologySchema.Migration35()));
+                list.Add(new SchemaMigration(36, "Add subject starter questions", new List<string>
+                {
+                    "CREATE TABLE IF NOT EXISTS subjectquestions (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64) NOT NULL, question TEXT NOT NULL, kind VARCHAR(32) NOT NULL, position INT NOT NULL DEFAULT 0, origin VARCHAR(16) NOT NULL, createdutc VARCHAR(32) NOT NULL, KEY idx_subjectquestions_tenant_subject (tenantid, subjectid, position));"
+                }));
                 return list;
             }
         }

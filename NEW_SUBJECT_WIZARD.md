@@ -180,17 +180,18 @@ from the request are copied into the response unchanged, whatever the model retu
 never destroy the user's work.
 
 **D3. Model output is parsed into typed DTOs and validated.** Each step has a response class (`WizardBrief`,
-`WizardQuestion`, `WizardOntologyProposal`, and so on), no `JsonElement`. Output that does not parse is retried once
+`WizardQuestion`, `WizardOntologyOutput`, and so on), no `JsonElement`. Output that does not parse is retried once
 with the parse error appended; a second failure returns a 502 with the reason, and the dashboard shows an empty
 editable step. Ontology proposals are validated: unique type names, edge endpoints that reference declared types,
 names normalized to PascalCase for nodes and UPPER_SNAKE for edges, and caps on counts and lengths.
 
-**D4. The ontology is saved in whichever form the server supports.** Until ontology governance Phase 2 lands, commit
-renders the proposal into the subject's `OntologyDefinitionPrompt` (types, descriptions, and endpoint rules as text),
-which the classifier already consumes. After it lands, commit creates a tenant ontology with a Draft version from the
-proposal. If the caller has Ontology Execute, the wizard offers "Approve and use it", which approves the version and
-pins it. Otherwise the draft is left for an approver and the rendered text is used meanwhile. Either way the
-classifier sees the same definition.
+**D4. The ontology is saved as a governed version when the caller may, and as prompt text always.** Ontology governance
+landed before the wizard was built, so commit offers three modes: **Approve** (the default for callers with Ontology
+Execute) creates a tenant ontology, approves its first version, and pins it to the subject; **Draft** (Ontology Write)
+creates the ontology and leaves the version for an approver; **Prompt** creates no ontology. In every mode the rendered
+ontology is also stored as the subject's `OntologyDefinitionPrompt`, so a subject waiting for approval (or later
+unpinned) still classifies with the drafted types. A mode the caller may not use is lowered with a warning rather than
+failing the commit. Creation, approval, and pinning are audited like the ontology routes.
 
 **D5. User content is data, not instructions.** The description, grounding text, and fetched page are placed in the
 user message inside delimiters and the system prompt says to treat them as material about the subject. A grounding
@@ -200,9 +201,19 @@ URL goes through the fetch-safety policy and the download limit like any ingeste
 a subject described in Spanish gets Spanish questions, tagline, and answering prompt. The wizard's own UI strings are
 translated through i18next as usual.
 
+**D8. Commit undoes itself on failure.** The data layer has no cross-table transaction, so commit creates the subject
+first and, if storing its questions or its ontology fails, removes the subject, its questions, and any ontology it
+created before reporting the error. The questions themselves are replaced in one transaction.
+
+**D9. Prompt additions use the subject's own prompt columns.** The subject's `SystemPrompt`, `OntologyClassifyPrompt`,
+`PromptRewritePrompt`, and `RerankingPrompt` are always appended to the global prompts by the prompt resolver, so the
+wizard writes its additions there rather than creating per-subject overrides. They show up in the subject form and on
+the subject's Prompts page like any hand-written addition.
+
 **D7. Starter questions are stored structurally.** A `subjectquestions` table (id, tenant, subject, question, kind,
-position, origin of Model or User, created) rather than a JSON column, per the data-layer rules. The subject's
-Questions tab edits them after creation, and the ask page shows up to four as suggestions when a conversation starts.
+position, origin of Model or User, created) rather than a JSON column, per the data-layer rules. A "Starter Questions"
+row action on the Subjects pages edits them after creation, and the ask page shows up to four as suggestions when a
+conversation starts.
 
 ## Example
 
@@ -239,62 +250,83 @@ the proposal plus the model and elapsed time so the dashboard can show what prod
 
 ### Phase 0: Plan
 - [x] Write this plan.
-- [ ] Resolve the open questions below with the user.
+- [x] Resolve the open questions below with the user.
 
 ### Phase 1: Generation service and prompts (W1, W2)
-- [ ] Request and response DTOs for each step; `WizardSettings` (`Wizard` section: limits and timeout).
-- [ ] Seeded prompts and output contracts, idempotent on first boot and on upgrade.
-- [ ] `SubjectWizardService`: model resolution (request, then tenant default completion endpoint), one retry on a
+- [x] Request and response DTOs for each step; `WizardSettings` (`Wizard` section: limits and timeout).
+- [x] Seeded prompts and output contracts, idempotent on first boot and on upgrade.
+- [x] `SubjectWizardService`: model resolution (request, then tenant default completion endpoint), one retry on a
   parse failure, locked-item enforcement (D2), validation (D3), grounding through the fetch-safety policy (D5).
-- [ ] Metrics: `pneuma_wizard_generation_total{step,outcome}` and `pneuma_wizard_generation_duration_seconds{step}`;
+- [x] Metrics: `pneuma_wizard_generation_total{step,outcome}` and `pneuma_wizard_generation_duration_seconds{step}`;
   a span per generation.
 
 ### Phase 2: Commit, starter questions, bulk facts (W3, W4, W5)
-- [ ] Migration: `subjectquestions` in all four providers, tenant and subject cascades.
-- [ ] Commit: subject, Append prompt overrides, starter questions, ontology per D4, all or nothing.
-- [ ] Starter question routes; bulk evaluation facts route.
-- [ ] Ontology governance integration behind a capability check, so the wizard works before and after it lands.
+- [x] Migration: `subjectquestions` in all four providers, tenant and subject cascades.
+- [x] Commit: subject, prompt additions (D9), starter questions, ontology per D4, removed again on failure (D8).
+- [x] Starter question routes; bulk evaluation facts route.
+- [x] Ontology governance integration: modes offered by the caller's permissions, lowered with a warning (D4).
 
 ### Phase 3: Dashboards (W6)
-- [ ] Shared wizard steps in the subject dashboard: "New subject" opens the wizard; the existing form becomes "Create
+- [x] Shared wizard steps in the subject dashboard: "New subject" opens the wizard; the existing form becomes "Create
   manually".
-- [ ] Admin dashboard: the same wizard from Knowledge > Subjects; the first-run setup's subject step hands off to it.
-- [ ] Step rail, lock and edit controls, regenerate with guidance, traceability warnings, prompt-versus-default view,
+- [x] Admin dashboard: the same wizard from Knowledge > Subjects; the first-run setup's subject step offers it.
+- [x] Step rail, lock and edit controls, regenerate with guidance, traceability warnings, prompt-versus-default view,
   review page, sources step reusing the link, text, and crawl plan surfaces, coverage check.
-- [ ] Subject Questions tab; starter questions on the user dashboard ask page.
-- [ ] i18n (en, es), light and dark themes, 1280, 768, and 390 px.
+- [x] Starter Questions row action on both Subjects pages; starter questions on the user dashboard ask page.
+- [x] i18n (en, es), light and dark themes, 1280, 768, and 390 px.
 
 ### Phase 4: Surfaces (W7)
-- [ ] MCP tools: `pneuma_draft_subject` (runs steps 2 to 5 in one call and returns the draft) and
+- [x] MCP tools: `pneuma_draft_subject` (runs steps 2 to 5 in one call and returns the draft) and
   `pneuma_create_subject_from_draft`, so an agent can set up a subject the same way.
-- [ ] SDKs (C#, JavaScript, Python), Postman folder.
-- [ ] Docs: `REST_API.md`, `MCP_API.md`, `TELEMETRY.md`, `README.md` (a short section on creating a subject with the
+- [x] SDKs (C#, JavaScript, Python), Postman folder.
+- [x] Docs: `REST_API.md`, `MCP_API.md`, `TELEMETRY.md`, `README.md` (a short section on creating a subject with the
   wizard), and `CHANGELOG.md`.
 
 ### Phase 5: Tests and close-out
-- [ ] Suite `SubjectWizard` against `StubModelServer`: each step parses a canned response; a malformed response is
+- [x] Suite `SubjectWizard` against `StubModelServer`: each step parses a canned response; a malformed response is
   retried once and then reported; locked items survive regeneration; ontology validation rejects unknown endpoints;
   commit is all or nothing; prompts are Append overrides; grounding URLs to private addresses are refused.
-- [ ] Database contract cases for `subjectquestions` in all four providers.
-- [ ] Full build with zero warnings, full test run, dashboards lint and build, file-size guardrail.
+- [x] Database contract case for `subjectquestions` (runs against each provider in CI, like the other suites).
+- [x] Full build with zero warnings, full test run, dashboards lint and build, file-size guardrail.
 - [ ] Simulated user session per `SIMULATED_USER_TESTING.md`: a first-time user creates a subject with the wizard
   against a real small model, with findings brought to the user before any fix.
 
 ## Open questions
 
-- **Draft persistence.** D1 keeps the draft in the browser. Is resuming on another device or sharing a draft with a
-  colleague something you want in the first version?
-- **Where it lives.** The plan puts the wizard in both the subject and admin dashboards and hands the admin first-run
-  setup over to it. Should the manual form stay as the default for admins, with the wizard as the alternative?
-- **Ontology timing.** D4 ships the ontology as prompt text first and switches to governed versions when that work
-  lands. Would you rather the wizard wait for governance and only ever produce versions?
-- **Ask-page suggestions.** Starter questions shown to end users on the ask page are a visible product change. Include
-  it, or keep starter questions internal to the wizard and evaluation?
-- **Coverage check cost.** It asks every accepted question once. Is a manual start with the cost shown enough, or
-  should it be capped (for example, the first eight questions)?
-- **Grounding fetch.** Letting step 1 read a URL makes the drafts much better for obscure subjects but means the model
-  sees fetched content before the subject exists. Keep it, or limit grounding to pasted text?
+- **Draft persistence (answered 2026-09-30).** The user confirmed the draft lives in the browser (D1).
+- **Where it lives (decided while building; easy to change).** "+ New Subject" opens the wizard in both dashboards and
+  the manual form moved to a secondary "Create manually" button. The admin first-run setup offers the wizard at its
+  subject step rather than replacing that step outright, so a first-time admin can still type a subject by hand.
+- **Ontology timing (settled by events).** Ontology governance landed first, so the wizard produces governed versions
+  from the start (D4).
+- **Ask-page suggestions (included).** Up to four starter questions show as suggestions on the ask page. Delete a
+  subject's starter questions to hide them.
+- **Coverage check cost (capped).** The check runs only when started, shows the count on the button, and asks at most
+  `Wizard.CoverageMaxQuestions` (default 12) questions.
+- **Grounding fetch (kept).** Step 1 can read a URL, through the fetch-safety policy and the download limit; pasted
+  text works as well. Turning it off is a constructor switch on the routes if an operator asks for it.
 
 ## Progress log
 
 - **2026-09-30.** Wrote this plan.
+- **2026-09-30. Built** (the user confirmed the browser-held draft; the other open questions were decided as recorded
+  above). Server: migration 36 (`subjectquestions`), `SubjectWizardService` (drafting, one retry, locked items kept,
+  ontology clean-up), `SubjectWizardCommitService` (commit with removal on failure), `SubjectCreation` (the create rules
+  shared with `SubjectRoutes`), routes under `/v1.0/subject-wizard` plus render-ontology, starter question routes, bulk
+  evaluation facts, ten seeded `wizard.*` prompts, the `Wizard` settings section, and `WizardMetrics`. MCP tools
+  `pneuma_draft_subject` and `pneuma_create_subject_from_draft`. Dashboards: the eight-step wizard in the subject and
+  admin dashboards (shared components, own `sw-` styles mapped to each theme, draft in `sessionStorage`), Starter
+  Questions modals, the setup hand-off, and ask-page suggestions in the user dashboard; en and es strings in their own
+  `wizard` modules. SDKs, Postman, configs, and docs. Suite `SubjectWizard`: 11 cases, all passing.
+- **2026-09-30. Verified in a browser** against a temporary server (SQLite, the bench RecallDB, LiteGraph, and
+  DocumentAtom in their own tenant) and the local gemma3:4b model. The subject dashboard wizard ran end to end: brief
+  28 s, questions 228 s, regenerating kept the locked and the edited question, ontology 280 s (7 node and 4 relationship
+  types), prompts 198 s, commit 1 s (ontology approved and pinned), pasted text ingested, and the coverage check
+  answered from it. Screens checked at 1280, 768, and 390 px in light and dark; the admin Subjects page, wizard, and
+  Starter Questions modal, and the user dashboard's ask-page suggestions were checked too, with no page errors. Fixes
+  from the run: the model timeout default went from 180 to 300 s (the ontology step timed out on the 4B model); empty
+  question and ontology steps now say "Draft" and explain themselves; the ontology prompt now says types are kinds of
+  things, never the subject or one specific person or work (the 4B model made "CharlieParker" a type); "Create subject"
+  moved to the footer; the ontology table columns and the add-question row were resized; the coverage check stops when
+  the wizard closes; the rail is left-aligned in the admin dashboard. Full suite before the fixes: 339 cases, 336
+  passed, 3 skipped; the SubjectWizard suite passes after them. The simulated user session (Phase 5) is still to do.

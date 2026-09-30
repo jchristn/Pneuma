@@ -366,6 +366,7 @@ namespace Pneuma.Core.Observability
             AppendCounterFamily(sb, "pneuma_classification_cache_total", "Classification cache lookups, by outcome (hit or miss)", _ClassificationCache);
             AppendCounterFamily(sb, "pneuma_ontology_violations_total", "Ontology rule violations found, by rule type and action", _OntologyViolations);
             AppendCounterFamily(sb, "pneuma_taxonomy_links_total", "Taxonomy links (cell ABOUT concept) added to or removed from the graph", _TaxonomyLinks);
+            WizardMetrics.AppendTo(sb);
             AppendCounterFamily(sb, "pneuma_ontology_operations_total", "Finished ontology operations, by kind and outcome", _OntologyOperations);
 
             AppendCounterFamily(sb, "pneuma_integration_requests_total", "Integration requests by service, operation, and outcome", _IntegrationRequests);

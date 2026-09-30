@@ -113,6 +113,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 "DELETE FROM evalresults WHERE tenantid = " + t + ";",
                 "DELETE FROM evalruns WHERE tenantid = " + t + ";",
                 "DELETE FROM evalfacts WHERE tenantid = " + t + ";",
+                "DELETE FROM subjectquestions WHERE tenantid = " + t + ";",
                 "DELETE FROM chattoolcalls WHERE tenantid = " + t + ";",
                 "DELETE FROM chatturnperfevents WHERE tenantid = " + t + ";",
                 "DELETE FROM chatfeedback WHERE tenantid = " + t + ";",

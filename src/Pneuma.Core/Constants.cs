@@ -121,6 +121,9 @@ namespace Pneuma.Core
         /// <summary>Ontology operation identifier prefix (a background validate, retag, or drift check run).</summary>
         public const string OntologyOperationPrefix = "oop_";
 
+        /// <summary>Subject starter question identifier prefix.</summary>
+        public const string SubjectQuestionPrefix = "sq_";
+
         #endregion
 
         #region General

@@ -847,6 +847,68 @@ class PneumaClient:
         """POST /v1.0/links/{id}/refresh - check a link for changes now; a changed link is re-ingested."""
         return self._request("POST", f"/v1.0/links/{link_id}/refresh")
 
+    # ------------------------------------------------------------ New subject wizard
+
+    def get_wizard_options(self) -> Any:
+        """GET /v1.0/subject-wizard/options - ontology modes the caller may use and the wizard's limits."""
+        return self._request("GET", "/v1.0/subject-wizard/options")
+
+    def draft_wizard_step(
+        self,
+        step: str,
+        draft: Dict[str, Any],
+        model_runner_id: Optional[str] = None,
+        guidance: Optional[str] = None,
+        mode: Optional[str] = None,
+        count: int = 0,
+    ) -> Any:
+        """POST /v1.0/subject-wizard/{step} - draft brief, questions, ontology, prompts, or sources.
+
+        Nothing is stored. Returns {"value", "model", "modelRunnerId", "elapsedMs", "warnings", "groundingExcerpt"}.
+        """
+        body: Dict[str, Any] = {"draft": draft, "count": count}
+        if model_runner_id:
+            body["modelRunnerId"] = model_runner_id
+        if guidance:
+            body["guidance"] = guidance
+        if mode:
+            body["mode"] = mode
+        return self._request("POST", f"/v1.0/subject-wizard/{step}", json_body=body)
+
+    def render_wizard_ontology(self, draft: Dict[str, Any]) -> Any:
+        """POST /v1.0/subject-wizard/render-ontology - the draft ontology as the classifier will see it."""
+        return self._request("POST", "/v1.0/subject-wizard/render-ontology", json_body={"draft": draft})
+
+    def commit_subject_wizard(
+        self,
+        draft: Dict[str, Any],
+        inference_model: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        collection: Optional[str] = None,
+        ontology_mode: str = "Approve",
+    ) -> Any:
+        """POST /v1.0/subject-wizard/commit - create the subject, its questions, and its ontology from a draft."""
+        body: Dict[str, Any] = {"draft": draft, "ontologyMode": ontology_mode}
+        if inference_model:
+            body["inferenceModel"] = inference_model
+        if embedding_model:
+            body["embeddingModel"] = embedding_model
+        if collection:
+            body["collection"] = collection
+        return self._request("POST", "/v1.0/subject-wizard/commit", json_body=body)
+
+    def get_subject_questions(self, subject_id: str) -> Any:
+        """GET /v1.0/subjects/{id}/questions - a subject's starter questions."""
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/questions")
+
+    def set_subject_questions(self, subject_id: str, questions: List[Dict[str, Any]]) -> Any:
+        """PUT /v1.0/subjects/{id}/questions - replace a subject's starter questions ({question, kind})."""
+        return self._request("PUT", f"/v1.0/subjects/{subject_id}/questions", json_body={"questions": questions})
+
+    def bulk_create_eval_facts(self, facts: List[Dict[str, Any]]) -> Any:
+        """POST /v1.0/eval/facts/bulk - create up to 100 evaluation facts ({subjectId, question, expectedAnswer, category})."""
+        return self._request("POST", "/v1.0/eval/facts/bulk", json_body={"facts": facts})
+
     def get_link_ingestion_log(self, link_id: str) -> Any:
         """GET /v1.0/links/{id}/log — per-step ingestion log for a link."""
         return self._request("GET", f"/v1.0/links/{link_id}/log")

@@ -73,7 +73,7 @@ function EndpointForm({ kind, value, onChange }) {
 
 const blankEndpoint = (provider = 'Ollama') => ({ name: '', model: '', endpoint: 'http://ollama:11434', provider, apiKey: '', maxConcurrentRequests: 1 });
 
-export default function SetupWizard({ onClose }) {
+export default function SetupWizard({ onClose, onGuidedSubject = null }) {
   const { t } = useTranslation();
   const { apiClient } = useAuth();
   const navigate = useNavigate();
@@ -236,6 +236,15 @@ export default function SetupWizard({ onClose }) {
         </div>
       )}
 
+      {step === 1 && onGuidedSubject && (
+        <div className="wiz-panel">
+          <p className="field-hint">{t('setup.guidedHint', 'Rather describe the subject in a sentence and let the model draft its example questions, ontology, and prompts? The guided wizard also walks you through adding content and checking what it answers.')}</p>
+          <button type="button" className="button-secondary" disabled={busy}
+            onClick={() => { try { localStorage.setItem('pneuma.setupComplete', '1'); } catch { /* ignore */ } onClose(); onGuidedSubject(); }}>
+            {t('setup.guidedButton', 'Use the guided subject wizard')}
+          </button>
+        </div>
+      )}
       {step === 1 && (
         <div className="wiz-panel wiz-grid">
           <Field label="Display name" tip="What this subject is called. Everything you ingest here is scoped to it — a subject can be a person, product, company, place, or topic.">

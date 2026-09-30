@@ -134,30 +134,13 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", createRefreshProblem).ConfigureAwait(false);
                 return;
             }
-            subject.TenantId = rc.TenantId;
-            // A pinned ontology version is set through PUT /v1.0/subjects/{id}/ontology, which checks it is approved and audits it.
-            subject.OntologyVersionId = null;
-            if (String.IsNullOrWhiteSpace(subject.GraphRootNodeId)) subject.GraphRootNodeId = SlugHelper.Slugify(subject.DisplayName);
-            if (String.IsNullOrWhiteSpace(subject.Tagline)) subject.Tagline = Subject.DefaultTagline;
-            if (String.IsNullOrWhiteSpace(subject.RerankingPrompt)) subject.RerankingPrompt = Subject.DefaultRerankingPrompt;
-            if (String.IsNullOrWhiteSpace(subject.PromptRewritePrompt)) subject.PromptRewritePrompt = Subject.DefaultPromptRewritePrompt;
-
-            // Resolve the URL slug: an explicit, already-taken slug is a conflict; an auto-generated one is
-            // de-duplicated by appending a numeric suffix so subject creation never fails on a name clash.
-            bool explicitSlug = !String.IsNullOrWhiteSpace(subject.UrlSlug);
-            string desiredSlug = SlugHelper.Slugify(explicitSlug ? subject.UrlSlug : subject.DisplayName);
-            if (String.IsNullOrWhiteSpace(desiredSlug)) desiredSlug = "subject";
-            Subject? slugClash = await _Db.Subjects.ReadBySlugAsync(rc.TenantId, desiredSlug, ctx.Token).ConfigureAwait(false);
-            if (slugClash != null)
+            // Defaults, the graph root, and a unique URL slug; pinning an ontology version has its own audited route.
+            string? slugProblem = await SubjectCreation.PrepareAsync(_Db, rc.TenantId, subject, ctx.Token).ConfigureAwait(false);
+            if (slugProblem != null)
             {
-                if (explicitSlug)
-                {
-                    await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", "A subject with URL slug '" + desiredSlug + "' already exists.").ConfigureAwait(false);
-                    return;
-                }
-                desiredSlug = await NextAvailableSlugAsync(rc.TenantId, desiredSlug, null, ctx.Token).ConfigureAwait(false);
+                await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", slugProblem).ConfigureAwait(false);
+                return;
             }
-            subject.UrlSlug = desiredSlug;
 
             Subject created = await _Db.Subjects.CreateAsync(subject, ctx.Token).ConfigureAwait(false);
             ApplyConcurrencyOverrides(created);
@@ -203,17 +186,6 @@ namespace Pneuma.Server.Routes
 
         // Append a numeric suffix (-2, -3, ...) to a base slug until one is free within the tenant, ignoring an
         // optional current subject (so an update can keep its own slug). Bounded to avoid an unbounded loop.
-        private async Task<string> NextAvailableSlugAsync(string tenantId, string baseSlug, string? ignoreSubjectId, CancellationToken token)
-        {
-            for (int suffix = 2; suffix < 10000; suffix++)
-            {
-                string candidate = baseSlug + "-" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                Subject? existing = await _Db.Subjects.ReadBySlugAsync(tenantId, candidate, token).ConfigureAwait(false);
-                if (existing == null || existing.Id == ignoreSubjectId) return candidate;
-            }
-            return baseSlug + "-" + IdGenerator.GenerateSubjectId();
-        }
-
         private async Task UpdateAsync(HttpContextBase ctx)
         {
             RequestContext rc = RouteHelper.Context(ctx);

@@ -325,6 +325,8 @@ export default function AskView() {
   const [subjectMissing, setSubjectMissing] = useState(false);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState('');
+  // Up to four of the subject's starter questions, offered as suggestions before the first question.
+  const [starters, setStarters] = useState([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
@@ -362,6 +364,16 @@ export default function AskView() {
       .catch(() => { if (!cancelled) { setSubject(null); setSubjectMissing(true); } });
     return () => { cancelled = true; };
   }, [apiClient, slug]);
+
+  // The subject's starter questions, offered as suggestions. Failure just means no suggestions.
+  useEffect(() => {
+    let cancelled = false;
+    if (!subject?.id) { setStarters([]); return undefined; }
+    apiClient.getSubjectQuestions(subject.id)
+      .then((list) => { if (!cancelled) setStarters((Array.isArray(list) ? list : []).filter((q) => q && q.question).slice(0, 4)); })
+      .catch(() => { if (!cancelled) setStarters([]); });
+    return () => { cancelled = true; };
+  }, [apiClient, subject?.id]);
 
   // Pick a wait-state quip that hasn't been shown recently, so the rotation feels varied.
   const pickQuip = useCallback(() => {
@@ -618,6 +630,15 @@ export default function AskView() {
 
   // Pre-submit: the original search hero.
   if (messages.length === 0) {
+    const suggestionRow = starters.length > 0 ? (
+      <div className="starter-questions" aria-label={t('ask.suggestions', 'Suggested questions')}>
+        {starters.map((s) => (
+          <button key={s.id || s.question} type="button" className="starter-question" onClick={() => setQuestion(s.question)} disabled={streaming}>
+            {s.question}
+          </button>
+        ))}
+      </div>
+    ) : null;
     return (
       <div className="view ask-view">
         <section className="search-hero">
@@ -633,6 +654,7 @@ export default function AskView() {
             autoFocus
             size="large"
           />
+          {suggestionRow}
           <div className="scope-row scope-row-hero">
             <ThreadSwitcher apiClient={apiClient} subjectId={subject?.id || null} activeThreadId={activeThreadId} onSelect={loadThread} onNew={handleNewChat} onViewAll={() => navigate('/conversations')} reloadToken={threadReload} disabled={streaming} />
             <ScopeFilter labels={scopeLabels} tags={scopeTags} onChange={onScopeChange} disabled={streaming} />

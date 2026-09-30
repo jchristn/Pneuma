@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_set_link_refresh", "pneuma_submit_content", "pneuma_enumerate_crawl_plans", "pneuma_get_crawl_plan", "pneuma_create_crawl_plan", "pneuma_update_crawl_plan", "pneuma_test_crawl_plan", "pneuma_preview_crawl_plan", "pneuma_start_crawl_plan", "pneuma_stop_crawl_plan", "pneuma_enumerate_crawl_operations", "pneuma_get_crawl_operation", "pneuma_enumerate_ontologies", "pneuma_get_ontology_version", "pneuma_get_subject_ontology", "pneuma_enumerate_ontology_violations", "pneuma_start_ontology_operation", "pneuma_get_ontology_operation", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_draft_subject", "pneuma_create_subject_from_draft", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_set_link_refresh", "pneuma_submit_content", "pneuma_enumerate_crawl_plans", "pneuma_get_crawl_plan", "pneuma_create_crawl_plan", "pneuma_update_crawl_plan", "pneuma_test_crawl_plan", "pneuma_preview_crawl_plan", "pneuma_start_crawl_plan", "pneuma_stop_crawl_plan", "pneuma_enumerate_crawl_operations", "pneuma_get_crawl_operation", "pneuma_enumerate_ontologies", "pneuma_get_ontology_version", "pneuma_get_subject_ontology", "pneuma_enumerate_ontology_violations", "pneuma_start_ontology_operation", "pneuma_get_ontology_operation", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -105,6 +105,43 @@ namespace Pneuma.Server.Mcp
                             concurrencyOverrides = new { type = "object", description = "Optional per-subject ingestion concurrency overrides; each field is an integer and null/absent inherits the system default (effective = override ?? system default). Keys: contentRetrieval, typeDetection, cellExtraction, classification, graphMerge, summarization, chunking, embedding, indexing, summarizationConcurrency, summarizationMinCellLength, classificationBatchSize, classificationBatchOverlap, classificationBatchConcurrency, stageTimeoutSeconds." }
                         },
                         required = new[] { "displayName" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_draft_subject",
+                    description = "Draft a new subject with a model, the way the dashboards' new subject wizard does: from a description of the subject and who will ask about it, write a brief (name, type, description, tagline, audience, tone), example questions, an ontology built to answer them (node and relationship types with the questions each serves), and prompt additions. Nothing is saved. Show the draft to the user, apply their edits, then call pneuma_create_subject_from_draft. Takes tens of seconds (four model calls).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            description = new { type = "string", description = "What the subject is and who will ask about it (required)." },
+                            groundingText = new { type = "string", description = "Optional reference text about the subject." },
+                            groundingUrl = new { type = "string", description = "Optional web page about the subject to read first (subject to the server's fetch-safety policy)." },
+                            modelRunnerId = new { type = "string", description = "Completion model endpoint to draft with; defaults to the tenant's first active one." },
+                            questionCount = new { type = "integer", description = "How many example questions to draft (default 12)." },
+                            guidance = new { type = "string", description = "Optional guidance for the model." }
+                        },
+                        required = new[] { "description" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_create_subject_from_draft",
+                    description = "Create a subject from a draft returned by pneuma_draft_subject (edited or not): the subject with its brief and prompt additions, its starter questions, and its ontology. ontologyMode Approve (default) creates a tenant ontology, approves it, and pins it to the subject; Draft leaves it for an approver; Prompt stores it as the subject's ontology prompt. The mode is lowered to what the caller may do. Only create subjects the user asked for.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            draft = new { type = "object", description = "The draft object from pneuma_draft_subject." },
+                            inferenceModel = new { type = "string", description = "Completion model endpoint for the subject; defaults to the first active one." },
+                            embeddingModel = new { type = "string", description = "Embedding model endpoint; defaults to the first active one." },
+                            collection = new { type = "string", description = "RecallDB collection; defaults to the default collection." },
+                            ontologyMode = new { type = "string", description = "Prompt, Draft, or Approve (default)." }
+                        },
+                        required = new[] { "draft" }
                     }
                 },
                 new

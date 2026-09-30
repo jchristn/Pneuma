@@ -258,6 +258,9 @@ function ResourceView({
   extraActions = [],
   toolbar = null,
   headerActions = null,
+  // Optional label and class for the create button (for example when a guided flow is the primary way to create).
+  addLabel = null,
+  addClassName = 'button-primary',
   createDisabled = false,
   createNotice = null,
   modalSize = 'lg',
@@ -428,9 +431,9 @@ function ResourceView({
           <>
             {headerActions}
             {capabilities.create && formFields.length > 0 && (
-              <button type="button" className="button-primary" onClick={() => setModal({ type: 'create' })}
+              <button type="button" className={addClassName} onClick={() => setModal({ type: 'create' })}
                 title={t('resource.addTip', { name: singular, defaultValue: `Create a new ${singular}. Opens a form; nothing is saved until you submit.` })}>
-                + {t('common.add')}
+                {addLabel || `+ ${t('common.add')}`}
               </button>
             )}
           </>

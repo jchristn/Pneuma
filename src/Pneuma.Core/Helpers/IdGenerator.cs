@@ -156,6 +156,10 @@ namespace Pneuma.Core.Helpers
         /// <returns>Ontology operation identifier.</returns>
         public static string GenerateOntologyOperationId() => Generate(Constants.OntologyOperationPrefix);
 
+        /// <summary>Generate a subject starter question identifier.</summary>
+        /// <returns>Subject question identifier.</returns>
+        public static string GenerateSubjectQuestionId() => Generate(Constants.SubjectQuestionPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

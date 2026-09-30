@@ -767,6 +767,107 @@ namespace Pneuma.Sdk
             return SendAsync<LinkRefreshResult>(HttpMethod.Post, "/v1.0/links/" + Escape(id) + "/refresh", null, token);
         }
 
+        /// <summary>What the new subject wizard can do for the caller (ontology modes, limits, whether a completion model exists).</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The options.</returns>
+        public Task<WizardOptions> GetWizardOptionsAsync(CancellationToken token = default)
+        {
+            return SendAsync<WizardOptions>(HttpMethod.Get, "/v1.0/subject-wizard/options", null, token);
+        }
+
+        /// <summary>Draft the subject brief (reads the draft's reference URL when set).</summary>
+        /// <param name="request">The draft so far.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The brief.</returns>
+        public Task<WizardResult<WizardBrief>> DraftWizardBriefAsync(WizardGenerateRequest request, CancellationToken token = default)
+        {
+            return SendAsync<WizardResult<WizardBrief>>(HttpMethod.Post, "/v1.0/subject-wizard/brief", request, token);
+        }
+
+        /// <summary>Draft example questions (Mode "replace" keeps locked and edited ones; "more" adds new ones).</summary>
+        /// <param name="request">The draft so far.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The full question list.</returns>
+        public Task<WizardResult<List<WizardQuestion>>> DraftWizardQuestionsAsync(WizardGenerateRequest request, CancellationToken token = default)
+        {
+            return SendAsync<WizardResult<List<WizardQuestion>>>(HttpMethod.Post, "/v1.0/subject-wizard/questions", request, token);
+        }
+
+        /// <summary>Draft the ontology from the brief and questions.</summary>
+        /// <param name="request">The draft so far.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The ontology.</returns>
+        public Task<WizardResult<WizardOntology>> DraftWizardOntologyAsync(WizardGenerateRequest request, CancellationToken token = default)
+        {
+            return SendAsync<WizardResult<WizardOntology>>(HttpMethod.Post, "/v1.0/subject-wizard/ontology", request, token);
+        }
+
+        /// <summary>Draft the subject's prompt additions.</summary>
+        /// <param name="request">The draft so far.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The prompts.</returns>
+        public Task<WizardResult<WizardPrompts>> DraftWizardPromptsAsync(WizardGenerateRequest request, CancellationToken token = default)
+        {
+            return SendAsync<WizardResult<WizardPrompts>>(HttpMethod.Post, "/v1.0/subject-wizard/prompts", request, token);
+        }
+
+        /// <summary>Suggest where content for the subject might come from.</summary>
+        /// <param name="request">The draft so far.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The suggestions.</returns>
+        public Task<WizardResult<List<WizardSourceSuggestion>>> DraftWizardSourcesAsync(WizardGenerateRequest request, CancellationToken token = default)
+        {
+            return SendAsync<WizardResult<List<WizardSourceSuggestion>>>(HttpMethod.Post, "/v1.0/subject-wizard/sources", request, token);
+        }
+
+        /// <summary>Clean up a draft ontology and render it as the classifier will see it (no model call).</summary>
+        /// <param name="draft">The draft.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The rendered ontology.</returns>
+        public Task<WizardRenderedOntology> RenderWizardOntologyAsync(SubjectWizardDraft draft, CancellationToken token = default)
+        {
+            return SendAsync<WizardRenderedOntology>(HttpMethod.Post, "/v1.0/subject-wizard/render-ontology", new WizardGenerateRequest { Draft = draft }, token);
+        }
+
+        /// <summary>Create the subject, its starter questions, and its ontology from a finished draft.</summary>
+        /// <param name="request">The finished draft and settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>What was created.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public Task<WizardCommitResult> CommitSubjectWizardAsync(WizardCommitRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<WizardCommitResult>(HttpMethod.Post, "/v1.0/subject-wizard/commit", request, token);
+        }
+
+        /// <summary>List a subject's starter questions.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The questions, in order.</returns>
+        public Task<List<SubjectQuestion>> GetSubjectQuestionsAsync(string subjectId, CancellationToken token = default)
+        {
+            return SendAsync<List<SubjectQuestion>>(HttpMethod.Get, "/v1.0/subjects/" + Escape(subjectId) + "/questions", null, token);
+        }
+
+        /// <summary>Replace a subject's starter questions.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="questions">The questions, in order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The stored questions.</returns>
+        public Task<List<SubjectQuestion>> SetSubjectQuestionsAsync(string subjectId, List<SubjectQuestion> questions, CancellationToken token = default)
+        {
+            return SendAsync<List<SubjectQuestion>>(HttpMethod.Put, "/v1.0/subjects/" + Escape(subjectId) + "/questions", new SubjectQuestionsRequest { Questions = questions ?? new List<SubjectQuestion>() }, token);
+        }
+
+        /// <summary>Create up to 100 evaluation facts at once.</summary>
+        /// <param name="facts">The facts.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>How many were created and the facts.</returns>
+        public Task<EvalFactBulkResult> BulkCreateEvalFactsAsync(List<EvalFact> facts, CancellationToken token = default)
+        {
+            return SendAsync<EvalFactBulkResult>(HttpMethod.Post, "/v1.0/eval/facts/bulk", new EvalFactBulkRequest { Facts = facts ?? new List<EvalFact>() }, token);
+        }
+
         /// <summary>Get a link's per-step ingestion log (one entry per ingestion run, each with its events).</summary>
         /// <param name="id">Link identifier.</param>
         /// <param name="token">Cancellation token.</param>

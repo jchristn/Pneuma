@@ -161,6 +161,15 @@
     "intervalSeconds": 60,
     "batchSize": 50
   },
+  "wizard": {
+    "defaultQuestionCount": 12,
+    "maxQuestions": 40,
+    "maxOntologyTypes": 60,
+    "maxGroundingCharacters": 12000,
+    "maxPromptCharacters": 4000,
+    "timeoutSeconds": 300,
+    "coverageMaxQuestions": 12
+  },
   "ontology": {
     "workerEnabled": true,
     "workerPollIntervalMs": 2000,

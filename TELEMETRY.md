@@ -75,6 +75,12 @@ See [`ONTOLOGY.md`](ONTOLOGY.md).
 - `pneuma_ontology_operations_total{kind,outcome}`: finished ontology operations by kind (Validate, Retag,
   DriftCheck) and final status (Succeeded, Failed).
 
+### New subject wizard
+
+- `pneuma_wizard_generation_total{step,outcome}`: wizard drafting calls by step (brief, questions, ontology, prompts,
+  sources) and outcome (`success`, `retried` when the first reply was unusable and the retry worked, `failed`).
+- `pneuma_wizard_generation_duration_seconds{step}`: model time per drafting call.
+
 ### Retrieval & Answer
 - `pneuma_chat_answers_total{outcome}` — answered chat/query turns by outcome.
 - `pneuma_chat_answer_duration_seconds{outcome}` — total answer-latency histogram.

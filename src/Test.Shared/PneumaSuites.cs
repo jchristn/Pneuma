@@ -46,7 +46,8 @@ namespace Test.Shared
                     LinkRefreshSuite.Build(),
                     OntologySuite.Build(),
                     OntologyPipelineSuite.Build(),
-                    OntologyApiSuite.Build()
+                    OntologyApiSuite.Build(),
+                    SubjectWizardSuite.Build()
                 };
             }
         }

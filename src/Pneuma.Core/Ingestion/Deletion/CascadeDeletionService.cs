@@ -153,6 +153,9 @@ namespace Pneuma.Core.Ingestion.Deletion
             }).ConfigureAwait(false);
             await TryExternalAsync(() => _Db.ChatTurns.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
 
+            // Remove the subject's starter questions.
+            await TryExternalAsync(() => _Db.SubjectQuestions.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
+
             // Remove the subject's per-subject prompt overrides.
             await TryExternalAsync(() => _Db.SubjectPrompts.DeleteBySubjectAsync(tenantId, subjectId, token)).ConfigureAwait(false);
 

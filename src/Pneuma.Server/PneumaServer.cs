@@ -10,13 +10,14 @@ namespace Pneuma.Server
     using Pneuma.Core.Ingestion.Pipeline;
     using Pneuma.Core.Ingestion.Prompts;
     using Pneuma.Core.Ingestion.Refresh;
+    using Pneuma.Core.Integrations;
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
-    using Pneuma.Core.Integrations;
     using Pneuma.Core.Observability;
     using Pneuma.Core.Ontologies;
     using Pneuma.Core.Storage;
+    using Pneuma.Core.Wizard;
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Routes;
     using Pneuma.Server.Services;
@@ -274,13 +275,17 @@ namespace Pneuma.Server
             OntologyService ontologyService = new OntologyService(_Database);
             new OntologyRoutes(_Database, _Authorization, ontologyService, new OntologyProposer(_Database, _GraphFactory, _Authentication.Cipher, _Settings.Ontology, _Logging)).Register(_Server);
             new OntologyVersionRoutes(_Database, _Authorization, ontologyService).Register(_Server);
+            // New subject wizard: drafts a subject's brief, questions, ontology, and prompts with a model, then creates it.
+            SubjectWizardService subjectWizard = new SubjectWizardService(_Database, _Authentication.Cipher, _CrawlHttp, _Settings.Wizard, _Logging);
+            SubjectWizardCommitService subjectWizardCommit = new SubjectWizardCommitService(_Database, ontologyService, _Collections, _Settings.Retrieval.DefaultCollectionId, _Settings.Wizard, _Logging);
+            new SubjectWizardRoutes(_Database, _Authorization, subjectWizard, subjectWizardCommit, _Settings.Wizard, true).Register(_Server);
             new SubjectOntologyRoutes(_Database, _Authorization, ontologyService, new OntologyViolationReviewer(_Database, _GraphFactory), classificationCache, _GraphFactory, _Settings.Ontology).Register(_Server);
             OntologyOperationProcessor ontologyProcessor = new OntologyOperationProcessor(_Database, _GraphFactory, _Authentication.Cipher, new PolyPromptClassifier(_Logging), _Settings.Ontology);
             _OntologyWorker = new OntologyOperationWorker(_Database, ontologyProcessor, classificationCache, _Settings.Ontology, _Logging);
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency, _Blobs, new McpCrawlTools(_Database, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler), _LinkRefresh, new McpOntologyTools(_Database, classificationCache, _Settings.Ontology)).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency, _Blobs, new McpCrawlTools(_Database, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler), _LinkRefresh, new McpOntologyTools(_Database, classificationCache, _Settings.Ontology), new McpWizardTools(subjectWizard, subjectWizardCommit, _Authorization)).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _Concurrency);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);

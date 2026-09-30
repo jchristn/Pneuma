@@ -284,6 +284,11 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectlinks_nextrefresh' AND object_id = OBJECT_ID(N'dbo.subjectlinks')) CREATE INDEX idx_subjectlinks_nextrefresh ON dbo.subjectlinks (nextrefreshutc);"
                 }));
                 list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", SqlServerOntologySchema.Migration35()));
+                list.Add(new SchemaMigration(36, "Add subject starter questions", new List<string>
+                {
+                    "IF OBJECT_ID(N'dbo.subjectquestions', N'U') IS NULL CREATE TABLE dbo.subjectquestions (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, question NVARCHAR(MAX) NOT NULL, kind NVARCHAR(32) NOT NULL, position INT NOT NULL DEFAULT 0, origin NVARCHAR(16) NOT NULL, createdutc NVARCHAR(32) NOT NULL);",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectquestions_tenant_subject' AND object_id = OBJECT_ID(N'dbo.subjectquestions')) CREATE INDEX idx_subjectquestions_tenant_subject ON dbo.subjectquestions (tenantid, subjectid, position);"
+                }));
                 return list;
             }
         }

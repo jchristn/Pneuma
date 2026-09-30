@@ -6,11 +6,12 @@ namespace Pneuma.Core.Database
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Integrations;
     using Pneuma.Core.Models;
-    using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Ontologies;
     using Pneuma.Core.Security;
+    using Pneuma.Core.Wizard;
 
     /// <summary>
     /// Seeds default records into an empty database. Every step is idempotent: it checks for an
@@ -261,6 +262,10 @@ namespace Pneuma.Core.Database
             // The ontology authoring assistant's task and the JSON shape it must return.
             await SeedPromptAsync(db, "ontology.propose", "Ontology Proposal", OntologyProposer.DefaultTask, token).ConfigureAwait(false);
             await SeedPromptAsync(db, "ontology.propose.format", "Ontology Proposal Output Format", OntologyProposer.DefaultFormat, token).ConfigureAwait(false);
+
+            // The new subject wizard's task and output format for each step.
+            foreach (SubjectWizardPromptDefault wizardPrompt in SubjectWizardPrompts.All())
+                await SeedPromptAsync(db, wizardPrompt.Key, wizardPrompt.Name, wizardPrompt.Content, token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "cell.summarize", "Cell Summarization",
                 "Summarize the following content faithfully and concisely, preserving names, dates, places, and claims. " +
