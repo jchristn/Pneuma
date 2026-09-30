@@ -283,6 +283,7 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF COL_LENGTH('dbo.ingestionjobs', 'triggeredby') IS NULL ALTER TABLE dbo.ingestionjobs ADD triggeredby NVARCHAR(256) NOT NULL DEFAULT 'Submit';",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectlinks_nextrefresh' AND object_id = OBJECT_ID(N'dbo.subjectlinks')) CREATE INDEX idx_subjectlinks_nextrefresh ON dbo.subjectlinks (nextrefreshutc);"
                 }));
+                list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", SqlServerOntologySchema.Migration35()));
                 return list;
             }
         }

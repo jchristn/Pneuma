@@ -87,11 +87,13 @@ export class PneumaClient {
      * @param {object} [options.query] - Query parameters
      * @param {boolean} [options.auth=true] - Whether to send the bearer token
      * @param {object} [options.headers] - Additional headers
+     * @param {string} [options.rawBody] - A non-JSON request body sent as-is (for example a Turtle document)
+     * @param {string} [options.contentType] - Content type of `rawBody`
      * @returns {Promise<*>} Parsed JSON body, or null for 204/empty responses.
      * @throws {PneumaError} On any non-2xx status.
      */
     async request(method, path, options = {}) {
-        const { body, query, auth = true, headers = {} } = options;
+        const { body, query, auth = true, headers = {}, rawBody, contentType } = options;
         const url = `${this.baseUrl}${path}${buildQuery(query)}`;
 
         const finalHeaders = { Accept: 'application/json', ...headers };
@@ -100,7 +102,10 @@ export class PneumaClient {
         }
 
         const init = { method, headers: finalHeaders };
-        if (body !== undefined && body !== null) {
+        if (typeof rawBody === 'string') {
+            finalHeaders['Content-Type'] = contentType || 'text/plain';
+            init.body = rawBody;
+        } else if (body !== undefined && body !== null) {
             finalHeaders['Content-Type'] = 'application/json';
             init.body = JSON.stringify(body);
         }
@@ -710,6 +715,179 @@ export class PneumaClient {
      */
     getJobLog(id) {
         return this.request('GET', `/v1.0/jobs/${encodeURIComponent(id)}/log`);
+    }
+
+    // ==================== Ontologies ====================
+
+    /** List the built-in ontology templates. @returns {Promise<object[]>} */
+    listOntologyTemplates() {
+        return this.request('GET', '/v1.0/ontology-templates');
+    }
+
+    /** List the tenant's ontologies. @param {object} [options] `{ maxResults, skip, order, search }` @returns {Promise<object>} */
+    listOntologies(options = {}) {
+        return this.request('GET', '/v1.0/ontologies', { query: options });
+    }
+
+    /**
+     * Create an ontology; its first version is a draft (empty, from a template, or a copy of a version).
+     * @param {object} ontology `{ name, description?, template?, copyFromVersionId? }`
+     * @returns {Promise<object>} `{ ontology, versions, pinnedSubjects }`
+     */
+    createOntology(ontology) {
+        return this.request('POST', '/v1.0/ontologies', { body: ontology });
+    }
+
+    /** Get an ontology with its versions and the subjects that pin them. @param {string} id @returns {Promise<object>} */
+    getOntology(id) {
+        return this.request('GET', `/v1.0/ontologies/${encodeURIComponent(id)}`);
+    }
+
+    /** Rename or re-describe an ontology. @param {string} id @param {object} update `{ name?, description? }` @returns {Promise<object>} */
+    updateOntology(id, update) {
+        return this.request('PUT', `/v1.0/ontologies/${encodeURIComponent(id)}`, { body: update });
+    }
+
+    /** Delete an ontology and its versions (refused while a subject pins one). @param {string} id */
+    deleteOntology(id) {
+        return this.request('DELETE', `/v1.0/ontologies/${encodeURIComponent(id)}`);
+    }
+
+    /** List an ontology's versions, newest first. @param {string} id @param {object} [options] @returns {Promise<object>} */
+    listOntologyVersions(id, options = {}) {
+        return this.request('GET', `/v1.0/ontologies/${encodeURIComponent(id)}/versions`, { query: options });
+    }
+
+    /** Start a new draft that copies a version (by default the newest). @param {string} id @param {string} [basedOnVersionId] @returns {Promise<object>} */
+    createOntologyDraft(id, basedOnVersionId) {
+        return this.request('POST', `/v1.0/ontologies/${encodeURIComponent(id)}/versions`, { body: { basedOnVersionId: basedOnVersionId || null } });
+    }
+
+    /**
+     * Have the inference model propose a new draft (uses the ontology.propose prompts).
+     * @param {string} id
+     * @param {object} request `{ subjectId?, sampleText?, modelRunnerId?, sampleCells?, instructions?, language?, basedOnVersionId? }`
+     * @returns {Promise<object>} the proposed draft
+     */
+    proposeOntology(id, request) {
+        return this.request('POST', `/v1.0/ontologies/${encodeURIComponent(id)}/propose`, { body: request });
+    }
+
+    /** Get a version with its types, rules, concepts, and approval problems. @param {string} versionId @returns {Promise<object>} */
+    getOntologyVersion(versionId) {
+        return this.request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`);
+    }
+
+    /** Replace a draft's contents. @param {string} versionId @param {object} version @returns {Promise<object>} */
+    updateOntologyVersion(versionId, version) {
+        return this.request('PUT', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`, { body: version });
+    }
+
+    /** Delete a draft version. @param {string} versionId */
+    deleteOntologyVersion(versionId) {
+        return this.request('DELETE', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`);
+    }
+
+    /** Approve a draft (needs Ontology Execute). @param {string} versionId @param {string} [changeSummary] @returns {Promise<object>} */
+    approveOntologyVersion(versionId, changeSummary) {
+        return this.request('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/approve`, { body: { changeSummary: changeSummary || null } });
+    }
+
+    /** Retire an approved version (refused while a subject pins it). @param {string} versionId @returns {Promise<object>} */
+    retireOntologyVersion(versionId) {
+        return this.request('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/retire`);
+    }
+
+    /** Compare a version with another (default: the version it was copied from). @param {string} versionId @param {string} [against] @returns {Promise<object>} */
+    diffOntologyVersion(versionId, against) {
+        return this.request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/diff`, { query: against ? { against } : {} });
+    }
+
+    /** Get the definition text the classifier sees for a version. @param {string} versionId @returns {Promise<object>} `{ versionId, definition }` */
+    getOntologyDefinition(versionId) {
+        return this.request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/definition`);
+    }
+
+    /**
+     * Export a version as OWL and SKOS.
+     * @param {string} versionId @param {string} [format='turtle'] 'turtle' or 'jsonld' @param {string} [baseIri]
+     * @returns {Promise<string|object>} Turtle text, or the parsed JSON-LD
+     */
+    exportOntologyVersion(versionId, format = 'turtle', baseIri) {
+        return this.request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/export`, { query: { format, baseIri } });
+    }
+
+    /**
+     * Import a SKOS taxonomy into a draft.
+     * @param {string} versionId @param {string} document Turtle or JSON-LD text
+     * @param {object} [options] `{ format: 'turtle'|'jsonld', mode: 'merge'|'replace' }`
+     * @returns {Promise<object>} `{ added, updated, removed, total, warnings, version }`
+     */
+    importTaxonomy(versionId, document, options = {}) {
+        const format = options.format || 'turtle';
+        return this.request('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/taxonomy/import`, {
+            query: { format, mode: options.mode || 'merge' },
+            rawBody: document,
+            contentType: format === 'jsonld' ? 'application/ld+json' : 'text/turtle'
+        });
+    }
+
+    /** Show how a subject classifies (pinned version, definition, settings). @param {string} subjectId @returns {Promise<object>} */
+    getSubjectOntology(subjectId) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology`);
+    }
+
+    /**
+     * Pin a subject to an approved version, or unpin it (null).
+     * @param {string} subjectId @param {string|null} ontologyVersionId @param {boolean} [retag=true]
+     * @returns {Promise<object>}
+     */
+    setSubjectOntology(subjectId, ontologyVersionId, retag = true) {
+        return this.request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology`, { body: { ontologyVersionId, retag } });
+    }
+
+    /** List a subject's ontology violations; `{ status, jobId, operationId }` filter. @param {string} subjectId @param {object} [options] @returns {Promise<object>} */
+    listOntologyViolations(subjectId, options = {}) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-violations`, { query: options });
+    }
+
+    /** Release a quarantined element into the graph. @param {string} violationId @returns {Promise<object>} */
+    releaseOntologyViolation(violationId) {
+        return this.request('POST', `/v1.0/ontology-violations/${encodeURIComponent(violationId)}/release`);
+    }
+
+    /** Dismiss a quarantined element. @param {string} violationId @returns {Promise<object>} */
+    dismissOntologyViolation(violationId) {
+        return this.request('POST', `/v1.0/ontology-violations/${encodeURIComponent(violationId)}/dismiss`);
+    }
+
+    /** List a subject's ontology operations. @param {string} subjectId @param {object} [options] @returns {Promise<object>} */
+    listOntologyOperations(subjectId, options = {}) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-operations`, { query: options });
+    }
+
+    /** Queue a background ontology operation. @param {string} subjectId @param {object} request `{ kind: 'Validate'|'Retag'|'DriftCheck', sampleSize? }` @returns {Promise<object>} */
+    startOntologyOperation(subjectId, request) {
+        return this.request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-operations`, { body: request });
+    }
+
+    /** Get an ontology operation with its items. @param {string} operationId @returns {Promise<object>} `{ operation, items }` */
+    getOntologyOperation(operationId) {
+        return this.request('GET', `/v1.0/ontology-operations/${encodeURIComponent(operationId)}`);
+    }
+
+    /**
+     * Export a subject's graph.
+     * @param {string} subjectId @param {string} [format='json'] 'json', 'jsonld', 'turtle', or 'graphml' @param {string} [baseIri]
+     * @returns {Promise<string|object>} parsed JSON for json/jsonld, text otherwise
+     */
+    exportSubjectGraph(subjectId, format = 'json', baseIri) {
+        return this.request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/graph/export`, { query: { format, baseIri } });
+    }
+
+    /** Remove the classification cache entries a subject stored. @param {string} subjectId @returns {Promise<object>} `{ removed }` */
+    clearClassificationCache(subjectId) {
+        return this.request('DELETE', `/v1.0/subjects/${encodeURIComponent(subjectId)}/classification-cache`);
     }
 
     // ==================== Model Runners ====================

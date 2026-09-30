@@ -38,6 +38,7 @@ namespace Pneuma.Core.Database.Mysql.Implementations
             {
                 IngestionJobEventMethods.DeleteByJobSql(tenantId, id),
                 IngestionJobAttemptMethods.DeleteByJobSql(tenantId, id),
+                OntologyMethods.DeleteViolationsByJobSql(tenantId, id),
                 DeleteByIdSql(tenantId, id)
             };
             await QueryTransaction(statements, token).ConfigureAwait(false);
@@ -168,6 +169,9 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                 ", chunksproduced = " + job.Completeness.ChunksProduced.ToString(CultureInfo.InvariantCulture) +
                 ", chunksembedded = " + job.Completeness.ChunksEmbedded.ToString(CultureInfo.InvariantCulture) +
                 ", chunksindexed = " + job.Completeness.ChunksIndexed.ToString(CultureInfo.InvariantCulture) +
+                ", classificationcachehits = " + job.Completeness.ClassificationCacheHits.ToString(CultureInfo.InvariantCulture) +
+                ", ontologyviolations = " + job.Completeness.OntologyViolations.ToString(CultureInfo.InvariantCulture) +
+                ", taxonomymatches = " + job.Completeness.TaxonomyMatches.ToString(CultureInfo.InvariantCulture) +
                 ", lastupdateutc = " + Sanitizer.Ts(job.LastUpdateUtc) +
                 " WHERE tenantid = " + Sanitizer.Str(job.TenantId) + " AND id = " + Sanitizer.Str(job.Id) + ";";
             await Query(sql, token).ConfigureAwait(false);
@@ -218,7 +222,10 @@ namespace Pneuma.Core.Database.Mysql.Implementations
                     SummariesFailed = RowReader.GetInt(row, "summariesfailed"),
                     ChunksProduced = RowReader.GetInt(row, "chunksproduced"),
                     ChunksEmbedded = RowReader.GetInt(row, "chunksembedded"),
-                    ChunksIndexed = RowReader.GetInt(row, "chunksindexed")
+                    ChunksIndexed = RowReader.GetInt(row, "chunksindexed"),
+                    ClassificationCacheHits = RowReader.GetInt(row, "classificationcachehits"),
+                    OntologyViolations = RowReader.GetInt(row, "ontologyviolations"),
+                    TaxonomyMatches = RowReader.GetInt(row, "taxonomymatches")
                 },
                 CreatedUtc = RowReader.GetDateTime(row, "createdutc"),
                 LastUpdateUtc = RowReader.GetDateTime(row, "lastupdateutc")

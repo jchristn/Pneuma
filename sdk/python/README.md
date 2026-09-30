@@ -207,6 +207,24 @@ brevity):
   `overrideContent`, `source`, `mergeMode`), set a per-subject override
   (`merge_mode` is `"Append"` or `"Replace"`), or remove an override to revert
   to the global prompt
+- **Ontologies** (see `ONTOLOGY.md`): `list_ontology_templates()`,
+  `list_ontologies()`, `create_ontology(name, description=None, template=None,
+  copy_from_version_id=None)`, `get_ontology(id)`, `update_ontology(id, name,
+  description)`, `delete_ontology(id)`, `list_ontology_versions(id)`,
+  `create_ontology_draft(id, based_on_version_id=None)`,
+  `propose_ontology(id, request)`, `get_ontology_version(id)`,
+  `update_ontology_version(id, version)`, `delete_ontology_version(id)`,
+  `approve_ontology_version(id, change_summary=None)`,
+  `retire_ontology_version(id)`, `diff_ontology_version(id, against=None)`,
+  `get_ontology_definition(id)`, `export_ontology_version(id, fmt="turtle")`,
+  `import_taxonomy(id, document, fmt="turtle", mode="merge")`,
+  `get_subject_ontology(subject_id)`, `set_subject_ontology(subject_id,
+  ontology_version_id, retag=True)`, `list_ontology_violations(subject_id,
+  status=None)`, `release_ontology_violation(id)`,
+  `dismiss_ontology_violation(id)`, `list_ontology_operations(subject_id)`,
+  `start_ontology_operation(subject_id, kind, sample_size=None)`,
+  `get_ontology_operation(id)`, `export_subject_graph(subject_id, fmt="json")`,
+  `clear_classification_cache(subject_id)`
 - **Settings**: `get_settings()`, `update_settings(settings)`
 - **Request history**: `list_request_history(**filters)`,
   `request_history_summary(**filters)`, `get_request_history(id)`,

@@ -33,6 +33,9 @@ namespace Pneuma.Server.Mcp
         /// <summary>Crawl plan and crawl operation tools; null disables them.</summary>
         public McpCrawlTools? Crawl { get; set; } = null;
 
+        /// <summary>Ontology governance tools; null disables them.</summary>
+        public McpOntologyTools? Ontology { get; set; } = null;
+
         /// <summary>Link refresh service for <c>pneuma_set_link_refresh</c>'s "refresh now"; null checks nothing.</summary>
         public Pneuma.Core.Ingestion.Refresh.LinkRefreshService? LinkRefresh
         {
@@ -205,6 +208,35 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_get_crawl_operation":
                     if (Crawl == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Crawl plan tools are not available on this server.").ConfigureAwait(false); return; }
                     toolResult = await Crawl.GetOperationAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_ontologies":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.EnumerateOntologiesAsync(rc, arguments, ctx.Token).ConfigureAwait(false);
+                    break;
+                case "pneuma_get_ontology_version":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.GetVersionAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_get_subject_ontology":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.GetSubjectOntologyAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_enumerate_ontology_violations":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.EnumerateViolationsAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_start_ontology_operation":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.StartOperationAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
+                    if (toolResult == null) return; // error already sent
+                    break;
+                case "pneuma_get_ontology_operation":
+                    if (Ontology == null) { await McpJsonRpc.SendErrorAsync(ctx, id, -32601, "Ontology tools are not available on this server.").ConfigureAwait(false); return; }
+                    toolResult = await Ontology.GetOperationAsync(ctx, rc, id, arguments, ctx.Token).ConfigureAwait(false);
                     if (toolResult == null) return; // error already sent
                     break;
                 case "pneuma_enumerate_links":

@@ -72,10 +72,13 @@ namespace Pneuma.Core.Database
         public IIngestionJobMethods IngestionJobs { get; protected set; } = null!;
 
         /// <summary>Ingestion job event methods.</summary>
-        public IIngestionJobEventMethods IngestionJobEvents { get; protected set; } = null!;
+        public IIngestionJobEventMethods IngestionJobEvents { get; protected set; } = null!;
+
 
         /// <summary>IngestionJobAttemptMethods data access.</summary>
-        public IIngestionJobAttemptMethods IngestionJobAttempts { get; protected set; } = null!;
+        public IIngestionJobAttemptMethods IngestionJobAttempts { get; protected set; } = null!;
+
+
 
         /// <summary>Crawl plan data access (plans, settings, secrets).</summary>
         public ICrawlPlanMethods CrawlPlans { get; protected set; } = null!;
@@ -121,6 +124,21 @@ namespace Pneuma.Core.Database
 
         /// <summary>Ingestion tuning (singleton concurrency defaults) methods.</summary>
         public IIngestionTuningMethods IngestionTuning { get; protected set; } = null!;
+
+        /// <summary>Tenant ontology methods.</summary>
+        public IOntologyMethods Ontologies { get; protected set; } = null!;
+
+        /// <summary>Ontology version methods (versions with their types, rules, and taxonomy concepts).</summary>
+        public IOntologyVersionMethods OntologyVersions { get; protected set; } = null!;
+
+        /// <summary>Ontology rule violation methods.</summary>
+        public IOntologyViolationMethods OntologyViolations { get; protected set; } = null!;
+
+        /// <summary>Background ontology operation methods.</summary>
+        public IOntologyOperationMethods OntologyOperations { get; protected set; } = null!;
+
+        /// <summary>Classification cache index methods.</summary>
+        public IClassificationCacheMethods ClassificationCache { get; protected set; } = null!;
 
         #endregion
 

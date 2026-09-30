@@ -61,6 +61,12 @@ namespace Test.Shared.Support
             get { lock (_Lock) { return _LastEmbedBody; } }
         }
 
+        /// <summary>The body of the most recent chat or generate request, or empty.</summary>
+        public string LastChatBody
+        {
+            get { lock (_Lock) { return _LastChatBody; } }
+        }
+
         #endregion
 
         #region Private-Members
@@ -75,6 +81,7 @@ namespace Test.Shared.Support
         private int _InFlight = 0;
         private int _MaxConcurrent = 0;
         private string _LastEmbedBody = String.Empty;
+        private string _LastChatBody = String.Empty;
         private bool _Disposed = false;
 
         #endregion
@@ -145,6 +152,7 @@ namespace Test.Shared.Support
                     return;
                 }
 
+                lock (_Lock) { _LastChatBody = body; }
                 string text = JsonEncodedText.Encode(ChatText).ToString();
                 string json = path.EndsWith("/api/generate", StringComparison.Ordinal)
                     ? "{\"model\":\"stub\",\"response\":\"" + text + "\",\"done\":true}"

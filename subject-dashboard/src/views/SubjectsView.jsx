@@ -7,6 +7,7 @@ import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
+import SubjectOntologyModal from '../components/ontology/SubjectOntologyModal';
 import CopyableId from '../components/CopyableId';
 import FacetFilterEditor from '../components/FacetFilterEditor';
 import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
@@ -35,6 +36,7 @@ const DEFAULT_PROMPT_REWRITE = 'Rewrite the question into a single, self-contain
 const EMPTY_FORM = {
   displayName: '', type: 'Subject', description: '', tagline: DEFAULT_TAGLINE, urlSlug: '',
   thinkingEnabled: false, publishedForChat: true, historyRetentionDays: 90, defaultRefreshIntervalMinutes: 0,
+  classificationTemperature: 0, classificationCacheEnabled: true,
   embeddingModel: '', inferenceModel: '', collection: '', rerankingModel: '', promptRewriteModel: '',
   rerankerType: 'LlmListwise',
   chunkStrategy: 'FixedTokenCount', chunkMaxTokens: 256, chunkOverlapTokens: 32, chunkHeaders: 'TitleAndHeadings',
@@ -81,6 +83,7 @@ function SubjectsView() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingNotice, setDeletingNotice] = useState(false);
+  const [ontologySubject, setOntologySubject] = useState(null);
 
   const load = useCallback(async () => {
     if (!apiClient) return;
@@ -144,6 +147,8 @@ function SubjectsView() {
       publishedForChat: subject.publishedForChat !== false,
       historyRetentionDays: subject.historyRetentionDays || 90,
       defaultRefreshIntervalMinutes: subject.defaultRefreshIntervalMinutes || 0,
+      classificationTemperature: subject.classificationTemperature ?? 0,
+      classificationCacheEnabled: subject.classificationCacheEnabled !== false,
       embeddingModel: subject.embeddingModel || '',
       inferenceModel: subject.inferenceModel || '',
       collection: subject.collection || '',
@@ -193,6 +198,8 @@ function SubjectsView() {
       chunkHeaders: form.chunkHeaders || 'None',
       historyRetentionDays: Math.max(1, Number(form.historyRetentionDays) || 90),
       defaultRefreshIntervalMinutes: Number(form.defaultRefreshIntervalMinutes) || 0,
+      classificationTemperature: Math.min(2, Math.max(0, Number(form.classificationTemperature) || 0)),
+      classificationCacheEnabled: !!form.classificationCacheEnabled,
       // Only the concurrency knobs the operator set are sent as overrides; the rest inherit the system default.
       concurrencyOverrides: Object.fromEntries(
         Object.entries(form.concurrencyOverrides || {})
@@ -269,6 +276,7 @@ function SubjectsView() {
         <ActionMenu
           actions={[
             { label: t('common.edit'), onClick: () => openEdit(row) },
+            { label: t('subjects.ontology'), onClick: () => setOntologySubject(row) },
             { label: t('common.delete'), variant: 'danger', onClick: () => setDeleteTarget(row) }
           ]}
         />
@@ -395,6 +403,16 @@ function SubjectsView() {
               onChange={(e) => setForm({ ...form, historyRetentionDays: e.target.value })}
               title={t('subjects.historyRetentionTip', 'How many days of chat-turn history are kept for this subject before pruning. Minimum 1. Default 90.')}
             />
+          </div>
+          <div className="form-group" title={t('subjects.classificationTemperatureTip')}>
+            <label htmlFor="cd-temperature" title={t('subjects.classificationTemperatureTip')}>{t('subjects.classificationTemperature')}</label>
+            <input id="cd-temperature" type="number" min={0} max={2} step={0.1} value={form.classificationTemperature}
+              onChange={(e) => setForm({ ...form, classificationTemperature: e.target.value })} title={t('subjects.classificationTemperatureTip')} />
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={t('subjects.classificationCacheTip')}>
+            <input id="cd-class-cache" type="checkbox" checked={form.classificationCacheEnabled}
+              onChange={(e) => setForm({ ...form, classificationCacheEnabled: e.target.checked })} title={t('subjects.classificationCacheTip')} />
+            <label htmlFor="cd-class-cache" style={{ margin: 0 }} title={t('subjects.classificationCacheTip')}>{t('subjects.classificationCache')}</label>
           </div>
           <div className="form-group" title={t('subjects.defaultRefreshTip')}>
             <label htmlFor="cd-refresh" title={t('subjects.defaultRefreshTip')}>{t('subjects.defaultRefresh')}</label>
@@ -524,6 +542,8 @@ function SubjectsView() {
           <button type="button" className="btn btn-primary" onClick={() => setDeletingNotice(false)}>{t('common.close')}</button>
         </div>
       </Modal>
+
+      {ontologySubject && <SubjectOntologyModal subject={ontologySubject} onClose={() => setOntologySubject(null)} onChanged={load} />}
     </div>
   );
 }

@@ -136,6 +136,26 @@ namespace Pneuma.Core.Helpers
         /// <returns>Crawl operation object identifier.</returns>
         public static string GenerateCrawlOperationObjectId() => Generate(Constants.CrawlOperationObjectPrefix);
 
+        /// <summary>Generate an ontology identifier.</summary>
+        /// <returns>Ontology identifier.</returns>
+        public static string GenerateOntologyId() => Generate(Constants.OntologyPrefix);
+
+        /// <summary>Generate an ontology version identifier.</summary>
+        /// <returns>Ontology version identifier.</returns>
+        public static string GenerateOntologyVersionId() => Generate(Constants.OntologyVersionPrefix);
+
+        /// <summary>Generate an ontology rule identifier.</summary>
+        /// <returns>Ontology rule identifier.</returns>
+        public static string GenerateOntologyRuleId() => Generate(Constants.OntologyRulePrefix);
+
+        /// <summary>Generate an ontology violation identifier.</summary>
+        /// <returns>Ontology violation identifier.</returns>
+        public static string GenerateOntologyViolationId() => Generate(Constants.OntologyViolationPrefix);
+
+        /// <summary>Generate an ontology operation identifier.</summary>
+        /// <returns>Ontology operation identifier.</returns>
+        public static string GenerateOntologyOperationId() => Generate(Constants.OntologyOperationPrefix);
+
         /// <summary>Generate a request history entry identifier.</summary>
         /// <returns>Request history identifier.</returns>
         public static string GenerateRequestHistoryId() => Generate(Constants.RequestHistoryPrefix);

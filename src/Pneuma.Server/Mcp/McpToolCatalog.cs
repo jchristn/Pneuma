@@ -32,7 +32,7 @@ namespace Pneuma.Server.Mcp
             {
                 platform = "Pneuma",
                 description = "Generalized knowledge-graph hydration platform.",
-                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_set_link_refresh", "pneuma_submit_content", "pneuma_enumerate_crawl_plans", "pneuma_get_crawl_plan", "pneuma_create_crawl_plan", "pneuma_update_crawl_plan", "pneuma_test_crawl_plan", "pneuma_preview_crawl_plan", "pneuma_start_crawl_plan", "pneuma_stop_crawl_plan", "pneuma_enumerate_crawl_operations", "pneuma_get_crawl_operation", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
+                tools = new[] { "pneuma_capabilities", "pneuma_enumerate_subjects", "pneuma_get_subject", "pneuma_create_subject", "pneuma_update_subject", "pneuma_enumerate_jobs", "pneuma_get_job", "pneuma_ingestion_summary", "pneuma_enumerate_links", "pneuma_get_link", "pneuma_set_link_refresh", "pneuma_submit_content", "pneuma_enumerate_crawl_plans", "pneuma_get_crawl_plan", "pneuma_create_crawl_plan", "pneuma_update_crawl_plan", "pneuma_test_crawl_plan", "pneuma_preview_crawl_plan", "pneuma_start_crawl_plan", "pneuma_stop_crawl_plan", "pneuma_enumerate_crawl_operations", "pneuma_get_crawl_operation", "pneuma_enumerate_ontologies", "pneuma_get_ontology_version", "pneuma_get_subject_ontology", "pneuma_enumerate_ontology_violations", "pneuma_start_ontology_operation", "pneuma_get_ontology_operation", "pneuma_search", "pneuma_get_node", "pneuma_get_neighbors", "pneuma_query", "pneuma_get_history_turn", "pneuma_enumerate_threads", "pneuma_get_thread", "pneuma_delete_thread", "pneuma_enumerate_feedback", "pneuma_analytics", "pneuma_enumerate_eval_runs", "pneuma_get_eval_run", "pneuma_enumerate_eval_facts", "pneuma_create_eval_fact", "pneuma_delete_eval_fact", "pneuma_start_eval_run", "pneuma_cancel_eval_run", "pneuma_delete_eval_run", "pneuma_distinct_labels", "pneuma_distinct_tags", "pneuma_enumerate_request_history", "pneuma_get_request_history", "pneuma_request_history_summary", "pneuma_get_settings", "pneuma_enumerate_model_runner_health", "pneuma_get_model_runner_health" },
                 enumeration = "Collections are paged. Call an pneuma_enumerate_* tool with skip=0; the first result's totalRecords is the exact count. Advance skip by the page size and repeat until endOfResults is true (equivalently recordsRemaining reaches 0). Enumeration objects are small summaries — fetch a full object individually with the matching pneuma_get_* tool."
             };
         }
@@ -337,6 +337,63 @@ namespace Pneuma.Server.Mcp
                             skip = new { type = "integer", description = "Number of records to skip." }
                         }
                     }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_ontologies",
+                    description = "Enumerate the tenant's governed ontologies as summaries, paged, each with its versions (id, number, status: Draft, Approved, or Retired). A subject pins one approved version; use pneuma_get_ontology_version for a version's node types, edge types, rules, and taxonomy concepts.",
+                    inputSchema = new { type = "object", properties = PagingProperties(null) }
+                },
+                new
+                {
+                    name = "pneuma_get_ontology_version",
+                    description = "Fetch one ontology version: node types and edge types with descriptions, constraint rules (edge endpoints, cardinality, required fields, name patterns, minimum confidence) with their actions, taxonomy concepts with labels, and, for a draft, the problems that block approval.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Ontology version id (onv_...)." } }, required = new[] { "id" } }
+                },
+                new
+                {
+                    name = "pneuma_get_subject_ontology",
+                    description = "Show how a subject classifies content into its graph: the pinned ontology version (or that it uses the ontology.definition prompt), the exact definition text the classifier sees, the classification temperature and cache setting, cached results, and how many quarantined elements await review.",
+                    inputSchema = new { type = "object", properties = new { subjectId = new { type = "string", description = "Subject id." } }, required = new[] { "subjectId" } }
+                },
+                new
+                {
+                    name = "pneuma_enumerate_ontology_violations",
+                    description = "Enumerate a subject's ontology rule violations as summaries, paged: elements that broke a rule of the pinned version (or used an undeclared type), what was done (Warn, Drop, Quarantine, Reverse), and the review status. Filter with status (Recorded, Quarantined, Released, Dismissed).",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id." },
+                            status = new { type = "string", description = "Only this status." },
+                            maxResults = new { type = "integer", description = "Page size (clamped by the server)." },
+                            skip = new { type = "integer", description = "Number of records to skip." }
+                        },
+                        required = new[] { "subjectId" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_start_ontology_operation",
+                    description = "Queue a background ontology operation on a subject: Validate (check the stored graph against the pinned version's rules), Retag (re-link stored cells to the pinned version's taxonomy), or DriftCheck (classify sampleSize cells twice and report how often the result changes; costs two model calls per cell). Returns immediately; poll pneuma_get_ontology_operation until status is Succeeded or Failed. Only one operation of a kind runs per subject.",
+                    inputSchema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            subjectId = new { type = "string", description = "Subject id." },
+                            kind = new { type = "string", description = "Validate, Retag, or DriftCheck." },
+                            sampleSize = new { type = "integer", description = "Cells to sample for a drift check (default 10)." }
+                        },
+                        required = new[] { "subjectId", "kind" }
+                    }
+                },
+                new
+                {
+                    name = "pneuma_get_ontology_operation",
+                    description = "Fetch one ontology operation: status, progress (total, processed), findings (violations found, taxonomy links added and removed, or cells whose classification changed and the drift rate), the error if it failed, and its items.",
+                    inputSchema = new { type = "object", properties = new { id = new { type = "string", description = "Operation id (oop_...)." } }, required = new[] { "id" } }
                 },
                 new
                 {

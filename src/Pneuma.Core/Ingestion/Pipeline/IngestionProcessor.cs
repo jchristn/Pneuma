@@ -17,6 +17,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Observability;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
     using Radiant;
@@ -40,6 +41,13 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// </summary>
         public ContentResolver Resolver { get; }
 
+        /// <summary>Ontology limits applied during ingestion (violations kept per job). Set by the host from its settings.</summary>
+        public OntologySettings Ontology
+        {
+            get { return _Deps.Ontology; }
+            set { _Deps.Ontology = value ?? new OntologySettings(); }
+        }
+
         #endregion
 
         #region Private-Members
@@ -57,6 +65,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
         private readonly int _RetryBackoffMaxMs;
         private readonly PartialLossPolicyEnum _PartialLossPolicy;
         private readonly VersionRetirementService _Retirement;
+        private readonly StageDependencies _Deps;
 
         #endregion
 
@@ -105,27 +114,27 @@ namespace Pneuma.Core.Ingestion.Pipeline
             _Journal = new IngestionJournal(db, logging);
             // One process-wide embedding cache (a global system size limit) shared by every job this worker runs.
             EmbeddingCache embeddingCache = new EmbeddingCache(settings.EmbeddingCacheSize);
-            StageDependencies deps = new StageDependencies(db, processor, cipher, graphFactory, vectors, artifacts, fetcher, documentAtom, blobs, _Journal, embeddingCache, concurrency, logging);
-            Resolver = deps.Resolver;
+            _Deps = new StageDependencies(db, processor, cipher, graphFactory, vectors, artifacts, fetcher, documentAtom, blobs, _Journal, embeddingCache, concurrency, logging);
+            Resolver = _Deps.Resolver;
             _Runner = new StageRunner(db, _Journal, concurrency, telemetry);
             _Retirement = new VersionRetirementService(db, graphFactory, vectors, logging);
 
             _CategorizationStages = new List<IStage>
             {
-                new ContentRetrievalStage(deps),
-                new TypeDetectionStage(deps),
-                new CellExtractionStage(deps),
-                new ClassificationStage(deps)
+                new ContentRetrievalStage(_Deps),
+                new TypeDetectionStage(_Deps),
+                new CellExtractionStage(_Deps),
+                new ClassificationStage(_Deps)
             };
             _HydrationStages = new List<IStage>
             {
-                new OntologyCanonicalizationStage(deps),
-                new GraphMergeStage(deps),
-                new RelationshipConsolidationStage(deps),
-                new SummarizationStage(deps),
-                new ChunkingStage(deps),
-                new EmbeddingStage(deps),
-                new IndexingStage(deps)
+                new OntologyCanonicalizationStage(_Deps),
+                new GraphMergeStage(_Deps),
+                new RelationshipConsolidationStage(_Deps),
+                new SummarizationStage(_Deps),
+                new ChunkingStage(_Deps),
+                new EmbeddingStage(_Deps),
+                new IndexingStage(_Deps)
             };
         }
 

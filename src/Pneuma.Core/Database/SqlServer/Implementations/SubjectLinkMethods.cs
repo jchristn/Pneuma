@@ -63,6 +63,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                     if (String.IsNullOrEmpty(jobId)) continue;
                     statements.Add(IngestionJobEventMethods.DeleteByJobSql(tenantId, jobId));
                     statements.Add(IngestionJobAttemptMethods.DeleteByJobSql(tenantId, jobId));
+                    statements.Add(OntologyMethods.DeleteViolationsByJobSql(tenantId, jobId));
                     statements.Add(IngestionJobMethods.DeleteByIdSql(tenantId, jobId));
                 }
             }

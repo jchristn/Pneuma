@@ -17,8 +17,17 @@ namespace Pneuma.Core.Models
             set { if (String.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(Id)); _Id = value; }
         }
 
-        /// <summary>Owning tenant identifier. Null for global prompts.</summary>
+        /// <summary>Owning tenant identifier. Null for system (global) prompts.</summary>
         public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Whether this is a system default (shared by every tenant) rather than a tenant's own copy. A tenant copy of a
+        /// system prompt overrides it for that tenant's subjects; deleting the copy resets the tenant to the system default.
+        /// </summary>
+        public bool IsSystemDefault
+        {
+            get { return String.IsNullOrEmpty(TenantId); }
+        }
 
         /// <summary>Stable key identifying the prompt's role (e.g. "ontology.classify", "user.answer").</summary>
         public string Key

@@ -5,6 +5,7 @@ namespace Pneuma.Core.Ingestion.Stages
     using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Integrations.Models;
+    using Pneuma.Core.Ontologies;
 
     /// <summary>
     /// The mutable per-job state that flows through the ordered pipeline stages. Each <see cref="IStage"/> reads
@@ -72,6 +73,18 @@ namespace Pneuma.Core.Ingestion.Stages
         /// detection; null when the type must be detected.
         /// </summary>
         public string? DeclaredDocumentType { get; set; } = null;
+
+        /// <summary>
+        /// The subject's classification setup (runner, prompts, pinned ontology version, taxonomy matcher), resolved by
+        /// classification and read by the ontology and relationship stages; null before classification.
+        /// </summary>
+        public ClassificationSetup? Classification { get; set; } = null;
+
+        /// <summary>
+        /// Taxonomy concepts matched in each cell, by cell index (distinct concept keys). Filled by classification when the
+        /// pinned ontology version has a taxonomy; linked to the cells' graph nodes by relationship consolidation.
+        /// </summary>
+        public Dictionary<int, List<string>> TaxonomyMatches { get; set; } = new Dictionary<int, List<string>>();
 
         #endregion
 

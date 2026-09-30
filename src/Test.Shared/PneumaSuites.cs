@@ -43,7 +43,10 @@ namespace Test.Shared
                     CrawlFrameworkSuite.Build(),
                     CrawlApiSuite.Build(),
                     CrawlersSuite.Build(),
-                    LinkRefreshSuite.Build()
+                    LinkRefreshSuite.Build(),
+                    OntologySuite.Build(),
+                    OntologyPipelineSuite.Build(),
+                    OntologyApiSuite.Build()
                 };
             }
         }

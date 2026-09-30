@@ -57,6 +57,19 @@ namespace Pneuma.Core.Ingestion.Models
         /// <summary>Chunks stored in the search index.</summary>
         public int ChunksIndexed { get; set; } = 0;
 
+        /// <summary>Classification calls answered from the classification cache instead of the model.</summary>
+        public int ClassificationCacheHits
+        {
+            get { return _ClassificationCacheHits; }
+            set { _ClassificationCacheHits = value; }
+        }
+
+        /// <summary>Elements that broke a rule of the subject's pinned ontology version (or used an undeclared type).</summary>
+        public int OntologyViolations { get; set; } = 0;
+
+        /// <summary>Taxonomy concept matches found in the document's cells.</summary>
+        public int TaxonomyMatches { get; set; } = 0;
+
         #endregion
 
         #region Private-Members
@@ -65,6 +78,7 @@ namespace Pneuma.Core.Ingestion.Models
         private int _CellNodesCreated = 0;
         private int _CellNodesFailed = 0;
         private int _SummariesFailed = 0;
+        private int _ClassificationCacheHits = 0;
 
         #endregion
 
@@ -86,6 +100,12 @@ namespace Pneuma.Core.Ingestion.Models
         public void IncrementCellNodesFailed()
         {
             Interlocked.Increment(ref _CellNodesFailed);
+        }
+
+        /// <summary>Atomically count a classification call answered from the cache.</summary>
+        public void IncrementClassificationCacheHits()
+        {
+            Interlocked.Increment(ref _ClassificationCacheHits);
         }
 
         /// <summary>Atomically count a failed summary.</summary>

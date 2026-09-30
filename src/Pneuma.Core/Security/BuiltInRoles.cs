@@ -114,6 +114,13 @@ namespace Pneuma.Core.Security
                         PermissionTypeEnum.Permit,
                         new List<ResourceTypeEnum> { ResourceTypeEnum.CrawlPlan, ResourceTypeEnum.CrawlOperation },
                         new List<OperationTypeEnum> { OperationTypeEnum.Read, OperationTypeEnum.Write, OperationTypeEnum.Execute }));
+                    // Editors author ontologies (create drafts, edit them, propose, import) but do not approve or retire
+                    // versions: Ontology Execute is kept for tenant administrators or a custom approver role, so authoring
+                    // and approval can be held by different people.
+                    specs.Add(new PermissionSpec(
+                        PermissionTypeEnum.Permit,
+                        new List<ResourceTypeEnum> { ResourceTypeEnum.Ontology },
+                        new List<OperationTypeEnum> { OperationTypeEnum.Read, OperationTypeEnum.Write }));
                     break;
 
                 case Viewer:
@@ -124,6 +131,10 @@ namespace Pneuma.Core.Security
                             ResourceTypeEnum.Subject, ResourceTypeEnum.GraphNode, ResourceTypeEnum.SearchIndex,
                             ResourceTypeEnum.Source
                         },
+                        new List<OperationTypeEnum> { OperationTypeEnum.Read }));
+                    specs.Add(new PermissionSpec(
+                        PermissionTypeEnum.Permit,
+                        new List<ResourceTypeEnum> { ResourceTypeEnum.Ontology },
                         new List<OperationTypeEnum> { OperationTypeEnum.Read }));
                     break;
 

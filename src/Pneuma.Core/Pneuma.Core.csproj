@@ -14,11 +14,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- AngleSharp comes in through dotNetRdf.Core (RDFa parsing); pinned to a release without advisory GHSA-pgww-w46g-26qg. -->
+    <PackageReference Include="AngleSharp" Version="1.8.2" />
     <PackageReference Include="Blobject.AzureBlob" Version="6.0.0" />
     <PackageReference Include="Blobject.CIFS" Version="6.0.0" />
     <PackageReference Include="Blobject.Disk" Version="6.0.0" />
     <PackageReference Include="Blobject.GoogleCloud" Version="6.0.0" />
     <PackageReference Include="Blobject.NFS" Version="6.0.0" />
+    <PackageReference Include="dotNetRdf.Core" Version="3.5.2" />
     <PackageReference Include="GitHubCrawler" Version="1.0.1" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
     <PackageReference Include="Blobject.AmazonS3" Version="6.0.0" />

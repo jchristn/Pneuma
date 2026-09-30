@@ -3,25 +3,27 @@ namespace Pneuma.Core.Ingestion.Stages
     using System;
     using System.Collections.Generic;
     using System.Globalization;
-    using System.Security.Cryptography;
-    using System.Text;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Graph;
     using Pneuma.Core.Ingestion.Models;
-    using Pneuma.Core.Ingestion.Prompts;
+    using Pneuma.Core.Integrations;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Observability;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Serialization;
 
     /// <summary>
-    /// Maps the extracted cells to a candidate subgraph using the job's completion endpoint. A large document is
-    /// classified in bounded, symmetrically-overlapping batches (so no single model call carries a whole
-    /// document's prompt) and the partial subgraphs are merged. Persists the candidate subgraph artifact and
-    /// records prompt provenance. A missing completion endpoint is a deterministic hard failure.
+    /// Maps the extracted cells to a candidate subgraph using the job's completion endpoint. The subject's pinned ontology
+    /// version (when it has one) supplies the definition and a taxonomy matched deterministically in the cells before any
+    /// model call; identical requests are answered from the classification cache. A large document is classified in
+    /// bounded, symmetrically-overlapping batches (so no single model call carries a whole document's prompt) and the
+    /// partial subgraphs are merged. Persists the candidate subgraph artifact and records provenance. A missing
+    /// completion endpoint is a deterministic hard failure.
     /// </summary>
     public class ClassificationStage : IStage
     {
@@ -61,32 +63,18 @@ namespace Pneuma.Core.Ingestion.Stages
             Subject? subject = await _Deps.Db.Subjects.ReadByIdAsync(job.SubjectId, token).ConfigureAwait(false);
             context.SubjectName = subject?.DisplayName ?? "Unknown subject";
 
-            // The classification model comes from the job's chosen completion runner in the model-endpoint store;
-            // its key is decrypted here for the direct provider call. No endpoint is a deterministic hard failure.
-            ModelRunner? runner = await ResolveCompletionEndpointAsync(job, token).ConfigureAwait(false);
-            if (runner == null) throw new IngestionHardFailException(IngestionStageEnum.Classification, IngestionFailureCategoryEnum.Configuration, "No completion model endpoint is available for classification.");
+            // The runner, prompts (system default, tenant and subject overrides), and pinned ontology version are resolved
+            // once per job. No completion endpoint is a deterministic hard failure.
+            ClassificationSetup? setup = await ClassificationSetupBuilder.BuildAsync(_Deps.Db, _Deps.Cipher, job.TenantId, subject, job.CompletionEndpointId, token).ConfigureAwait(false);
+            if (setup == null) throw new IngestionHardFailException(IngestionStageEnum.Classification, IngestionFailureCategoryEnum.Configuration, "No completion model endpoint is available for classification.");
+            context.Classification = setup;
 
-            string? apiKey = null;
-            if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
-            {
-                try { apiKey = _Deps.Cipher.Decrypt(runner.AuthMaterialEncrypted); }
-                catch (Exception) { apiKey = null; }
-            }
-
-            // Resolve the classification and ontology prompts: global base + per-subject override (Append/Replace)
-            // + the legacy per-subject ontology columns, so a subject can refine classification and its ontology
-            // without losing the shared base. Global is the fallback.
-            PromptResolver resolver = new PromptResolver(_Deps.Db);
-            ResolvedPrompt classifyResolved = await resolver.ResolveAsync(job.TenantId, job.SubjectId, "ontology.classify", subject?.OntologyClassifyPrompt, token).ConfigureAwait(false);
-            string systemPrompt = String.IsNullOrWhiteSpace(classifyResolved.EffectiveContent) ? "Classify the content into the subject knowledge-graph ontology." : classifyResolved.EffectiveContent;
-
-            ResolvedPrompt ontologyResolved = await resolver.ResolveAsync(job.TenantId, job.SubjectId, "ontology.definition", subject?.OntologyDefinitionPrompt, token).ConfigureAwait(false);
-            string ontologyDefinition = ontologyResolved.EffectiveContent;
+            List<ExtractedCell> cells = context.Cells;
+            MatchTaxonomy(context, setup, cells);
 
             // Effective per-subject batching tuning (subject override falling back to the system default). A large
             // document is classified as bounded batches rather than one enormous prompt so a slow completion model
             // can finish each call well within the stage timeout; a document that fits one batch keeps the single call.
-            List<ExtractedCell> cells = context.Cells;
             int batchSize = _Deps.Concurrency.EffectiveClassificationBatchSize(job.SubjectId);
             CandidateSubgraph subgraph;
             if (cells.Count <= batchSize)
@@ -94,7 +82,7 @@ namespace Pneuma.Core.Ingestion.Stages
                 job.Completeness.ClassificationBatches = 1;
                 try
                 {
-                    subgraph = await _Deps.Classifier.ClassifyAsync(cells, systemPrompt, ontologyDefinition, runner, apiKey, context.SubjectName, token).ConfigureAwait(false);
+                    subgraph = await ClassifyAsync(context, setup, cells, 0, cells.Count, token).ConfigureAwait(false);
                 }
                 catch (Exception e) when (!(e is OperationCanceledException))
                 {
@@ -111,18 +99,73 @@ namespace Pneuma.Core.Ingestion.Stages
             {
                 int overlap = _Deps.Concurrency.EffectiveClassificationBatchOverlap(job.SubjectId);
                 int batchConcurrency = _Deps.Concurrency.EffectiveClassificationBatchConcurrency(job.SubjectId);
-                subgraph = await ClassifyInBatchesAsync(context, systemPrompt, ontologyDefinition, runner, apiKey, batchSize, overlap, batchConcurrency, token).ConfigureAwait(false);
+                subgraph = await ClassifyInBatchesAsync(context, setup, batchSize, overlap, batchConcurrency, token).ConfigureAwait(false);
             }
 
             await _Deps.Journal.TryStoreAsync("subgraph", () => _Deps.Artifacts.PutSubgraphAsync(job.LinkId, Json.Serialize(subgraph), token), token).ConfigureAwait(false);
             context.Subgraph = subgraph;
-            context.Provenance = await BuildPromptProvenanceAsync(job, token).ConfigureAwait(false);
-            context.Message = "Ontology / knowledge-graph mapping complete — proposed " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count + " relationship(s).";
+            context.Provenance = setup.Provenance + ", cache " + job.Completeness.ClassificationCacheHits.ToString(CultureInfo.InvariantCulture) + "/" +
+                job.Completeness.ClassificationBatches.ToString(CultureInfo.InvariantCulture) + " hits";
+            context.Message = "Ontology / knowledge-graph mapping complete — proposed " + subgraph.Nodes.Count + " node(s) and " + subgraph.Edges.Count + " relationship(s)" +
+                (job.Completeness.ClassificationCacheHits > 0 ? " (" + job.Completeness.ClassificationCacheHits + " batch(es) from the classification cache)" : String.Empty) +
+                (job.Completeness.TaxonomyMatches > 0 ? "; " + job.Completeness.TaxonomyMatches + " taxonomy match(es)." : ".");
         }
 
         #endregion
 
         #region Private-Methods
+
+        /// <summary>Match the pinned version's taxonomy in every cell (deterministic, no model call).</summary>
+        private static void MatchTaxonomy(StageContext context, ClassificationSetup setup, List<ExtractedCell> cells)
+        {
+            context.TaxonomyMatches = new Dictionary<int, List<string>>();
+            if (setup.Matcher == null) return;
+            int total = 0;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                List<TaxonomyMatch> matches = setup.Matcher.Match(cells[i].Text);
+                if (matches.Count == 0) continue;
+                List<string> keys = matches.Select(m => m.ConceptKey).Distinct(StringComparer.Ordinal).ToList();
+                context.TaxonomyMatches[i] = keys;
+                total += keys.Count;
+            }
+            context.Job.Completeness.TaxonomyMatches = total;
+        }
+
+        /// <summary>Classify the cells in [start, end), from the cache when an identical request was answered before.</summary>
+        private async Task<CandidateSubgraph> ClassifyAsync(StageContext context, ClassificationSetup setup, List<ExtractedCell> window, int start, int end, CancellationToken token)
+        {
+            List<string> conceptKeys = new List<string>();
+            for (int i = start; i < end; i++)
+            {
+                List<string>? keys;
+                if (context.TaxonomyMatches.TryGetValue(i, out keys)) conceptKeys.AddRange(keys);
+            }
+            string userPrompt = PolyPromptClassifier.BuildUserPrompt(window, context.SubjectName, setup.Hint(conceptKeys));
+            string key = ClassificationCache.Key(setup.Runner.Id, setup.Runner.DefaultModel, setup.Temperature, setup.SystemPrompt, userPrompt);
+
+            if (setup.CacheEnabled)
+            {
+                CandidateSubgraph? cached = null;
+                try { cached = await _Deps.ClassificationCache.TryGetAsync(context.Job.TenantId, key, token).ConfigureAwait(false); }
+                catch (Exception e) when (!(e is OperationCanceledException)) { _Deps.Logging.Warn("[ClassificationStage] cache read failed: " + e.Message); }
+                if (cached != null)
+                {
+                    context.Job.Completeness.IncrementClassificationCacheHits();
+                    PneumaMetrics.RecordClassificationCache("hit");
+                    return cached;
+                }
+                PneumaMetrics.RecordClassificationCache("miss");
+            }
+
+            CandidateSubgraph result = await _Deps.Classifier.ClassifyAsync(setup.SystemPrompt, userPrompt, setup.Runner, setup.ApiKey, setup.Temperature, token).ConfigureAwait(false);
+            if (setup.CacheEnabled)
+            {
+                try { await _Deps.ClassificationCache.StoreAsync(context.Job.TenantId, context.Job.SubjectId, key, result, token).ConfigureAwait(false); }
+                catch (Exception e) when (!(e is OperationCanceledException)) { _Deps.Logging.Warn("[ClassificationStage] cache write failed: " + e.Message); }
+            }
+            return result;
+        }
 
         /// <summary>
         /// Classify a large document as independent, bounded batches and merge the partial subgraphs. Each batch
@@ -132,19 +175,9 @@ namespace Pneuma.Core.Ingestion.Stages
         /// merge dedups by canonical type+name. Candidate Refs are only unique within a single model call, so each
         /// batch's Refs are namespaced before concatenation to keep every edge pointing at its own nodes.
         /// </summary>
-        private async Task<CandidateSubgraph> ClassifyInBatchesAsync(
-            StageContext context,
-            string systemPrompt,
-            string ontologyDefinition,
-            ModelRunner runner,
-            string? apiKey,
-            int batchSize,
-            int overlap,
-            int batchConcurrency,
-            CancellationToken token)
+        private async Task<CandidateSubgraph> ClassifyInBatchesAsync(StageContext context, ClassificationSetup setup, int batchSize, int overlap, int batchConcurrency, CancellationToken token)
         {
             List<ExtractedCell> cells = context.Cells;
-            string subjectName = context.SubjectName;
             List<int> starts = new List<int>();
             for (int start = 0; start < cells.Count; start += batchSize) starts.Add(start);
             context.Job.Completeness.ClassificationBatches = starts.Count;
@@ -166,7 +199,7 @@ namespace Pneuma.Core.Ingestion.Stages
                         try
                         {
                             List<ExtractedCell> window = cells.GetRange(windowStart, windowEnd - windowStart);
-                            parts[batchIndex] = await _Deps.Classifier.ClassifyAsync(window, systemPrompt, ontologyDefinition, runner, apiKey, subjectName, token).ConfigureAwait(false);
+                            parts[batchIndex] = await ClassifyAsync(context, setup, window, windowStart, windowEnd, token).ConfigureAwait(false);
                         }
                         catch (OperationCanceledException)
                         {
@@ -217,53 +250,6 @@ namespace Pneuma.Core.Ingestion.Stages
                 }
             }
             return merged;
-        }
-
-        private async Task<ModelRunner?> ResolveCompletionEndpointAsync(IngestionJob job, CancellationToken token)
-        {
-            if (!String.IsNullOrWhiteSpace(job.CompletionEndpointId))
-            {
-                ModelRunner? byId = await _Deps.Db.ModelRunners.ReadAsync(job.CompletionEndpointId!, token).ConfigureAwait(false);
-                if (byId != null && byId.Active) return byId;
-            }
-
-            List<ModelRunner> runners = await _Deps.Db.ModelRunners.EnumerateAsync(job.TenantId, token).ConfigureAwait(false);
-            foreach (ModelRunner runner in runners)
-            {
-                if (!runner.Active) continue;
-                if (runner.Capabilities.Contains(ModelCapabilityEnum.Completion)) return runner;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Build the prompt-provenance summary so a run is reproducible: which prompt version and exact content
-        /// (by hash) shaped this candidate plan. If a prompt is later edited its hash changes, and a past job's
-        /// provenance still shows what it actually used.
-        /// </summary>
-        private async Task<string> BuildPromptProvenanceAsync(IngestionJob job, CancellationToken token)
-        {
-            string[] keys = { "ontology.classify", "ontology.definition", "cell.summarize" };
-            List<string> parts = new List<string>();
-            foreach (string key in keys)
-            {
-                Prompt? prompt = await _Deps.Db.Prompts.ReadByKeyAsync(job.TenantId, key, token).ConfigureAwait(false);
-                string hash = String.IsNullOrEmpty(prompt?.Content) ? "(none)" : ShortHash(prompt!.Content!);
-                int version = prompt?.Version ?? 0;
-                parts.Add(key + " v" + version + "@" + hash);
-            }
-            return String.Join(", ", parts);
-        }
-
-        private static string ShortHash(string content)
-        {
-            using (SHA256 sha = SHA256.Create())
-            {
-                byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < 4 && i < bytes.Length; i++) builder.Append(bytes[i].ToString("x2"));
-                return builder.ToString();
-            }
         }
 
         #endregion

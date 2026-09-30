@@ -158,5 +158,14 @@
     "Enabled": true,
     "IntervalSeconds": 60,
     "BatchSize": 50
+  },
+  "Ontology": {
+    "WorkerEnabled": true,
+    "WorkerPollIntervalMs": 2000,
+    "MaxGraphNodes": 100000,
+    "MaxViolationsPerJob": 500,
+    "MaxProposalSampleCells": 50,
+    "MaxDriftSampleSize": 25,
+    "CacheRetentionDays": 90
   }
 }

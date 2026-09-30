@@ -1,0 +1,20 @@
+/* Ontology editors: compact editable tables inside modals. */
+.onto-edit-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.onto-edit-table th { text-align: left; font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-text-secondary); padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--color-border); }
+.onto-edit-table td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.onto-edit-table input, .onto-edit-table select { width: 100%; min-width: 6rem; }
+.onto-edit-table td.onto-narrow { width: 1%; white-space: nowrap; }
+.onto-edit-table td.onto-narrow input { min-width: 0; width: auto; }
+.onto-scroll { overflow-x: auto; max-height: 26rem; overflow-y: auto; }
+.onto-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+.onto-toolbar .onto-spacer { flex: 1; }
+.onto-problems { background: var(--color-surface-alt); border: 1px solid var(--color-border); border-left: 3px solid var(--color-warning, #d97706); border-radius: var(--radius-md); padding: 0.5rem 0.75rem; margin: 0.5rem 0; font-size: var(--font-size-sm); }
+.onto-problems ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+.onto-counts { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.onto-diff h4 { margin: 0.75rem 0 0.25rem; font-size: var(--font-size-sm); }
+.onto-diff ul { margin: 0 0 0 1rem; padding: 0; font-size: var(--font-size-sm); }
+.onto-pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: var(--font-size-xs); background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.6rem; max-height: 22rem; overflow: auto; }
+.onto-section { margin-top: 1rem; }
+.onto-section > h3 { font-size: var(--font-size-md, 1rem); margin: 0 0 0.4rem; }
+.onto-error { white-space: pre-wrap; }
+@media (max-width: 480px) { .onto-edit-table input, .onto-edit-table select { min-width: 5rem; } }

@@ -7,6 +7,7 @@ import ResourceView from '../components/ResourceView';
 import FacetFilterEditor from '../components/FacetFilterEditor';
 import ConcurrencyOverridesEditor from '../components/ConcurrencyOverridesEditor';
 import StatusPill from '../components/StatusPill';
+import SubjectOntologyModal from '../components/ontology/SubjectOntologyModal';
 import { formatDateTime } from '../i18n/formatters';
 
 // { value, label } options from an ingestion-endpoint entry.
@@ -60,6 +61,7 @@ function SubjectsView() {
   const [completionOptions, setCompletionOptions] = useState([]);
   const [collectionOptions, setCollectionOptions] = useState([]);
   const [ingestionDefaults, setIngestionDefaults] = useState(null);
+  const [ontologySubject, setOntologySubject] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +137,10 @@ function SubjectsView() {
       { value: 'Title', label: 'Title only' },
       { value: 'None', label: 'None' }
     ], tip: 'Context embedded in front of each chunk so a passage cut from the middle of a document still says what it is about: the document title, plus the section headings above it. The stored and returned text is unchanged. Applies to new ingestions; re-ingest existing links to apply it to them.' },
+    // Classification reproducibility (ontology governance): subject-scoped because the same tenant can hold both
+    // exploratory and audited subjects. The pinned ontology version is set from the subject's Ontology action.
+    { name: 'classificationTemperature', label: t('subjects.classificationTemperature'), type: 'number', default: 0, min: 0, max: 2, step: 0.1, tip: t('subjects.classificationTemperatureTip') },
+    { name: 'classificationCacheEnabled', label: t('subjects.classificationCache'), type: 'checkbox', default: true, tip: t('subjects.classificationCacheTip') },
     // Full-width prompts
     { name: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 4, fullWidth: true, default: DEFAULT_SYSTEM_PROMPT, tip: 'Appended after the global system prompt for every chat about this subject (global base + subject appended). A sensible default is supplied; edit or clear it to taste.' },
     { name: 'rerankingPrompt', label: 'Reranking Prompt', type: 'textarea', rows: 3, fullWidth: true, default: DEFAULT_RERANKING_PROMPT, tip: 'Used only when a reranking model is set. Appended after the global reranking prompt to guide how passages are ordered by relevance.' },
@@ -149,6 +155,7 @@ function SubjectsView() {
     { name: 'tagline', label: 'Ask-Page Tagline', type: 'textarea', rows: 2, fullWidth: true, default: DEFAULT_TAGLINE, tip: "The subtitle shown beneath this subject's name on its ask page in the user dashboard (under the search box before asking, and under the chat header after). A sensible default is supplied; edit it to set the tone for this subject." }
   ];
   return (
+    <>
     <ResourceView
       resourceKey="subjects"
       singular="subject"
@@ -166,9 +173,12 @@ function SubjectsView() {
       }}
       postDeleteNotice={t('subjects.deletingBackground', 'We are deleting this subject and everything associated with it in the background. You may close this window.')}
       extraActions={[
-        { key: 'viewLinks', label: t('subjects.viewLinks'), onClick: (item) => navigate(`/dashboard/links?subjectId=${encodeURIComponent(item.id)}`) }
+        { key: 'viewLinks', label: t('subjects.viewLinks'), onClick: (item) => navigate(`/dashboard/links?subjectId=${encodeURIComponent(item.id)}`) },
+        { key: 'ontology', label: t('subjects.ontology'), tip: t('subjects.ontologyTip'), onClick: (item) => setOntologySubject(item) }
       ]}
     />
+    {ontologySubject && <SubjectOntologyModal subject={ontologySubject} onClose={() => setOntologySubject(null)} />}
+    </>
   );
 }
 

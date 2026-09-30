@@ -101,6 +101,11 @@ namespace Pneuma.Core.Integrations.Abstractions
         /// <returns>The community assignments.</returns>
         Task<CommunityDetectionResult> DetectCommunitiesAsync(bool writeBack, int maxIterations, CancellationToken token = default);
 
+        /// <summary>Delete a single edge by identifier. Best-effort; a missing edge is not an error.</summary>
+        /// <param name="edgeId">Edge identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task DeleteEdgeAsync(string edgeId, CancellationToken token = default);
+
         /// <summary>Delete a single node (and its attached edges) by identifier. Best-effort; a missing node is not an error.</summary>
         /// <param name="nodeId">Node identifier.</param>
         /// <param name="token">Cancellation token.</param>

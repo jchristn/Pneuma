@@ -271,6 +271,7 @@ namespace Pneuma.Core.Database.Mysql.Queries
                     "ALTER TABLE ingestionjobs ADD COLUMN triggeredby VARCHAR(256) NOT NULL DEFAULT 'Submit';",
                     "CREATE INDEX idx_subjectlinks_nextrefresh ON subjectlinks (nextrefreshutc);"
                 }));
+                list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", MysqlOntologySchema.Migration35()));
                 return list;
             }
         }

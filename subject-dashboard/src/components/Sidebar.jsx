@@ -28,6 +28,11 @@ function Sidebar() {
           id: 'subjects',
           label: t('nav.subjects'),
           icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 12 0v1" /></>)
+        },
+        {
+          id: 'ontologies',
+          label: t('nav.ontologies'),
+          icon: icon(<><circle cx="12" cy="5" r="2" /><circle cx="5" cy="19" r="2" /><circle cx="19" cy="19" r="2" /><path d="M12 7v4" /><path d="M12 11 6.5 17.5" /><path d="M12 11l5.5 6.5" /></>)
         }
       ]
     },

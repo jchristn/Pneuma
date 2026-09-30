@@ -15,5 +15,8 @@ namespace Pneuma.Sdk.Responses
 
         /// <summary>Optional additional context.</summary>
         public string? Context { get; set; } = null;
+
+        /// <summary>Individual problems behind the error (for example each validation failure), or null.</summary>
+        public System.Collections.Generic.List<string>? Problems { get; set; } = null;
     }
 }

@@ -283,6 +283,7 @@ namespace Pneuma.Core.Database.Sqlite.Queries
                     "ALTER TABLE ingestionjobs ADD COLUMN triggeredby TEXT NOT NULL DEFAULT 'Submit';",
                     "CREATE INDEX IF NOT EXISTS idx_subjectlinks_nextrefresh ON subjectlinks (nextrefreshutc);"
                 }));
+                list.Add(new SchemaMigration(35, "Add ontology governance: ontologies, versions, types, rules, taxonomy concepts, violations, operations, classification cache, subject pinned version and classification settings, and job counters", SqliteOntologySchema.Migration35()));
                 return list;
             }
         }

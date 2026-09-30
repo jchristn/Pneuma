@@ -79,6 +79,15 @@ namespace Pneuma.Server.Mcp
                 case "pneuma_enumerate_crawl_operations":
                 case "pneuma_get_crawl_operation":
                     return await authz.AuthorizeAsync(rc, ResourceTypeEnum.CrawlOperation, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_enumerate_ontologies":
+                case "pneuma_get_ontology_version":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Ontology, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_get_subject_ontology":
+                case "pneuma_enumerate_ontology_violations":
+                case "pneuma_get_ontology_operation":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Read, null, token).ConfigureAwait(false);
+                case "pneuma_start_ontology_operation":
+                    return await authz.AuthorizeAsync(rc, ResourceTypeEnum.Subject, OperationTypeEnum.Update, null, token).ConfigureAwait(false);
                 case "pneuma_create_eval_fact":
                 case "pneuma_start_eval_run":
                 case "pneuma_cancel_eval_run":

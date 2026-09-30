@@ -153,6 +153,29 @@ namespace Pneuma.Core.Models
         /// </summary>
         public ChunkHeaderModeEnum ChunkHeaders { get; set; } = ChunkHeaderModeEnum.TitleAndHeadings;
 
+        /// <summary>
+        /// The approved ontology version this subject classifies against, or null to use the <c>ontology.definition</c>
+        /// prompt chain. Set through <c>PUT /v1.0/subjects/{id}/ontology</c> (which checks the version is approved and
+        /// audits the change); the subject create and update routes ignore it.
+        /// </summary>
+        public string? OntologyVersionId { get; set; } = null;
+
+        /// <summary>
+        /// Model temperature for this subject's ontology classification calls. 0 (the default) makes the same input give
+        /// the same answer as often as the model allows. Clamped to [0, 2].
+        /// </summary>
+        public double ClassificationTemperature
+        {
+            get { return _ClassificationTemperature; }
+            set { _ClassificationTemperature = Math.Clamp(value, 0.0, 2.0); }
+        }
+
+        /// <summary>
+        /// Reuse a stored classification result when a request is identical (same cells, prompts, ontology, model, and
+        /// temperature), so re-ingesting unchanged content gives the same graph without a model call. Default true.
+        /// </summary>
+        public bool ClassificationCacheEnabled { get; set; } = true;
+
         /// <summary>Default <see cref="RerankingPrompt"/>, applied at creation when none is supplied.</summary>
         public const string DefaultRerankingPrompt = "Rank the candidate passages by how well they help answer the question. Consider only relevance, not length or writing style.";
 
@@ -263,6 +286,7 @@ namespace Pneuma.Core.Models
         private int _HistoryRetentionDays = 90;
         private int _ChunkMaxTokens = 256;
         private int _ChunkOverlapTokens = 32;
+        private double _ClassificationTemperature = 0.0;
 
         #endregion
     }

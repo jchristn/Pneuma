@@ -8,6 +8,7 @@ namespace Pneuma.Core.Ingestion.Stages
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Security;
     using Pneuma.Core.Storage;
     using SyslogLogging;
@@ -70,6 +71,22 @@ namespace Pneuma.Core.Ingestion.Stages
         /// </summary>
         public ContentResolver Resolver { get; }
 
+        /// <summary>Reuses classification results for identical requests (tenant-scoped; results in the blob store).</summary>
+        public ClassificationCache ClassificationCache { get; }
+
+        /// <summary>Ontology limits (violations kept per job). Defaults when the host does not set them.</summary>
+        public OntologySettings Ontology
+        {
+            get { return _Ontology; }
+            set { _Ontology = value ?? new OntologySettings(); }
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private OntologySettings _Ontology = new OntologySettings();
+
         #endregion
 
         #region Constructors-and-Factories
@@ -119,6 +136,7 @@ namespace Pneuma.Core.Ingestion.Stages
             Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             Classifier = new PolyPromptClassifier(logging);
             Resolver = new ContentResolver(fetcher, blobs);
+            ClassificationCache = new ClassificationCache(db, blobs);
         }
 
         #endregion

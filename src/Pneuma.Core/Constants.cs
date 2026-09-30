@@ -106,6 +106,21 @@ namespace Pneuma.Core
         /// <summary>Crawl operation object identifier prefix (one object's outcome within one operation).</summary>
         public const string CrawlOperationObjectPrefix = "coo_";
 
+        /// <summary>Ontology identifier prefix (a tenant's governed ontology).</summary>
+        public const string OntologyPrefix = "ont_";
+
+        /// <summary>Ontology version identifier prefix.</summary>
+        public const string OntologyVersionPrefix = "onv_";
+
+        /// <summary>Ontology rule identifier prefix.</summary>
+        public const string OntologyRulePrefix = "orl_";
+
+        /// <summary>Ontology violation identifier prefix (one rule violation found in a subject's content).</summary>
+        public const string OntologyViolationPrefix = "ovl_";
+
+        /// <summary>Ontology operation identifier prefix (a background validate, retag, or drift check run).</summary>
+        public const string OntologyOperationPrefix = "oop_";
+
         #endregion
 
         #region General

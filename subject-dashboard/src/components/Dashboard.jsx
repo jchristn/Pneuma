@@ -16,6 +16,7 @@ import FeedbackView from '../views/FeedbackView';
 import ApiExplorerView from '../views/ApiExplorerView';
 import SettingsView from '../views/SettingsView';
 import CrawlersView from '../views/CrawlersView';
+import OntologiesView from '../views/OntologiesView';
 import NotFound from './NotFound';
 import './Dashboard.css';
 
@@ -28,6 +29,8 @@ function Dashboard() {
         return <HomeView />;
       case 'subjects':
         return <SubjectsView />;
+      case 'ontologies':
+        return <OntologiesView />;
       case 'links':
         return <LinksView />;
       case 'ingestion':

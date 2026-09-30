@@ -25,7 +25,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
             subject.LastUpdateUtc = subject.CreatedUtc;
 
             string sql =
-                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, chunkheaders, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, concurrencyoverridesjson, isprotected, defaultrefreshintervalminutes, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjects (id, tenantid, displayname, type, description, tagline, graphrootnodeid, urlslug, thinkingenabled, systemprompt, ontologyclassifyprompt, ontologydefinitionprompt, embeddingmodel, inferencemodel, rerankingmodel, rerankertype, promptrewritemodel, collection, chunkstrategy, chunkmaxtokens, chunkoverlaptokens, chunkheaders, rerankingprompt, promptrewriteprompt, retrievalfilterjson, historyretentiondays, deletionstatus, active, publishedforchat, concurrencyoverridesjson, isprotected, defaultrefreshintervalminutes, ontologyversionid, classificationtemperature, classificationcacheenabled, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(subject.Id) + ", " + Sanitizer.Str(subject.TenantId) + ", " +
                 Sanitizer.Str(subject.DisplayName) + ", " + Sanitizer.Str(subject.Type) + ", " +
                 Sanitizer.Str(subject.Description) + ", " + Sanitizer.Str(subject.Tagline) + ", " + Sanitizer.Str(subject.GraphRootNodeId) + ", " +
@@ -35,7 +35,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 Sanitizer.Str(subject.EmbeddingModel) + ", " + Sanitizer.Str(subject.InferenceModel) + ", " + Sanitizer.Str(subject.RerankingModel) + ", " + Sanitizer.Str(subject.RerankerType.ToString()) + ", " + Sanitizer.Str(subject.PromptRewriteModel) + ", " + Sanitizer.Str(subject.Collection) + ", " + Sanitizer.Str(subject.ChunkStrategy) + ", " + Sanitizer.Num(subject.ChunkMaxTokens) + ", " + Sanitizer.Num(subject.ChunkOverlapTokens) + ", " + Sanitizer.Str(subject.ChunkHeaders.ToString()) + ", " + Sanitizer.Str(subject.RerankingPrompt) + ", " + Sanitizer.Str(subject.PromptRewritePrompt) + ", " + Sanitizer.Str(subject.RetrievalFilterJson) + ", " +
                 Sanitizer.Num(subject.HistoryRetentionDays) + ", " +
                 Sanitizer.Str(subject.DeletionStatus.ToString()) + ", " +
-                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Str(subject.ConcurrencyOverridesJson) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " + Sanitizer.Num(subject.DefaultRefreshIntervalMinutes) + ", " +
+                Sanitizer.Bit(subject.Active) + ", " + Sanitizer.Bit(subject.PublishedForChat) + ", " + Sanitizer.Str(subject.ConcurrencyOverridesJson) + ", " + Sanitizer.Bit(subject.IsProtected) + ", " + Sanitizer.Num(subject.DefaultRefreshIntervalMinutes) + ", " + Sanitizer.Str(subject.OntologyVersionId) + ", " + Sanitizer.Num(subject.ClassificationTemperature) + ", " + Sanitizer.Bit(subject.ClassificationCacheEnabled) + ", " +
                 Sanitizer.Ts(subject.CreatedUtc) + ", " + Sanitizer.Ts(subject.LastUpdateUtc) + ");";
             await Query(sql, token).ConfigureAwait(false);
             return subject;
@@ -130,6 +130,9 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 ", chunkoverlaptokens = " + Sanitizer.Num(subject.ChunkOverlapTokens) +
                 ", chunkheaders = " + Sanitizer.Str(subject.ChunkHeaders.ToString()) +
                 ", defaultrefreshintervalminutes = " + Sanitizer.Num(subject.DefaultRefreshIntervalMinutes) +
+                ", ontologyversionid = " + Sanitizer.Str(subject.OntologyVersionId) +
+                ", classificationtemperature = " + Sanitizer.Num(subject.ClassificationTemperature) +
+                ", classificationcacheenabled = " + Sanitizer.Bit(subject.ClassificationCacheEnabled) +
                 ", rerankingprompt = " + Sanitizer.Str(subject.RerankingPrompt) +
                 ", promptrewriteprompt = " + Sanitizer.Str(subject.PromptRewritePrompt) +
                 ", retrievalfilterjson = " + Sanitizer.Str(subject.RetrievalFilterJson) +
@@ -158,6 +161,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
 
             List<string> statements = new List<string>();
             statements.AddRange(CrawlPlanMethods.DeleteBySubjectSql(tenantId, subjectId));
+            statements.AddRange(OntologyMethods.DeleteBySubjectSql(tenantId, subjectId));
             if (jobIds != null)
             {
                 foreach (string jobId in jobIds)
@@ -165,6 +169,7 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                     if (String.IsNullOrEmpty(jobId)) continue;
                     statements.Add(IngestionJobEventMethods.DeleteByJobSql(tenantId, jobId));
                     statements.Add(IngestionJobAttemptMethods.DeleteByJobSql(tenantId, jobId));
+                    statements.Add(OntologyMethods.DeleteViolationsByJobSql(tenantId, jobId));
                     statements.Add(IngestionJobMethods.DeleteByIdSql(tenantId, jobId));
                 }
             }
@@ -219,6 +224,9 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
                 ChunkOverlapTokens = RowReader.GetInt(row, "chunkoverlaptokens"),
                 ChunkHeaders = RowReader.GetEnum<ChunkHeaderModeEnum>(row, "chunkheaders", ChunkHeaderModeEnum.None),
                 DefaultRefreshIntervalMinutes = RowReader.GetInt(row, "defaultrefreshintervalminutes"),
+                OntologyVersionId = RowReader.GetNullableString(row, "ontologyversionid"),
+                ClassificationTemperature = RowReader.GetDouble(row, "classificationtemperature"),
+                ClassificationCacheEnabled = RowReader.GetBool(row, "classificationcacheenabled"),
                 RerankingPrompt = RowReader.GetNullableString(row, "rerankingprompt"),
                 PromptRewritePrompt = RowReader.GetNullableString(row, "promptrewriteprompt"),
                 RetrievalFilterJson = RowReader.GetNullableString(row, "retrievalfilterjson"),

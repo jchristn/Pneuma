@@ -29,6 +29,8 @@ namespace Pneuma.Core.Enums
         /// <summary>A URL was refused by the fetch-safety policy (a disallowed scheme or a private address).</summary>
         FetchBlocked,
         /// <summary>A crawl plan's credentials or security-relevant settings changed.</summary>
-        CrawlPlanSecurityChanged
+        CrawlPlanSecurityChanged,
+        /// <summary>An ontology version was approved or retired, or a subject's pinned ontology version changed.</summary>
+        OntologyGovernance
     }
 }

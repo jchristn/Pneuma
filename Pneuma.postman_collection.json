@@ -64,6 +64,34 @@
     {
       "key": "crawlOperationId",
       "value": ""
+    },
+    {
+      "key": "ontologyId",
+      "value": ""
+    },
+    {
+      "key": "ontologyVersionId",
+      "value": ""
+    },
+    {
+      "key": "ontologyDraftId",
+      "value": ""
+    },
+    {
+      "key": "violationId",
+      "value": ""
+    },
+    {
+      "key": "ontologyOperationId",
+      "value": ""
+    },
+    {
+      "key": "promptId",
+      "value": ""
+    },
+    {
+      "key": "tenantPromptId",
+      "value": ""
     }
   ],
   "auth": {
@@ -331,7 +359,46 @@
           "name": "List Prompts",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/v1.0/prompts"
+            "url": "{{baseUrl}}/v1.0/prompts",
+            "description": "Returns each key once: the tenant's own copy when it has one, otherwise the system default (isSystemDefault true). ?scope=system lists only the system defaults; ?scope=tenant only the tenant's copies. Saves promptId from the first result."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = pm.response.json();",
+                  "if (data.objects && data.objects.length) { pm.collectionVariables.set('promptId', data.objects[0].id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update prompt (tenant copy of a system default)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/prompts/{{promptId}}",
+            "description": "Editing a system default as a tenant user (or with ?scope=tenant) saves the tenant's own copy and leaves the system default unchanged; only a system administrator edits the default itself. The response is the tenant copy (isSystemDefault false).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Your tenant's version of the prompt.\",\n  \"active\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Reset prompt (delete the tenant copy)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/prompts/{{tenantPromptId}}",
+            "description": "Delete a tenant copy so the tenant uses the system default again. Deleting a system default is refused with 400 (protected)."
           }
         }
       ]
@@ -1472,6 +1539,568 @@
         }
       ],
       "description": "Runs of crawl plans: counts, per-object results, and confirmation of held deletions."
+    },
+    {
+      "name": "Ontologies",
+      "description": "Tenant ontologies and their versions (draft, approve, retire), subject pinning, rule violations and their review, background operations, taxonomy import, and graph and ontology export. See ONTOLOGY.md.",
+      "item": [
+        {
+          "name": "List ontology templates",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-templates",
+            "description": "The built-in templates (system scope, read-only) a tenant can create an ontology from."
+          }
+        },
+        {
+          "name": "Create ontology from template",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontologies",
+            "description": "Create a tenant ontology whose first version is a draft copied from the Default template. Needs Ontology Write. 409 when the name is taken. Saves ontologyId and ontologyVersionId.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Products\",\n  \"description\": \"Our product catalog.\",\n  \"template\": \"Default\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "var data = pm.response.json();",
+                  "pm.collectionVariables.set('ontologyId', data.ontology.id);",
+                  "pm.collectionVariables.set('ontologyVersionId', data.versions[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create ontology (negative: unknown template)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontologies",
+            "description": "Refused with 400: the template does not exist.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Broken\",\n  \"template\": \"Nope\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', function () { pm.response.to.have.status(400); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ontologies",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontologies",
+            "description": "The tenant's ontologies, paged."
+          }
+        },
+        {
+          "name": "Get ontology",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}",
+            "description": "The ontology with its versions (headers with counts) and the subjects that pin them."
+          }
+        },
+        {
+          "name": "Update ontology",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}",
+            "description": "Rename or re-describe.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Products\",\n  \"description\": \"Catalog and pricing.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List ontology versions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}/versions",
+            "description": "Newest first."
+          }
+        },
+        {
+          "name": "Get ontology version",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}",
+            "description": "Node types, edge types, rules, taxonomy concepts, and (for a draft) the problems that block approval."
+          }
+        },
+        {
+          "name": "Update draft version",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}",
+            "description": "Replace a draft's contents. Keep rule ids you want violations to stay linked to. 409 for an approved or retired version; 400 (with problems) for duplicate names or bad lengths. Problems that only block approval are returned in problems.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guidance\": \"Prefer Organization for named teams.\",\n  \"undeclaredTypeAction\": \"Quarantine\",\n  \"nodeTypes\": [\n    {\n      \"name\": \"Person\",\n      \"description\": \"A named individual.\"\n    },\n    {\n      \"name\": \"Organization\",\n      \"description\": \"A company or team.\"\n    },\n    {\n      \"name\": \"Product\",\n      \"description\": \"Something sold.\"\n    },\n    {\n      \"name\": \"Topic\",\n      \"description\": \"A theme.\"\n    }\n  ],\n  \"edgeTypes\": [\n    {\n      \"name\": \"WORKS_FOR\",\n      \"description\": \"Employment.\"\n    },\n    {\n      \"name\": \"MAKES\",\n      \"description\": \"An organization makes a product.\"\n    },\n    {\n      \"name\": \"ABOUT\",\n      \"description\": \"Subject matter.\"\n    }\n  ],\n  \"rules\": [\n    {\n      \"ruleType\": \"EdgeEndpoints\",\n      \"edgeType\": \"WORKS_FOR\",\n      \"fromNodeType\": \"Person\",\n      \"toNodeType\": \"Organization\",\n      \"action\": \"Reverse\"\n    },\n    {\n      \"ruleType\": \"EdgeEndpoints\",\n      \"edgeType\": \"MAKES\",\n      \"fromNodeType\": \"Organization\",\n      \"toNodeType\": \"Product\",\n      \"action\": \"Drop\"\n    },\n    {\n      \"ruleType\": \"RequiredField\",\n      \"nodeType\": \"Product\",\n      \"field\": \"Content\",\n      \"action\": \"Warn\"\n    },\n    {\n      \"ruleType\": \"MinConfidence\",\n      \"edgeType\": \"MAKES\",\n      \"minConfidence\": 0.6,\n      \"action\": \"Quarantine\"\n    }\n  ],\n  \"concepts\": [\n    {\n      \"key\": \"k8s\",\n      \"prefLabel\": \"Kubernetes\",\n      \"altLabels\": [\n        \"k8s\"\n      ],\n      \"nodeType\": \"Topic\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update draft version (negative: duplicate names)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}",
+            "description": "Refused with 400 and a problems list: names are compared without case, spaces, or punctuation.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nodeTypes\": [\n    {\n      \"name\": \"Person\"\n    },\n    {\n      \"name\": \"PERSON\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', function () { pm.response.to.have.status(400); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get rendered definition",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/definition",
+            "description": "The exact ontology text the classifier sees for this version."
+          }
+        },
+        {
+          "name": "Import SKOS taxonomy (Turtle)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/taxonomy/import?format=turtle&mode=merge",
+            "description": "Import skos:Concept resources into a draft. The body is the raw document. mode=replace removes the existing concepts first. Remote JSON-LD contexts are never fetched.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/turtle"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n<http://example.org/c/databases> a skos:Concept ; skos:prefLabel \"Databases\"@en ; skos:altLabel \"DBMS\" .\n<http://example.org/c/postgres> a skos:Concept ; skos:prefLabel \"PostgreSQL\" ; skos:altLabel \"Postgres\" ; skos:broader <http://example.org/c/databases> .\n"
+            }
+          }
+        },
+        {
+          "name": "Import SKOS taxonomy (negative: bad format)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/taxonomy/import?format=xml",
+            "description": "Refused with 400: use turtle or jsonld.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/turtle"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n<http://example.org/c/databases> a skos:Concept ; skos:prefLabel \"Databases\"@en ; skos:altLabel \"DBMS\" .\n<http://example.org/c/postgres> a skos:Concept ; skos:prefLabel \"PostgreSQL\" ; skos:altLabel \"Postgres\" ; skos:broader <http://example.org/c/databases> .\n"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', function () { pm.response.to.have.status(400); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve version",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/approve",
+            "description": "Approve a draft so subjects can pin it. Needs Ontology Execute (the Editor role does not have it); audited. 400 with problems when the draft is not approvable, 409 when it is not a draft.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"changeSummary\": \"First release.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve version (negative: already approved)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/approve",
+            "description": "Refused with 409: only a draft can be approved."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 409', function () { pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start a new draft",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}/versions",
+            "description": "A new draft copying a version (default: the newest). Saves ontologyDraftId.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basedOnVersionId\": \"{{ontologyVersionId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "var data = pm.response.json();",
+                  "if (data.id) { pm.collectionVariables.set('ontologyDraftId', data.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Diff versions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyDraftId}}/diff?against={{ontologyVersionId}}",
+            "description": "Added, removed, and changed types, rules, and concepts."
+          }
+        },
+        {
+          "name": "Propose a draft (authoring assistant)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}/propose",
+            "description": "Sample the subject's cells and have its inference model propose types and endpoints (ontology.propose and ontology.propose.format prompts). Extends basedOnVersionId. 201 with the new draft; 502 when the model's reply is unusable.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"sampleCells\": 20,\n  \"instructions\": \"Focus on products and the teams that build them.\",\n  \"language\": \"English\",\n  \"basedOnVersionId\": \"{{ontologyVersionId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Export version (OWL and SKOS, Turtle)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/export?format=turtle",
+            "description": "owl:Class per node type, owl:ObjectProperty per edge type, skos:Concept per concept. Optional baseIri."
+          }
+        },
+        {
+          "name": "Delete draft version",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyDraftId}}",
+            "description": "Delete a draft (409 for an approved or retired version)."
+          }
+        },
+        {
+          "name": "Pin subject to version",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology",
+            "description": "Pin an approved version (needs Subject Update and Ontology Read; audited). Queues a retag when the taxonomy changes and retag is true. 400 for a draft or retired version.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ontologyVersionId\": \"{{ontologyVersionId}}\",\n  \"retag\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Get subject ontology",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology",
+            "description": "Source (Version or Prompt), the effective definition, classification settings, cache entries, and quarantined count."
+          }
+        },
+        {
+          "name": "List ontology violations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology-violations?status=Quarantined",
+            "description": "Filter by status, jobId, or operationId. Saves violationId from the first result."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = pm.response.json();",
+                  "if (data.objects && data.objects.length) { pm.collectionVariables.set('violationId', data.objects[0].id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Release quarantined element",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-violations/{{violationId}}/release",
+            "description": "Merge a quarantined node (or link a quarantined relationship's endpoints). 409 when it is not quarantined or an endpoint is missing."
+          }
+        },
+        {
+          "name": "Dismiss quarantined element",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-violations/{{violationId}}/dismiss",
+            "description": "It stays out of the graph."
+          }
+        },
+        {
+          "name": "Start validation",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology-operations",
+            "description": "Check the stored graph against the pinned version's rules (202). Saves ontologyOperationId. 409 when one is already queued or running.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"Validate\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 202', function () { pm.response.to.have.status(202); });",
+                  "var data = pm.response.json();",
+                  "if (data.id) { pm.collectionVariables.set('ontologyOperationId', data.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start drift check",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology-operations",
+            "description": "Classify sampleSize cells twice, bypassing the cache, and report the drift rate (two model calls per cell).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"DriftCheck\",\n  \"sampleSize\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Start operation (negative: sample too large)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology-operations",
+            "description": "Refused with 400: sampleSize is capped by Ontology.MaxDriftSampleSize.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"DriftCheck\",\n  \"sampleSize\": 100000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', function () { pm.response.to.have.status(400); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ontology operations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology-operations",
+            "description": "Newest first."
+          }
+        },
+        {
+          "name": "Get ontology operation",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ontology-operations/{{ontologyOperationId}}",
+            "description": "Status, progress, findings, and items."
+          }
+        },
+        {
+          "name": "Export subject graph (GraphML)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/graph/export?format=graphml",
+            "description": "Also json, jsonld, and turtle (with an optional baseIri). X-Pneuma-Truncated is set when Ontology.MaxGraphNodes was reached."
+          }
+        },
+        {
+          "name": "Export subject graph (negative: bad format)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/graph/export?format=pdf",
+            "description": "Refused with 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', function () { pm.response.to.have.status(400); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clear subject classification cache",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/classification-cache",
+            "description": "Remove the cache entries the subject stored so its next ingests call the model."
+          }
+        },
+        {
+          "name": "Unpin subject",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/ontology",
+            "description": "Unpin: the subject goes back to the ontology.definition prompt chain.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ontologyVersionId\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Retire version",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/ontology-versions/{{ontologyVersionId}}/retire",
+            "description": "Needs Ontology Execute; audited. 409 while a subject pins the version."
+          }
+        },
+        {
+          "name": "Delete ontology",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/ontologies/{{ontologyId}}",
+            "description": "Delete the ontology and all its versions. 409 while a subject pins one of its versions."
+          }
+        }
+      ]
     }
   ]
 }

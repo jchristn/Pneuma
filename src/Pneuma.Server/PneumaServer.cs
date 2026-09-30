@@ -13,7 +13,9 @@ namespace Pneuma.Server
     using Pneuma.Core.Integrations.Abstractions;
     using Pneuma.Core.Integrations.Implementations;
     using Pneuma.Core.Integrations.Interfaces;
+    using Pneuma.Core.Integrations;
     using Pneuma.Core.Observability;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Storage;
     using Pneuma.Server.Mcp;
     using Pneuma.Server.Routes;
@@ -52,6 +54,7 @@ namespace Pneuma.Server
         private readonly Webserver _Server;
         private readonly CancellationTokenSource _Lifetime = new CancellationTokenSource();
         private EvalWorkerService? _EvalWorker;
+        private OntologyOperationWorker? _OntologyWorker;
         private readonly CrawlerFactory _Crawlers = new CrawlerFactory();
         private readonly CrawlPlanService _CrawlPlans;
         private readonly CrawlSyncService _CrawlSync;
@@ -191,6 +194,8 @@ namespace Pneuma.Server
             _Server.Start();
             // Background eval worker: processes queued (Pending) evaluation runs off the request path.
             _EvalWorker?.Start(_Lifetime.Token);
+            // Ontology worker: runs queued validate, retag, and drift-check operations and prunes the classification cache.
+            _OntologyWorker?.Start(_Lifetime.Token);
             // Crawl scheduler: runs due plans, finishes operations whose jobs are done, and recovers interrupted runs.
             _CrawlScheduler.Start(_Lifetime.Token);
             // Scheduled link refresh: conditional checks of due URL links, re-ingesting only what changed.
@@ -263,10 +268,19 @@ namespace Pneuma.Server
             new CommunityRoutes(_Database, _Authorization, communityService).Register(_Server);
             new EvalRoutes(_Database, _Authorization, groundedQuery, _Logging).Register(_Server);
             new FacetRoutes(_Database, _Authorization).Register(_Server);
+            // Ontology governance: tenant ontologies and versions, subject pinning, violations, background operations
+            // (validate, retag, drift check) claimed by the ontology worker, and graph and ontology export.
+            ClassificationCache classificationCache = new ClassificationCache(_Database, _Blobs);
+            OntologyService ontologyService = new OntologyService(_Database);
+            new OntologyRoutes(_Database, _Authorization, ontologyService, new OntologyProposer(_Database, _GraphFactory, _Authentication.Cipher, _Settings.Ontology, _Logging)).Register(_Server);
+            new OntologyVersionRoutes(_Database, _Authorization, ontologyService).Register(_Server);
+            new SubjectOntologyRoutes(_Database, _Authorization, ontologyService, new OntologyViolationReviewer(_Database, _GraphFactory), classificationCache, _GraphFactory, _Settings.Ontology).Register(_Server);
+            OntologyOperationProcessor ontologyProcessor = new OntologyOperationProcessor(_Database, _GraphFactory, _Authentication.Cipher, new PolyPromptClassifier(_Logging), _Settings.Ontology);
+            _OntologyWorker = new OntologyOperationWorker(_Database, ontologyProcessor, classificationCache, _Settings.Ontology, _Logging);
             // The eval worker processes queued runs; its EvalService is gate-aware so background eval yields to
             // interactive query/chat traffic. Started from Start() with the server's lifetime token.
             _EvalWorker = new EvalWorkerService(_Database, new EvalService(_Database, groundedQuery, _Logging, _ModelRunnerGate), _Logging);
-            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency, _Blobs, new McpCrawlTools(_Database, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler), _LinkRefresh).Register(_Server);
+            new McpRoutes(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _ModelRunnerGate, _Logging, _Settings, _ModelHealth, _Concurrency, _Blobs, new McpCrawlTools(_Database, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler), _LinkRefresh, new McpOntologyTools(_Database, classificationCache, _Settings.Ontology)).Register(_Server);
             PneumaToolExecutor toolExecutor = new PneumaToolExecutor(_Database, _Authorization, _Search, _Collections, _Settings.Retrieval.DefaultCollectionId, _GraphFactory, groundedQuery, _Concurrency);
             AgenticChatService agenticChat = new AgenticChatService(_Database, groundedQuery, toolExecutor, _Authentication.Cipher, _Settings.Retrieval.ChatMaxToolIterations, _Logging, _Telemetry);
             new ChatRoutes(_Authorization, agenticChat, _ModelRunnerGate, _Logging).Register(_Server);

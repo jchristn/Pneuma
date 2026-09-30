@@ -884,6 +884,139 @@ class PneumaClient:
         return self._request("DELETE", f"/v1.0/links/{link_id}")
 
     # ------------------------------------------------------------------
+    # Ontologies
+    # ------------------------------------------------------------------
+
+    def list_ontology_templates(self) -> Any:
+        """GET /v1.0/ontology-templates: the built-in templates a tenant can start from."""
+        return self._request("GET", "/v1.0/ontology-templates")
+
+    def list_ontologies(self, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/ontologies: the tenant's ontologies (paginated)."""
+        return self._request("GET", "/v1.0/ontologies", params=self._clean({"maxResults": max_results, "skip": skip}))
+
+    def create_ontology(self, name: str, description: Optional[str] = None, template: Optional[str] = None, copy_from_version_id: Optional[str] = None) -> Any:
+        """POST /v1.0/ontologies: create an ontology whose first version is a draft (empty, from a template, or a copy)."""
+        body = {"name": name, "description": description, "template": template, "copyFromVersionId": copy_from_version_id}
+        return self._request("POST", "/v1.0/ontologies", json_body={k: v for k, v in body.items() if v is not None})
+
+    def get_ontology(self, ontology_id: str) -> Any:
+        """GET /v1.0/ontologies/{id}: the ontology with its versions and the subjects that pin them."""
+        return self._request("GET", f"/v1.0/ontologies/{ontology_id}")
+
+    def update_ontology(self, ontology_id: str, name: Optional[str] = None, description: Optional[str] = None) -> Any:
+        """PUT /v1.0/ontologies/{id}: rename or re-describe."""
+        return self._request("PUT", f"/v1.0/ontologies/{ontology_id}", json_body={"name": name, "description": description})
+
+    def delete_ontology(self, ontology_id: str) -> None:
+        """DELETE /v1.0/ontologies/{id} (refused with 409 while a subject pins one of its versions)."""
+        return self._request("DELETE", f"/v1.0/ontologies/{ontology_id}")
+
+    def list_ontology_versions(self, ontology_id: str, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/ontologies/{id}/versions: newest first."""
+        return self._request("GET", f"/v1.0/ontologies/{ontology_id}/versions", params=self._clean({"maxResults": max_results, "skip": skip}))
+
+    def create_ontology_draft(self, ontology_id: str, based_on_version_id: Optional[str] = None) -> Any:
+        """POST /v1.0/ontologies/{id}/versions: a new draft copying a version (by default the newest)."""
+        return self._request("POST", f"/v1.0/ontologies/{ontology_id}/versions", json_body={"basedOnVersionId": based_on_version_id})
+
+    def propose_ontology(self, ontology_id: str, request: Dict[str, Any]) -> Any:
+        """POST /v1.0/ontologies/{id}/propose: have the inference model propose a new draft.
+
+        ``request`` keys: subjectId, sampleText, modelRunnerId, sampleCells, instructions, language, basedOnVersionId.
+        """
+        return self._request("POST", f"/v1.0/ontologies/{ontology_id}/propose", json_body=request)
+
+    def get_ontology_version(self, version_id: str) -> Any:
+        """GET /v1.0/ontology-versions/{id}: types, rules, concepts, and approval problems."""
+        return self._request("GET", f"/v1.0/ontology-versions/{version_id}")
+
+    def update_ontology_version(self, version_id: str, version: Dict[str, Any]) -> Any:
+        """PUT /v1.0/ontology-versions/{id}: replace a draft's contents."""
+        return self._request("PUT", f"/v1.0/ontology-versions/{version_id}", json_body=version)
+
+    def delete_ontology_version(self, version_id: str) -> None:
+        """DELETE /v1.0/ontology-versions/{id}: delete a draft."""
+        return self._request("DELETE", f"/v1.0/ontology-versions/{version_id}")
+
+    def approve_ontology_version(self, version_id: str, change_summary: Optional[str] = None) -> Any:
+        """POST /v1.0/ontology-versions/{id}/approve (needs Ontology Execute)."""
+        return self._request("POST", f"/v1.0/ontology-versions/{version_id}/approve", json_body={"changeSummary": change_summary})
+
+    def retire_ontology_version(self, version_id: str) -> Any:
+        """POST /v1.0/ontology-versions/{id}/retire (refused while a subject pins it)."""
+        return self._request("POST", f"/v1.0/ontology-versions/{version_id}/retire")
+
+    def diff_ontology_version(self, version_id: str, against: Optional[str] = None) -> Any:
+        """GET /v1.0/ontology-versions/{id}/diff: what changed from ``against`` (default the version it was copied from)."""
+        return self._request("GET", f"/v1.0/ontology-versions/{version_id}/diff", params=self._clean({"against": against}))
+
+    def get_ontology_definition(self, version_id: str) -> Any:
+        """GET /v1.0/ontology-versions/{id}/definition: the text the classifier sees."""
+        return self._request("GET", f"/v1.0/ontology-versions/{version_id}/definition")
+
+    def export_ontology_version(self, version_id: str, fmt: str = "turtle", base_iri: Optional[str] = None) -> Any:
+        """GET /v1.0/ontology-versions/{id}/export: OWL and SKOS as Turtle (text) or JSON-LD (parsed)."""
+        return self._request("GET", f"/v1.0/ontology-versions/{version_id}/export", params=self._clean({"format": fmt, "baseIri": base_iri}))
+
+    def import_taxonomy(self, version_id: str, document: str, fmt: str = "turtle", mode: str = "merge") -> Any:
+        """POST /v1.0/ontology-versions/{id}/taxonomy/import: import a SKOS document into a draft (merge or replace)."""
+        content_type = "application/ld+json" if fmt == "jsonld" else "text/turtle"
+        response = self._session.request(
+            "POST",
+            f"{self.base_url}/v1.0/ontology-versions/{version_id}/taxonomy/import",
+            params={"format": fmt, "mode": mode},
+            data=document.encode("utf-8"),
+            headers=self._headers({"Content-Type": content_type}),
+        )
+        if not (200 <= response.status_code < 300):
+            raise PneumaError(response.status_code, _safe_body(response))
+        return response.json()
+
+    def get_subject_ontology(self, subject_id: str) -> Any:
+        """GET /v1.0/subjects/{id}/ontology: pinned version, effective definition, and classification settings."""
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/ontology")
+
+    def set_subject_ontology(self, subject_id: str, ontology_version_id: Optional[str], retag: bool = True) -> Any:
+        """PUT /v1.0/subjects/{id}/ontology: pin an approved version, or unpin with None."""
+        return self._request("PUT", f"/v1.0/subjects/{subject_id}/ontology", json_body={"ontologyVersionId": ontology_version_id, "retag": retag})
+
+    def list_ontology_violations(self, subject_id: str, status: Optional[str] = None, job_id: Optional[str] = None, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/subjects/{id}/ontology-violations, optionally by status (Recorded, Quarantined, Released, Dismissed)."""
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/ontology-violations", params=self._clean({"status": status, "jobId": job_id, "maxResults": max_results, "skip": skip}))
+
+    def release_ontology_violation(self, violation_id: str) -> Any:
+        """POST /v1.0/ontology-violations/{id}/release: release a quarantined element into the graph."""
+        return self._request("POST", f"/v1.0/ontology-violations/{violation_id}/release")
+
+    def dismiss_ontology_violation(self, violation_id: str) -> Any:
+        """POST /v1.0/ontology-violations/{id}/dismiss."""
+        return self._request("POST", f"/v1.0/ontology-violations/{violation_id}/dismiss")
+
+    def list_ontology_operations(self, subject_id: str, max_results: Optional[int] = None, skip: Optional[int] = None) -> Any:
+        """GET /v1.0/subjects/{id}/ontology-operations."""
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/ontology-operations", params=self._clean({"maxResults": max_results, "skip": skip}))
+
+    def start_ontology_operation(self, subject_id: str, kind: str, sample_size: Optional[int] = None) -> Any:
+        """POST /v1.0/subjects/{id}/ontology-operations: queue Validate, Retag, or DriftCheck."""
+        body: Dict[str, Any] = {"kind": kind}
+        if sample_size is not None:
+            body["sampleSize"] = sample_size
+        return self._request("POST", f"/v1.0/subjects/{subject_id}/ontology-operations", json_body=body)
+
+    def get_ontology_operation(self, operation_id: str) -> Any:
+        """GET /v1.0/ontology-operations/{id}: the operation and its items."""
+        return self._request("GET", f"/v1.0/ontology-operations/{operation_id}")
+
+    def export_subject_graph(self, subject_id: str, fmt: str = "json", base_iri: Optional[str] = None) -> Any:
+        """GET /v1.0/subjects/{id}/graph/export: json or jsonld (parsed), turtle or graphml (text)."""
+        return self._request("GET", f"/v1.0/subjects/{subject_id}/graph/export", params=self._clean({"format": fmt, "baseIri": base_iri}))
+
+    def clear_classification_cache(self, subject_id: str) -> Any:
+        """DELETE /v1.0/subjects/{id}/classification-cache: remove the cache entries the subject stored."""
+        return self._request("DELETE", f"/v1.0/subjects/{subject_id}/classification-cache")
+
+    # ------------------------------------------------------------------
     # Jobs
     # ------------------------------------------------------------------
 

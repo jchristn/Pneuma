@@ -54,10 +54,12 @@ namespace Pneuma.Server.Routes
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         /// <param name="crawl">Crawl plan tools; null disables them.</param>
         /// <param name="linkRefresh">Link refresh service for "refresh now"; null checks nothing.</param>
-        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency, IBlobStore? blobs = null, McpCrawlTools? crawl = null, Pneuma.Core.Ingestion.Refresh.LinkRefreshService? linkRefresh = null)
+        /// <param name="ontology">Ontology governance tools; null disables them.</param>
+        public McpRoutes(DatabaseDriverBase db, AuthorizationService authz, IInvertedIndex search, ICollectionStore collections, string? defaultCollectionId, IGraphRepositoryFactory graphFactory, GroundedQueryService query, ModelRunnerGate gate, LoggingModule logging, AppSettings settings, ModelHealthMonitor health, ConcurrencyManager concurrency, IBlobStore? blobs = null, McpCrawlTools? crawl = null, Pneuma.Core.Ingestion.Refresh.LinkRefreshService? linkRefresh = null, McpOntologyTools? ontology = null)
         {
             _Invoker = new McpToolInvoker(db, authz, search, collections, defaultCollectionId, graphFactory, query, gate, logging, settings, health, concurrency, blobs);
             _Invoker.Crawl = crawl;
+            _Invoker.Ontology = ontology;
             _Invoker.LinkRefresh = linkRefresh;
         }
 

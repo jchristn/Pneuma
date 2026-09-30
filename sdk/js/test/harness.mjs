@@ -132,6 +132,22 @@ async function main() {
         assert(link && typeof link === 'object', 'submitLink should return an object');
     });
 
+    await step('ontology lifecycle (draft, approve, pin, unpin, retire)', async () => {
+        assert(createdSubjectId, 'need a subject id to pin an ontology');
+        const created = await client.createOntology({ name: `SDK Harness Ontology ${Date.now()}`, template: 'Default' });
+        const versionId = created.versions[0].id;
+        assert(created.versions[0].status === 'Draft', 'the first version should be a draft');
+        const definition = await client.getOntologyDefinition(versionId);
+        assert(definition.definition.includes('Node types:'), 'the definition should list node types');
+        await client.approveOntologyVersion(versionId, 'Harness approval');
+        const view = await client.setSubjectOntology(createdSubjectId, versionId);
+        assert(view.source === 'Version', 'the pinned version should be used');
+        await client.setSubjectOntology(createdSubjectId, null);
+        const retired = await client.retireOntologyVersion(versionId);
+        assert(retired.status === 'Retired', 'the version should be retired');
+        await client.deleteOntology(created.ontology.id);
+    });
+
     await step('list jobs (envelope)', async () => {
         const jobs = await client.listJobs(undefined, { maxResults: 10 });
         assert(jobs && typeof jobs === 'object', 'listJobs should return an envelope object');

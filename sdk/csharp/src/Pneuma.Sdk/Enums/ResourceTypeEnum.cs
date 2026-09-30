@@ -43,6 +43,12 @@ namespace Pneuma.Sdk.Enums
         /// <summary>Search index resource.</summary>
         SearchIndex,
         /// <summary>Provenance source resource.</summary>
-        Source
+        Source,
+        /// <summary>Crawl plan resource.</summary>
+        CrawlPlan,
+        /// <summary>Crawl operation resource.</summary>
+        CrawlOperation,
+        /// <summary>Ontology resource (a tenant's governed ontology and its versions); Execute approves and retires versions.</summary>
+        Ontology
     }
 }

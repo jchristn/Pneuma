@@ -53,6 +53,10 @@ namespace Pneuma.Core.Observability
         private static readonly ConcurrentDictionary<string, MetricHistogram> _CrawlDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static long _CrawlRunning = 0;
         private static readonly ConcurrentDictionary<string, long> _LinkRefresh = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _ClassificationCache = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _OntologyViolations = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _TaxonomyLinks = new ConcurrentDictionary<string, long>();
+        private static readonly ConcurrentDictionary<string, long> _OntologyOperations = new ConcurrentDictionary<string, long>();
 
         private static long _Requests2xx = 0;
         private static long _Requests4xx = 0;
@@ -172,6 +176,46 @@ namespace Pneuma.Core.Observability
         {
             string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
             Increment(_LinkRefresh, "outcome=\"" + Escape(safeOutcome) + "\"");
+        }
+
+        /// <summary>Record a classification cache lookup.</summary>
+        /// <param name="outcome">hit or miss.</param>
+        public static void RecordClassificationCache(string outcome)
+        {
+            string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
+            Increment(_ClassificationCache, "outcome=\"" + Escape(safeOutcome) + "\"");
+        }
+
+        /// <summary>Record ontology rule violations found in classified content or a stored graph.</summary>
+        /// <param name="ruleType">The rule type, or Undeclared for an undeclared type.</param>
+        /// <param name="action">The action applied.</param>
+        /// <param name="count">How many.</param>
+        public static void RecordOntologyViolations(string ruleType, string action, int count)
+        {
+            if (count <= 0) return;
+            string safeType = String.IsNullOrEmpty(ruleType) ? "(unknown)" : ruleType;
+            string safeAction = String.IsNullOrEmpty(action) ? "(unknown)" : action;
+            Add(_OntologyViolations, "rule_type=\"" + Escape(safeType) + "\",action=\"" + Escape(safeAction) + "\"", count);
+        }
+
+        /// <summary>Record taxonomy links added to or removed from the graph.</summary>
+        /// <param name="change">added or removed.</param>
+        /// <param name="count">How many.</param>
+        public static void RecordTaxonomyLinks(string change, int count)
+        {
+            if (count <= 0) return;
+            string safeChange = String.IsNullOrEmpty(change) ? "(unknown)" : change;
+            Add(_TaxonomyLinks, "change=\"" + Escape(safeChange) + "\"", count);
+        }
+
+        /// <summary>Record a finished ontology operation.</summary>
+        /// <param name="kind">Validate, Retag, or DriftCheck.</param>
+        /// <param name="outcome">Succeeded or Failed.</param>
+        public static void RecordOntologyOperation(string kind, string outcome)
+        {
+            string safeKind = String.IsNullOrEmpty(kind) ? "(unknown)" : kind;
+            string safeOutcome = String.IsNullOrEmpty(outcome) ? "(unknown)" : outcome;
+            Increment(_OntologyOperations, "kind=\"" + Escape(safeKind) + "\",outcome=\"" + Escape(safeOutcome) + "\"");
         }
 
         /// <summary>Record a chunk re-chunked at a smaller size after the embedding model rejected it as too long.</summary>
@@ -319,6 +363,10 @@ namespace Pneuma.Core.Observability
             AppendCounterFamily(sb, "pneuma_crawl_bytes_total", "Bytes of objects crawl operations enumerated, by plan type", _CrawlBytes);
             AppendGauge(sb, "pneuma_crawl_running", "Crawl operations enumerating on this server", Interlocked.Read(ref _CrawlRunning));
             AppendCounterFamily(sb, "pneuma_link_refresh_total", "Scheduled link refresh checks, by outcome", _LinkRefresh);
+            AppendCounterFamily(sb, "pneuma_classification_cache_total", "Classification cache lookups, by outcome (hit or miss)", _ClassificationCache);
+            AppendCounterFamily(sb, "pneuma_ontology_violations_total", "Ontology rule violations found, by rule type and action", _OntologyViolations);
+            AppendCounterFamily(sb, "pneuma_taxonomy_links_total", "Taxonomy links (cell ABOUT concept) added to or removed from the graph", _TaxonomyLinks);
+            AppendCounterFamily(sb, "pneuma_ontology_operations_total", "Finished ontology operations, by kind and outcome", _OntologyOperations);
 
             AppendCounterFamily(sb, "pneuma_integration_requests_total", "Integration requests by service, operation, and outcome", _IntegrationRequests);
             AppendHistogramFamily(sb, "pneuma_integration_request_duration_seconds", "Integration request duration in seconds, by service and operation", _IntegrationDuration);
@@ -352,6 +400,12 @@ namespace Pneuma.Core.Observability
         private static void Increment(ConcurrentDictionary<string, long> family, string labelKey)
         {
             family.AddOrUpdate(labelKey, 1L, IncrementExisting);
+        }
+
+        private static void Add(ConcurrentDictionary<string, long> family, string labelKey, int count)
+        {
+            long amount = Math.Max(0, count);
+            family.AddOrUpdate(labelKey, amount, (k, existing) => existing + amount);
         }
 
         private static long IncrementExisting(string key, long existing)

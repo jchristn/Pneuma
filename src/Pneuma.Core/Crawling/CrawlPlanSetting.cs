@@ -4,7 +4,7 @@ namespace Pneuma.Core.Crawling
 
     /// <summary>
     /// One stored crawl plan setting value: a scalar, or one element of a list (by ordinal). Rows are the persisted form
-    /// of the plan's typed settings and filter lists (decision D1 in ADDING_CRAWLERS.md).
+    /// of the plan's typed settings and filter lists (decision D1 in archive/ADDING_CRAWLERS.md).
     /// </summary>
     public class CrawlPlanSetting
     {

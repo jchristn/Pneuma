@@ -7,6 +7,7 @@ Runs a small end-to-end smoke test against a live Pneuma server:
   - list tenants, roles, subjects
   - create a subject
   - submit a link for that subject
+  - approve, pin, unpin, and retire an ontology version
   - list ingestion jobs
 
 Behavior:
@@ -138,6 +139,26 @@ def _run(base_url):
     else:
         _fail("submit_link", "skipped: no subject id")
         failed += 1
+
+    # Ontology governance: a template draft is approved, pinned, shown, unpinned, and retired.
+    if created_id:
+        try:
+            created = client.create_ontology(f"SDK Harness Ontology {uuid.uuid4().hex[:8]}", template="Default")
+            version_id = created["versions"][0]["id"]
+            assert created["versions"][0]["status"] == "Draft", "the first version should be a draft"
+            assert "Node types:" in client.get_ontology_definition(version_id)["definition"], "definition missing"
+            client.approve_ontology_version(version_id, "Harness approval")
+            view = client.set_subject_ontology(created_id, version_id)
+            assert view["source"] == "Version", f"expected the pinned version to be used: {view!r}"
+            assert client.list_ontology_violations(created_id)["totalRecords"] == 0
+            client.set_subject_ontology(created_id, None)
+            assert client.retire_ontology_version(version_id)["status"] == "Retired"
+            client.delete_ontology(created["ontology"]["id"])
+            _pass("ontology_lifecycle")
+            passed += 1
+        except Exception as exc:  # noqa: BLE001
+            _fail("ontology_lifecycle", exc)
+            failed += 1
 
     # List jobs.
     try:

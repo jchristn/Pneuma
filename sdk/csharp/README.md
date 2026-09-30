@@ -199,6 +199,32 @@ EnumerationResult<Subject> page = await client.ListSubjectsAsync(query);
 Console.WriteLine($"{page.Objects.Count} of {page.TotalRecords}, endOfResults={page.EndOfResults}");
 ```
 
+## Ontologies
+
+Governed, versioned ontologies (see `ONTOLOGY.md`): create one from a template, edit the draft, approve it (needs
+Ontology Execute), and pin it to a subject.
+
+```csharp
+OntologyDetail created = await client.CreateOntologyAsync(new OntologyCreateRequest { Name = "Research", Template = "Default" });
+OntologyVersion draft = await client.GetOntologyVersionAsync(created.Versions[0].Id);
+draft.Rules.Add(new OntologyRule { RuleType = OntologyRuleTypeEnum.EdgeEndpoints, EdgeType = "WORKS_FOR", FromNodeType = "Person", ToNodeType = "Organization", Action = OntologyRuleActionEnum.Reverse });
+draft = await client.UpdateOntologyVersionAsync(draft.Id, draft);          // draft.Problems lists what blocks approval
+await client.ImportTaxonomyAsync(draft.Id, File.ReadAllText("taxonomy.ttl"));  // SKOS Turtle, merged by key
+await client.ApproveOntologyVersionAsync(draft.Id, "Initial version");
+await client.SetSubjectOntologyAsync(subjectId, draft.Id);                   // queues a Retag when the taxonomy changes
+
+EnumerationResult<OntologyViolation> held = await client.ListOntologyViolationsAsync(subjectId, OntologyViolationStatusEnum.Quarantined);
+OntologyOperation drift = await client.StartOntologyOperationAsync(subjectId, new OntologyOperationRequest { Kind = OntologyOperationKindEnum.DriftCheck, SampleSize = 10 });
+string turtle = await client.ExportSubjectGraphAsync(subjectId, "turtle");
+```
+
+Other methods: `ListOntologyTemplatesAsync`, `ListOntologiesAsync`, `GetOntologyAsync`, `UpdateOntologyAsync`,
+`DeleteOntologyAsync`, `ListOntologyVersionsAsync`, `CreateOntologyDraftAsync`, `ProposeOntologyAsync`,
+`DeleteOntologyVersionAsync`, `RetireOntologyVersionAsync`, `DiffOntologyVersionAsync`, `GetOntologyDefinitionAsync`,
+`ExportOntologyVersionAsync`, `GetSubjectOntologyAsync`, `ReleaseOntologyViolationAsync`,
+`DismissOntologyViolationAsync`, `ListOntologyOperationsAsync`, `GetOntologyOperationAsync`, and
+`ClearClassificationCacheAsync`. A failed call's `PneumaException.Error.Problems` lists every problem found.
+
 ## Settings (system admin)
 
 Read and update the server settings object. Secret fields are masked with `********` on read; the
@@ -234,7 +260,8 @@ credentials create/list/get/delete; roles, permissions, assignments, and audit; 
 content links (submit/list/get/delete) and ingestion jobs (list/detail/restart); model runners CRUD;
 prompts CRUD; per-subject prompt overrides (list/set/delete); request history
 (list/summary/get/delete/bulk-delete); knowledge-graph node/neighbors/edges; full-text search;
-grounded query; and server settings (get/update).
+grounded query; ontologies (versions, approval, rules, taxonomy import, subject pinning, violations,
+operations, and graph and ontology export); and server settings (get/update).
 
 ## Test harness
 

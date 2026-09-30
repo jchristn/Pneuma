@@ -6,6 +6,7 @@ namespace Test.Automated
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Sdk;
+    using Pneuma.Sdk.Enums;
     using Pneuma.Sdk.Models;
     using Pneuma.Sdk.Requests;
     using Pneuma.Sdk.Responses;
@@ -131,6 +132,24 @@ namespace Test.Automated
                 if (saved.SystemPrompt != "Answer concisely and cite sources.") throw new Exception("Updated systemPrompt did not persist.");
                 if (saved.ThinkingEnabled) throw new Exception("Updated thinkingEnabled did not persist.");
                 Console.WriteLine("       updated systemPrompt + thinkingEnabled");
+            }).ConfigureAwait(false);
+
+            await Step("Ontology lifecycle", async () =>
+            {
+                if (string.IsNullOrEmpty(createdSubjectId)) throw new Exception("No subject id from prior step.");
+                OntologyDetail created = await client.CreateOntologyAsync(new OntologyCreateRequest { Name = "SDK Smoke Ontology " + stamp, Template = "Default" }).ConfigureAwait(false);
+                OntologyVersion draft = created.Versions[0];
+                if (draft.Status != OntologyVersionStatusEnum.Draft) throw new Exception("The first version should be a draft.");
+                OntologyDefinitionResponse definition = await client.GetOntologyDefinitionAsync(draft.Id).ConfigureAwait(false);
+                if (!definition.Definition.Contains("Node types:")) throw new Exception("The definition should list node types.");
+                await client.ApproveOntologyVersionAsync(draft.Id, "Smoke approval").ConfigureAwait(false);
+                SubjectOntologyView view = await client.SetSubjectOntologyAsync(createdSubjectId!, draft.Id).ConfigureAwait(false);
+                if (view.Source != "Version") throw new Exception("The pinned version should be used.");
+                await client.SetSubjectOntologyAsync(createdSubjectId!, null).ConfigureAwait(false);
+                OntologyVersion retired = await client.RetireOntologyVersionAsync(draft.Id).ConfigureAwait(false);
+                if (retired.Status != OntologyVersionStatusEnum.Retired) throw new Exception("The version should be retired.");
+                await client.DeleteOntologyAsync(created.Ontology.Id).ConfigureAwait(false);
+                Console.WriteLine("       ontology " + created.Ontology.Id + " approved, pinned, unpinned, retired, deleted");
             }).ConfigureAwait(false);
 
             await Step("List history", async () =>

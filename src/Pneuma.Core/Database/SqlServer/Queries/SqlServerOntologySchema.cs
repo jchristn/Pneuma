@@ -1,0 +1,53 @@
+namespace Pneuma.Core.Database.SqlServer.Queries
+{
+    using System.Collections.Generic;
+
+    /// <summary>
+    /// SQL Server statements for the ontology governance migration: tenant ontologies and their versions (node types, edge
+    /// types, rules, taxonomy concepts and labels), rule violations, background operations and their items, the
+    /// classification cache index, the subject's pinned version and classification settings, and the job counters.
+    /// </summary>
+    internal static class SqlServerOntologySchema
+    {
+        /// <summary>Statements for migration 35.</summary>
+        /// <returns>The statements, in order.</returns>
+        internal static List<string> Migration35()
+        {
+            return new List<string>
+            {
+                "IF OBJECT_ID(N'dbo.ontologies', N'U') IS NULL CREATE TABLE dbo.ontologies (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, name NVARCHAR(256) NOT NULL, description NVARCHAR(MAX), createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologies_tenant_name' AND object_id = OBJECT_ID(N'dbo.ontologies')) CREATE UNIQUE INDEX idx_ontologies_tenant_name ON dbo.ontologies (tenantid, name);",
+                "IF OBJECT_ID(N'dbo.ontologyversions', N'U') IS NULL CREATE TABLE dbo.ontologyversions (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, ontologyid NVARCHAR(64) NOT NULL, versionnumber INT NOT NULL DEFAULT 1, status NVARCHAR(256) NOT NULL DEFAULT 'Draft', guidance NVARCHAR(MAX), undeclaredtypeaction NVARCHAR(256) NOT NULL DEFAULT 'Allow', changesummary NVARCHAR(MAX), basedonversionid NVARCHAR(64), createdbyuserid NVARCHAR(64), approvedbyuserid NVARCHAR(64), approvedutc NVARCHAR(32), retiredutc NVARCHAR(32), createdutc NVARCHAR(32) NOT NULL, lastupdateutc NVARCHAR(32) NOT NULL);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyversions_tenant_ontology_number' AND object_id = OBJECT_ID(N'dbo.ontologyversions')) CREATE UNIQUE INDEX idx_ontologyversions_tenant_ontology_number ON dbo.ontologyversions (tenantid, ontologyid, versionnumber);",
+                "IF OBJECT_ID(N'dbo.ontologynodetypes', N'U') IS NULL CREATE TABLE dbo.ontologynodetypes (tenantid NVARCHAR(64) NOT NULL, versionid NVARCHAR(64) NOT NULL, ordinal INT NOT NULL DEFAULT 0, name NVARCHAR(256) NOT NULL, description NVARCHAR(MAX));",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologynodetypes_version_name' AND object_id = OBJECT_ID(N'dbo.ontologynodetypes')) CREATE UNIQUE INDEX idx_ontologynodetypes_version_name ON dbo.ontologynodetypes (tenantid, versionid, name);",
+                "IF OBJECT_ID(N'dbo.ontologyedgetypes', N'U') IS NULL CREATE TABLE dbo.ontologyedgetypes (tenantid NVARCHAR(64) NOT NULL, versionid NVARCHAR(64) NOT NULL, ordinal INT NOT NULL DEFAULT 0, name NVARCHAR(256) NOT NULL, description NVARCHAR(MAX));",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyedgetypes_version_name' AND object_id = OBJECT_ID(N'dbo.ontologyedgetypes')) CREATE UNIQUE INDEX idx_ontologyedgetypes_version_name ON dbo.ontologyedgetypes (tenantid, versionid, name);",
+                "IF OBJECT_ID(N'dbo.ontologyrules', N'U') IS NULL CREATE TABLE dbo.ontologyrules (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, versionid NVARCHAR(64) NOT NULL, ordinal INT NOT NULL DEFAULT 0, ruletype NVARCHAR(256) NOT NULL, nodetype NVARCHAR(256), edgetype NVARCHAR(256), fromnodetype NVARCHAR(256), tonodetype NVARCHAR(256), fieldname NVARCHAR(256), rulepattern NVARCHAR(MAX), maxcount INT NOT NULL DEFAULT 1, minconfidence FLOAT NOT NULL DEFAULT 0.5, ruleaction NVARCHAR(256) NOT NULL DEFAULT 'Warn', description NVARCHAR(MAX));",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyrules_tenant_version' AND object_id = OBJECT_ID(N'dbo.ontologyrules')) CREATE INDEX idx_ontologyrules_tenant_version ON dbo.ontologyrules (tenantid, versionid);",
+                "IF OBJECT_ID(N'dbo.ontologyconcepts', N'U') IS NULL CREATE TABLE dbo.ontologyconcepts (tenantid NVARCHAR(64) NOT NULL, versionid NVARCHAR(64) NOT NULL, ordinal INT NOT NULL DEFAULT 0, conceptkey NVARCHAR(512) NOT NULL, preflabel NVARCHAR(256) NOT NULL, broaderkey NVARCHAR(512), definition NVARCHAR(MAX), nodetype NVARCHAR(256) NOT NULL DEFAULT 'Topic', casesensitive INT NOT NULL DEFAULT 0);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyconcepts_version_key' AND object_id = OBJECT_ID(N'dbo.ontologyconcepts')) CREATE UNIQUE INDEX idx_ontologyconcepts_version_key ON dbo.ontologyconcepts (tenantid, versionid, conceptkey);",
+                "IF OBJECT_ID(N'dbo.ontologyconceptlabels', N'U') IS NULL CREATE TABLE dbo.ontologyconceptlabels (tenantid NVARCHAR(64) NOT NULL, versionid NVARCHAR(64) NOT NULL, conceptkey NVARCHAR(512) NOT NULL, ordinal INT NOT NULL DEFAULT 0, label NVARCHAR(256) NOT NULL);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyconceptlabels_tenant_version' AND object_id = OBJECT_ID(N'dbo.ontologyconceptlabels')) CREATE INDEX idx_ontologyconceptlabels_tenant_version ON dbo.ontologyconceptlabels (tenantid, versionid);",
+                "IF OBJECT_ID(N'dbo.ontologyviolations', N'U') IS NULL CREATE TABLE dbo.ontologyviolations (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, jobid NVARCHAR(64), linkid NVARCHAR(64), operationid NVARCHAR(64), ontologyversionid NVARCHAR(64), ruleid NVARCHAR(64), ruletype NVARCHAR(256), elementkind NVARCHAR(256) NOT NULL DEFAULT 'Node', nodetype NVARCHAR(256), nodename NVARCHAR(MAX), edgetype NVARCHAR(256), fromnodetype NVARCHAR(256), fromnodename NVARCHAR(MAX), tonodetype NVARCHAR(256), tonodename NVARCHAR(MAX), content NVARCHAR(MAX), confidence FLOAT NOT NULL DEFAULT 0.5, ruleaction NVARCHAR(256) NOT NULL DEFAULT 'Warn', status NVARCHAR(256) NOT NULL DEFAULT 'Recorded', message NVARCHAR(MAX), resolvedbyuserid NVARCHAR(64), resolvedutc NVARCHAR(32), createdutc NVARCHAR(32) NOT NULL);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyviolations_tenant_subject' AND object_id = OBJECT_ID(N'dbo.ontologyviolations')) CREATE INDEX idx_ontologyviolations_tenant_subject ON dbo.ontologyviolations (tenantid, subjectid, createdutc);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyviolations_job' AND object_id = OBJECT_ID(N'dbo.ontologyviolations')) CREATE INDEX idx_ontologyviolations_job ON dbo.ontologyviolations (jobid);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyviolations_operation' AND object_id = OBJECT_ID(N'dbo.ontologyviolations')) CREATE INDEX idx_ontologyviolations_operation ON dbo.ontologyviolations (operationid);",
+                "IF OBJECT_ID(N'dbo.ontologyoperations', N'U') IS NULL CREATE TABLE dbo.ontologyoperations (id NVARCHAR(64) NOT NULL PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, kind NVARCHAR(256) NOT NULL, status NVARCHAR(256) NOT NULL DEFAULT 'Queued', ontologyversionid NVARCHAR(64), requestedbyuserid NVARCHAR(64), samplesize INT NOT NULL DEFAULT 10, total INT NOT NULL DEFAULT 0, processed INT NOT NULL DEFAULT 0, changed INT NOT NULL DEFAULT 0, added INT NOT NULL DEFAULT 0, removed INT NOT NULL DEFAULT 0, driftrate FLOAT NOT NULL DEFAULT 0, error NVARCHAR(MAX), claimtoken NVARCHAR(64), createdutc NVARCHAR(32) NOT NULL, startedutc NVARCHAR(32), finishedutc NVARCHAR(32));",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyoperations_tenant_subject' AND object_id = OBJECT_ID(N'dbo.ontologyoperations')) CREATE INDEX idx_ontologyoperations_tenant_subject ON dbo.ontologyoperations (tenantid, subjectid, createdutc);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyoperations_status' AND object_id = OBJECT_ID(N'dbo.ontologyoperations')) CREATE INDEX idx_ontologyoperations_status ON dbo.ontologyoperations (status);",
+                "IF OBJECT_ID(N'dbo.ontologyoperationitems', N'U') IS NULL CREATE TABLE dbo.ontologyoperationitems (tenantid NVARCHAR(64) NOT NULL, operationid NVARCHAR(64) NOT NULL, ordinal INT NOT NULL DEFAULT 0, nodeid NVARCHAR(64), excerpt NVARCHAR(MAX), ischanged INT NOT NULL DEFAULT 0, detail NVARCHAR(MAX));",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ontologyoperationitems_tenant_operation' AND object_id = OBJECT_ID(N'dbo.ontologyoperationitems')) CREATE INDEX idx_ontologyoperationitems_tenant_operation ON dbo.ontologyoperationitems (tenantid, operationid);",
+                "IF OBJECT_ID(N'dbo.classificationcache', N'U') IS NULL CREATE TABLE dbo.classificationcache (tenantid NVARCHAR(64) NOT NULL, cachekey NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64), blobkey NVARCHAR(256) NOT NULL, hits INT NOT NULL DEFAULT 0, createdutc NVARCHAR(32) NOT NULL, lastusedutc NVARCHAR(32) NOT NULL);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_classificationcache_tenant_key' AND object_id = OBJECT_ID(N'dbo.classificationcache')) CREATE UNIQUE INDEX idx_classificationcache_tenant_key ON dbo.classificationcache (tenantid, cachekey);",
+                "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_classificationcache_lastused' AND object_id = OBJECT_ID(N'dbo.classificationcache')) CREATE INDEX idx_classificationcache_lastused ON dbo.classificationcache (lastusedutc);",
+                "IF COL_LENGTH('dbo.subjects', 'ontologyversionid') IS NULL ALTER TABLE dbo.subjects ADD ontologyversionid NVARCHAR(64);",
+                "IF COL_LENGTH('dbo.subjects', 'classificationtemperature') IS NULL ALTER TABLE dbo.subjects ADD classificationtemperature FLOAT NOT NULL DEFAULT 0;",
+                "IF COL_LENGTH('dbo.subjects', 'classificationcacheenabled') IS NULL ALTER TABLE dbo.subjects ADD classificationcacheenabled INT NOT NULL DEFAULT 1;",
+                "IF COL_LENGTH('dbo.ingestionjobs', 'classificationcachehits') IS NULL ALTER TABLE dbo.ingestionjobs ADD classificationcachehits INT NOT NULL DEFAULT 0;",
+                "IF COL_LENGTH('dbo.ingestionjobs', 'ontologyviolations') IS NULL ALTER TABLE dbo.ingestionjobs ADD ontologyviolations INT NOT NULL DEFAULT 0;",
+                "IF COL_LENGTH('dbo.ingestionjobs', 'taxonomymatches') IS NULL ALTER TABLE dbo.ingestionjobs ADD taxonomymatches INT NOT NULL DEFAULT 0;"
+            };
+        }
+    }
+}

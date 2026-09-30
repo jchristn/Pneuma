@@ -95,7 +95,7 @@ Response envelope:
 
 ## Subjects
 
-`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}` · `GET /v1.0/subjects/by-slug/{slug}`. A subject has `displayName`, `type` (Person…), `description`, `tagline`, `graphRootNodeId`, plus: `urlSlug` (unique per tenant; auto-generated from the name when omitted - an explicit clash returns **409**), `thinkingEnabled` (show model reasoning in this subject's chats), `systemPrompt` (appended after the global system prompt for its chats), `ontologyClassifyPrompt` / `ontologyDefinitionPrompt` (appended after the global ontology prompts during ingestion), `historyRetentionDays` (chat-history retention, clamped ≥ 1), `defaultRefreshIntervalMinutes` (how often links that follow the subject default are re-checked for changes: 0 for off, the default, or 60 to 525600; other values are **400**; changing it reschedules those links), and a read-only `deletionStatus` (`None`/`Pending`/`Deleting`/`Failed`).
+`GET|POST /v1.0/subjects` · `GET|PUT|DELETE /v1.0/subjects/{id}` · `GET /v1.0/subjects/by-slug/{slug}`. A subject has `displayName`, `type` (Person…), `description`, `tagline`, `graphRootNodeId`, plus: `urlSlug` (unique per tenant; auto-generated from the name when omitted - an explicit clash returns **409**), `thinkingEnabled` (show model reasoning in this subject's chats), `systemPrompt` (appended after the global system prompt for its chats), `ontologyClassifyPrompt` / `ontologyDefinitionPrompt` (appended after the global ontology prompts during ingestion), `historyRetentionDays` (chat-history retention, clamped ≥ 1), `classificationTemperature` (sampling temperature for ingestion classification, 0 to 2, default 0), `classificationCacheEnabled` (reuse stored classification results for identical requests, default true), a read-only `ontologyVersionId` (the pinned ontology version, set with [`PUT /v1.0/subjects/{id}/ontology`](#ontologies) and ignored on create and update), `defaultRefreshIntervalMinutes` (how often links that follow the subject default are re-checked for changes: 0 for off, the default, or 60 to 525600; other values are **400**; changing it reschedules those links), and a read-only `deletionStatus` (`None`/`Pending`/`Deleting`/`Failed`).
 
 **A subject owns its models and collection** (moved off link submission): `embeddingModel` (embedding model-endpoint id) and `inferenceModel` (completion model-endpoint id) are **required** before links can be ingested to it or questions answered about it; `collection` (RecallDB collection id, dimensionality must match the embedding model) is **required** to ingest. `rerankingModel` and `promptRewriteModel` (completion model-endpoint ids) are **optional** — when set, the answer pipeline re-ranks retrieved passages / rewrites the question before searching; when null those steps are skipped. `rerankingPrompt` / `promptRewritePrompt` are subject-level overrides appended after the global `reranking` / `prompt.rewrite` prompts (like `systemPrompt`), with sensible defaults applied on create. `tagline` is the subtitle shown beneath the subject's name on its ask page (defaults to the built-in label when omitted). `GET /v1.0/subjects/by-slug/{slug}` resolves a subject by its slug (tenant-scoped).
 
@@ -227,7 +227,7 @@ kept. A job that completes early because the content is unchanged writes nothing
 retry within a job first removes what the failed attempt wrote, so retries never duplicate chunks or nodes. If removal
 fails, the job still completes, records a warning, and the next successful ingest of the link removes the leftovers.
 
-**Completeness and warnings.** Every job records what each stage received and produced in `completeness` (`cellsExtracted`, `classificationBatches`, `classificationBatchesFailed`, `cellNodesCreated`, `cellNodesFailed`, `summariesAttempted`, `summariesFailed`, `chunksProduced`, `chunksEmbedded`, `chunksIndexed`). Work a job drops but can complete without (a failed classification batch, a failed cell summary, a cell node that could not be created) is recorded in the job's `warnings` list, and the link's `warningCount` holds the count from its latest ingest. With `Ingestion.PartialLossPolicy` set to `Warn` (the default) such a job still ends `Completed`; with `Fail` it fails with category `PartialLoss` and is retried. A chunk that did not receive an embedding is never dropped: the attempt fails and is retried.
+**Completeness and warnings.** Every job records what each stage received and produced in `completeness` (`cellsExtracted`, `classificationBatches`, `classificationBatchesFailed`, `cellNodesCreated`, `cellNodesFailed`, `summariesAttempted`, `summariesFailed`, `chunksProduced`, `chunksEmbedded`, `chunksIndexed`, `classificationCacheHits`, `ontologyViolations`, `taxonomyMatches`). Work a job drops but can complete without (a failed classification batch, a failed cell summary, a cell node that could not be created) is recorded in the job's `warnings` list, and the link's `warningCount` holds the count from its latest ingest. With `Ingestion.PartialLossPolicy` set to `Warn` (the default) such a job still ends `Completed`; with `Fail` it fails with category `PartialLoss` and is retried. A chunk that did not receive an embedding is never dropped: the attempt fails and is retried.
 
 ## Crawl plans
 
@@ -263,6 +263,46 @@ Execute for test, preview, start, stop, and confirming deletions).
 | GET | `/v1.0/crawl-operations/{id}/objects` | What the operation did with each object `{ externalKey, action, succeeded, linkId, jobId, detail }` (paginated; `action=` `Add`, `Update`, `Retry`, `Delete`, `Skip`, `Fail`). Unchanged objects are counted only. |
 | POST | `/v1.0/crawl-operations/{id}/confirm-deletions` | Run the deletions a `Held` operation is waiting on → the operation. **409** when it is not `Held`. |
 
+## Ontologies
+
+Governed, versioned ontologies: node types, edge types, constraint rules, and a taxonomy that subjects classify into.
+See [`ONTOLOGY.md`](ONTOLOGY.md) for the model, scoping, and behavior. Ontologies are tenant-scoped. Permissions:
+`Ontology` Read for GETs, Write for create, edit, propose, and import, Delete for deletes, and Execute for approve and
+retire. Subject-facing routes use `Subject` Read (view, violations, operations, graph export) and Update (pin, release,
+dismiss, start an operation, clear the cache). A failed ontology call returns the usual error body plus `problems`,
+every problem found, when there is more than one thing to fix.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1.0/ontology-templates` | Built-in templates `[{ name, description, nodeTypeCount, edgeTypeCount, ruleCount }]` (read-only, system content). |
+| GET | `/v1.0/ontologies` | The tenant's ontologies (paginated). |
+| POST | `/v1.0/ontologies` | Create `{ name, description?, template?, copyFromVersionId? }` → **201** `OntologyDetail` `{ ontology, versions, pinnedSubjects }`; the first version is a draft (empty, from the template, or a copy). **409** for a name already in use. |
+| GET | `/v1.0/ontologies/{id}` | `OntologyDetail`: the ontology, its versions (newest first, with counts), and `pinnedSubjects` `[{ subjectId, displayName, ontologyVersionId }]`. |
+| PUT | `/v1.0/ontologies/{id}` | Rename or re-describe `{ name, description }`. |
+| DELETE | `/v1.0/ontologies/{id}` | Delete the ontology and its versions → **204**. **409** while a subject pins one of its versions. |
+| GET | `/v1.0/ontologies/{id}/versions` | Versions, newest first (paginated). |
+| POST | `/v1.0/ontologies/{id}/versions` | New draft `{ basedOnVersionId? }` copying that version (default the newest) → **201** `OntologyVersion`. |
+| POST | `/v1.0/ontologies/{id}/propose` | Have a model propose a new draft `{ subjectId?, sampleText?, modelRunnerId?, sampleCells? (default 20, capped by `Ontology.MaxProposalSampleCells`), instructions?, language?, basedOnVersionId? }` → **201** the draft. Needs a subject or sample text. Uses the `ontology.propose` and `ontology.propose.format` prompts. **502** when the model's reply cannot be used. |
+| GET | `/v1.0/ontology-versions/{id}` | `OntologyVersion` `{ id, ontologyId, versionNumber, status (Draft, Approved, Retired), guidance, undeclaredTypeAction (Allow, Warn, Drop, Quarantine), changeSummary, basedOnVersionId, createdByUserId, approvedByUserId, approvedUtc, retiredUtc, nodeTypes, edgeTypes, rules, concepts, problems }`. |
+| PUT | `/v1.0/ontology-versions/{id}` | Replace a draft's contents (same shape) → the version with its `problems`. **409** for an approved or retired version; **400** for contents that cannot be stored (sizes, duplicate rule ids). |
+| DELETE | `/v1.0/ontology-versions/{id}` | Delete a draft → **204**. **409** otherwise. |
+| POST | `/v1.0/ontology-versions/{id}/approve` | Approve a draft `{ changeSummary? }` → the version. **400** with `problems` while the draft has any. Audited. |
+| POST | `/v1.0/ontology-versions/{id}/retire` | Retire an approved version → the version. **409** while a subject pins it. Audited. |
+| GET | `/v1.0/ontology-versions/{id}/diff` | Compare with `against=` (default the version it was copied from) → `{ fromVersionId, toVersionId, addedNodeTypes, removedNodeTypes, changedNodeTypes, addedEdgeTypes, removedEdgeTypes, changedEdgeTypes, addedRules, removedRules, addedConcepts, removedConcepts, changedConcepts, guidanceChanged, undeclaredTypeActionChanged, taxonomyChanged }`. |
+| GET | `/v1.0/ontology-versions/{id}/definition` | `{ versionId, definition }`: the text the classifier sees for this version. |
+| GET | `/v1.0/ontology-versions/{id}/export` | OWL and SKOS: `format=turtle` (default, `text/turtle`) or `jsonld` (`application/ld+json`); `baseIri=` (absolute, default `urn:pneuma:`). |
+| POST | `/v1.0/ontology-versions/{id}/taxonomy/import` | Import a SKOS concept scheme into a draft. The body is the raw document (`Content-Type: text/turtle` or `application/ld+json`); `format=turtle\|jsonld`, `mode=merge\|replace` → `{ added, updated, removed, total, warnings, version }`. **400** for a document that cannot be read, **409** for a version that is not a draft, **413** over the size limit. Remote JSON-LD contexts are not fetched. |
+| GET | `/v1.0/subjects/{id}/ontology` | `SubjectOntologyView` `{ subjectId, source (Version or Prompt), ontology, version, effectiveDefinition, classificationTemperature, classificationCacheEnabled, cacheEntries, quarantinedCount, conceptCount }`. |
+| PUT | `/v1.0/subjects/{id}/ontology` | Pin `{ ontologyVersionId, retag? (default true) }` (an approved version) or unpin (`ontologyVersionId: null`) → the view. Queues a `Retag` operation when the taxonomy changes and `retag` is true. **400** for a version that is not approved. Audited. |
+| GET | `/v1.0/subjects/{id}/ontology-violations` | Violations, newest first (paginated; `status=` `Recorded`, `Quarantined`, `Released`, `Dismissed`; `jobId=`; `operationId=`). Each `{ id, jobId, linkId, operationId, ontologyVersionId, ruleId, ruleType, elementKind (Node, Edge), nodeType, nodeName, edgeType, fromNodeType, fromNodeName, toNodeType, toNodeName, content, confidence, action, status, message, resolvedByUserId, resolvedUtc, createdUtc }`. |
+| POST | `/v1.0/ontology-violations/{id}/release` | Add a quarantined element to the graph → the violation (`Released`). **409** when it is not quarantined. |
+| POST | `/v1.0/ontology-violations/{id}/dismiss` | Discard a quarantined element → the violation (`Dismissed`). **409** when it is not quarantined. |
+| GET | `/v1.0/subjects/{id}/ontology-operations` | Operations, newest first (paginated). |
+| POST | `/v1.0/subjects/{id}/ontology-operations` | Queue `{ kind (Validate, Retag, DriftCheck), sampleSize? (1 to `Ontology.MaxDriftSampleSize`, default 10) }` → **202** `OntologyOperation`. **400** for `Validate` without a pinned version; **409** when one of that kind is already queued or running. |
+| GET | `/v1.0/ontology-operations/{id}` | `{ operation, items }`. The operation carries `kind`, `status` (`Queued`, `Running`, `Succeeded`, `Failed`), `total`, `processed`, `changed`, `added`, `removed`, `driftRate`, `error`, and timestamps; each item `{ ordinal, nodeId, excerpt, changed, detail }`. |
+| GET | `/v1.0/subjects/{id}/graph/export` | The subject's graph: `format=json` (default), `jsonld`, `turtle`, or `graphml`; `baseIri=`. Sent as a download; `X-Pneuma-Truncated: true` when the graph exceeded `Ontology.MaxGraphNodes`. |
+| DELETE | `/v1.0/subjects/{id}/classification-cache` | Remove the classification cache entries the subject stored → `{ removed }`. |
+
 ## Model Runners (admin)
 
 `GET|POST /v1.0/model-runners` · `GET|PUT|DELETE /v1.0/model-runners/{id}`. Pneuma **manages model endpoints natively** in its own `modelrunners` store; LLM access (embeddings, completions, summarization) runs in-process through PolyPrompt. Each item is an embedding or completion endpoint: `{ id, type (Embedding|Completion), provider, name, model, endpoint, apiFormat, deployment, apiVersion, region, project, accessKeyId, active, maxConcurrentRequests, maxRetries, maxInputTokens, maxQueueDepth, contextSize }`.
@@ -283,9 +323,19 @@ A background monitor probes each model endpoint's **base URL**, deduplicated so 
 
 `ModelEndpointHealth`: `{ endpointId, endpointName, type, baseUrl, isHealthy, statusCode?, latencyMs?, firstCheckUtc?, lastCheckUtc?, lastHealthyUtc?, lastUnhealthyUtc?, lastStateChangeUtc?, totalUptimeMs, totalDowntimeMs, uptimePercentage, consecutiveSuccesses, consecutiveFailures, lastError?, history: [{ timestampUtc, success }] }`. Before a base URL's first probe, timestamps are null (a "pending" state).
 
-## Prompts (admin)
+## Prompts
 
-`GET|POST /v1.0/prompts` · `GET|PUT|DELETE /v1.0/prompts/{id}`. Keyed prompts: `ontology.classify`, `cell.summarize`, `user.answer`.
+`GET|POST /v1.0/prompts` · `GET|PUT|DELETE /v1.0/prompts/{id}`. Every prompt the platform sends to a model is a keyed
+prompt, including `ontology.classify`, `ontology.definition`, `ontology.classify.format`, `taxonomy.hint`,
+`ontology.propose`, `ontology.propose.format`, `cell.summarize`, and `user.answer`. Each prompt carries a computed
+`isSystemDefault`.
+
+A key resolves as **system default → tenant copy → subject override** ([Subject Prompts](#subject-prompts)). `GET`
+lists the prompt in effect for the caller's tenant, one per key: the tenant's copy where one exists, else the system
+default (`scope=system` lists only system defaults, `scope=tenant` only the tenant's copies). `PUT` on a system default
+by a tenant user creates or updates the tenant's copy and leaves the system default unchanged; a system administrator
+edits the system default itself, or saves a tenant copy with `scope=tenant`. `DELETE` of a tenant copy returns the
+tenant to the system default; only a system administrator can delete a system default.
 
 ## Settings (admin)
 

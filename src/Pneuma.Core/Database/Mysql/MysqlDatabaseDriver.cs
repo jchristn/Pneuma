@@ -90,6 +90,11 @@ namespace Pneuma.Core.Database.Mysql
             EvalRuns = new EvalRunMethods(this);
             EvalResults = new EvalResultMethods(this);
             IngestionTuning = new IngestionTuningMethods(this);
+            Ontologies = new OntologyMethods(this);
+            OntologyVersions = new OntologyVersionMethods(this);
+            OntologyViolations = new OntologyViolationMethods(this);
+            OntologyOperations = new OntologyOperationMethods(this);
+            ClassificationCache = new ClassificationCacheMethods(this);
         }
 
         #endregion

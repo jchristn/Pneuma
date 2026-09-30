@@ -11,6 +11,7 @@ namespace Pneuma.Core.Ingestion.Deletion
     using Pneuma.Core.Integrations.Interfaces;
     using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Storage;
 
     /// <summary>
@@ -197,6 +198,9 @@ namespace Pneuma.Core.Ingestion.Deletion
             {
                 await TryExternalAsync(() => _LiteGraphAdmin.DeprovisionAsync(tenant.LiteGraphTenantGuid!, token)).ConfigureAwait(false);
             }
+
+            // Remove the tenant's cached classification results from the blob store (the index rows go with the tenant data).
+            await TryExternalAsync(() => new ClassificationCache(_Db, _Blobs).ClearAsync(tenantId, null, token)).ConfigureAwait(false);
 
             // Remove all tenant-scoped database rows and the tenant row in one transaction.
             return await _Db.Tenants.DeleteWithTenantDataAsync(tenantId, token).ConfigureAwait(false);

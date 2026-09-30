@@ -238,6 +238,25 @@ order, search }` options object as its last argument.
 - `setSubjectPrompt(subjectId, key, { content, mergeMode? })` — set a per-subject override; `mergeMode` defaults to `'Append'`
 - `deleteSubjectPrompt(subjectId, key)` — remove an override, reverting the key to the global prompt
 
+### Ontologies
+- `listOntologyTemplates()`, `listOntologies(options?)`, `createOntology({ name, description?, template?, copyFromVersionId? })`, `getOntology(id)`, `updateOntology(id, update)`, `deleteOntology(id)`
+- `listOntologyVersions(id, options?)`, `createOntologyDraft(id, basedOnVersionId?)`, `proposeOntology(id, request)`
+- `getOntologyVersion(versionId)`, `updateOntologyVersion(versionId, version)`, `deleteOntologyVersion(versionId)`, `approveOntologyVersion(versionId, changeSummary?)`, `retireOntologyVersion(versionId)`, `diffOntologyVersion(versionId, against?)`, `getOntologyDefinition(versionId)`
+- `exportOntologyVersion(versionId, format?, baseIri?)` (Turtle text or parsed JSON-LD), `importTaxonomy(versionId, document, { format, mode })` (SKOS Turtle or JSON-LD)
+- `getSubjectOntology(subjectId)`, `setSubjectOntology(subjectId, ontologyVersionId, retag?)`
+- `listOntologyViolations(subjectId, { status, jobId, operationId })`, `releaseOntologyViolation(id)`, `dismissOntologyViolation(id)`
+- `listOntologyOperations(subjectId)`, `startOntologyOperation(subjectId, { kind, sampleSize? })`, `getOntologyOperation(id)`
+- `exportSubjectGraph(subjectId, format?, baseIri?)`, `clearClassificationCache(subjectId)`
+
+```js
+const { ontology, versions } = await client.createOntology({ name: 'Research', template: 'Default' });
+const draft = await client.getOntologyVersion(versions[0].id);
+draft.rules.push({ ruleType: 'EdgeEndpoints', edgeType: 'WORKS_FOR', fromNodeType: 'Person', toNodeType: 'Organization', action: 'Reverse' });
+await client.updateOntologyVersion(draft.id, draft);
+await client.approveOntologyVersion(draft.id, 'Initial version');
+await client.setSubjectOntology(subjectId, draft.id);
+```
+
 ### Settings (system-admin only)
 - `getSettings()` — GET `/v1.0/settings`; secrets masked as `"********"`
 - `updateSettings(settings)` — PUT `/v1.0/settings`; unchanged masked secrets are preserved

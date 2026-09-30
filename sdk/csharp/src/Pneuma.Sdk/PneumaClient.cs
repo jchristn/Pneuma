@@ -1059,6 +1059,293 @@ namespace Pneuma.Sdk
 
         #endregion
 
+        #region Public-Methods-Ontologies
+
+        /// <summary>List the built-in ontology templates.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The templates.</returns>
+        public Task<List<OntologyTemplateInfo>> ListOntologyTemplatesAsync(CancellationToken token = default)
+        {
+            return SendAsync<List<OntologyTemplateInfo>>(HttpMethod.Get, "/v1.0/ontology-templates", null, token);
+        }
+
+        /// <summary>List the tenant's ontologies.</summary>
+        /// <param name="query">Optional paging and search.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of ontologies.</returns>
+        public Task<EnumerationResult<Ontology>> ListOntologiesAsync(EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<Ontology>>(HttpMethod.Get, "/v1.0/ontologies" + (query?.ToQueryString() ?? string.Empty), null, token);
+        }
+
+        /// <summary>Create an ontology; its first version is a draft (empty, from a template, or a copy of a version).</summary>
+        /// <param name="request">The ontology.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The ontology with its versions.</returns>
+        public Task<OntologyDetail> CreateOntologyAsync(OntologyCreateRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<OntologyDetail>(HttpMethod.Post, "/v1.0/ontologies", request, token);
+        }
+
+        /// <summary>Get an ontology with its versions and the subjects that pin them.</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The ontology.</returns>
+        public Task<OntologyDetail> GetOntologyAsync(string id, CancellationToken token = default)
+        {
+            return SendAsync<OntologyDetail>(HttpMethod.Get, "/v1.0/ontologies/" + Escape(id), null, token);
+        }
+
+        /// <summary>Rename or re-describe an ontology.</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="request">The new name and description.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The ontology.</returns>
+        public Task<OntologyDetail> UpdateOntologyAsync(string id, OntologyUpdateRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<OntologyDetail>(HttpMethod.Put, "/v1.0/ontologies/" + Escape(id), request, token);
+        }
+
+        /// <summary>Delete an ontology and its versions (refused while a subject pins one).</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        public Task DeleteOntologyAsync(string id, CancellationToken token = default)
+        {
+            return SendCoreAsync(HttpMethod.Delete, "/v1.0/ontologies/" + Escape(id), null, token);
+        }
+
+        /// <summary>List an ontology's versions, newest first.</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="query">Optional paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of versions.</returns>
+        public Task<EnumerationResult<OntologyVersion>> ListOntologyVersionsAsync(string id, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<OntologyVersion>>(HttpMethod.Get, "/v1.0/ontologies/" + Escape(id) + "/versions" + (query?.ToQueryString() ?? string.Empty), null, token);
+        }
+
+        /// <summary>Start a new draft that copies a version (by default the newest).</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="basedOnVersionId">Version to copy, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The draft.</returns>
+        public Task<OntologyVersion> CreateOntologyDraftAsync(string id, string? basedOnVersionId = null, CancellationToken token = default)
+        {
+            return SendAsync<OntologyVersion>(HttpMethod.Post, "/v1.0/ontologies/" + Escape(id) + "/versions", new OntologyDraftRequest { BasedOnVersionId = basedOnVersionId }, token);
+        }
+
+        /// <summary>Have the inference model propose a new draft from a subject's content or sample text.</summary>
+        /// <param name="id">Ontology identifier.</param>
+        /// <param name="request">What to sample and how.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The proposed draft.</returns>
+        public Task<OntologyVersion> ProposeOntologyAsync(string id, OntologyProposeRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<OntologyVersion>(HttpMethod.Post, "/v1.0/ontologies/" + Escape(id) + "/propose", request, token);
+        }
+
+        /// <summary>Get a version with its types, rules, concepts, and approval problems.</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The version.</returns>
+        public Task<OntologyVersion> GetOntologyVersionAsync(string versionId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyVersion>(HttpMethod.Get, "/v1.0/ontology-versions/" + Escape(versionId), null, token);
+        }
+
+        /// <summary>Replace a draft's contents.</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="version">The contents.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The saved draft with its approval problems.</returns>
+        public Task<OntologyVersion> UpdateOntologyVersionAsync(string versionId, OntologyVersion version, CancellationToken token = default)
+        {
+            if (version == null) throw new ArgumentNullException(nameof(version));
+            return SendAsync<OntologyVersion>(HttpMethod.Put, "/v1.0/ontology-versions/" + Escape(versionId), version, token);
+        }
+
+        /// <summary>Delete a draft version.</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task.</returns>
+        public Task DeleteOntologyVersionAsync(string versionId, CancellationToken token = default)
+        {
+            return SendCoreAsync(HttpMethod.Delete, "/v1.0/ontology-versions/" + Escape(versionId), null, token);
+        }
+
+        /// <summary>Approve a draft (needs Ontology Execute).</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="changeSummary">Optional change summary.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The approved version.</returns>
+        public Task<OntologyVersion> ApproveOntologyVersionAsync(string versionId, string? changeSummary = null, CancellationToken token = default)
+        {
+            return SendAsync<OntologyVersion>(HttpMethod.Post, "/v1.0/ontology-versions/" + Escape(versionId) + "/approve", new OntologyApproveRequest { ChangeSummary = changeSummary }, token);
+        }
+
+        /// <summary>Retire an approved version (refused while a subject pins it).</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The retired version.</returns>
+        public Task<OntologyVersion> RetireOntologyVersionAsync(string versionId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyVersion>(HttpMethod.Post, "/v1.0/ontology-versions/" + Escape(versionId) + "/retire", null, token);
+        }
+
+        /// <summary>Compare a version with another (by default the version it was copied from).</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="againstVersionId">Version to compare with, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The differences.</returns>
+        public Task<OntologyVersionDiff> DiffOntologyVersionAsync(string versionId, string? againstVersionId = null, CancellationToken token = default)
+        {
+            return SendAsync<OntologyVersionDiff>(HttpMethod.Get, AppendQuery("/v1.0/ontology-versions/" + Escape(versionId) + "/diff", "against", againstVersionId), null, token);
+        }
+
+        /// <summary>Get the definition text the classifier sees for a version.</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The definition.</returns>
+        public Task<OntologyDefinitionResponse> GetOntologyDefinitionAsync(string versionId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyDefinitionResponse>(HttpMethod.Get, "/v1.0/ontology-versions/" + Escape(versionId) + "/definition", null, token);
+        }
+
+        /// <summary>Export a version as OWL and SKOS.</summary>
+        /// <param name="versionId">Version identifier.</param>
+        /// <param name="format">"turtle" (default) or "jsonld".</param>
+        /// <param name="baseIri">Optional absolute base IRI.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The document.</returns>
+        public async Task<string> ExportOntologyVersionAsync(string versionId, string format = "turtle", string? baseIri = null, CancellationToken token = default)
+        {
+            string path = AppendQuery(AppendQuery("/v1.0/ontology-versions/" + Escape(versionId) + "/export", "format", format), "baseIri", baseIri);
+            return await SendCoreAsync(HttpMethod.Get, path, null, token).ConfigureAwait(false) ?? string.Empty;
+        }
+
+        /// <summary>Import a SKOS taxonomy into a draft.</summary>
+        /// <param name="versionId">Draft version identifier.</param>
+        /// <param name="document">The SKOS document (Turtle or JSON-LD).</param>
+        /// <param name="format">"turtle" (default) or "jsonld".</param>
+        /// <param name="mode">"merge" (default) or "replace".</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>What was imported.</returns>
+        public async Task<TaxonomyImportResult> ImportTaxonomyAsync(string versionId, string document, string format = "turtle", string mode = "merge", CancellationToken token = default)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            string path = AppendQuery(AppendQuery("/v1.0/ontology-versions/" + Escape(versionId) + "/taxonomy/import", "format", format), "mode", mode);
+            string contentType = string.Equals(format, "jsonld", StringComparison.OrdinalIgnoreCase) ? "application/ld+json" : "text/turtle";
+            string? body = await SendTextCoreAsync(HttpMethod.Post, path, document, contentType, token).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<TaxonomyImportResult>(body ?? "{}", _Json)!;
+        }
+
+        /// <summary>Show how a subject classifies: its pinned version, the definition the classifier sees, and its settings.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The view.</returns>
+        public Task<SubjectOntologyView> GetSubjectOntologyAsync(string subjectId, CancellationToken token = default)
+        {
+            return SendAsync<SubjectOntologyView>(HttpMethod.Get, "/v1.0/subjects/" + Escape(subjectId) + "/ontology", null, token);
+        }
+
+        /// <summary>Pin a subject to an approved version, or unpin it (null).</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="ontologyVersionId">Approved version, or null to unpin.</param>
+        /// <param name="retag">Queue a retag when the taxonomy changes.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The view.</returns>
+        public Task<SubjectOntologyView> SetSubjectOntologyAsync(string subjectId, string? ontologyVersionId, bool retag = true, CancellationToken token = default)
+        {
+            return SendAsync<SubjectOntologyView>(HttpMethod.Put, "/v1.0/subjects/" + Escape(subjectId) + "/ontology", new SubjectOntologyRequest { OntologyVersionId = ontologyVersionId, Retag = retag }, token);
+        }
+
+        /// <summary>List a subject's ontology violations.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="status">Only this status, or null.</param>
+        /// <param name="query">Optional paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of violations.</returns>
+        public Task<EnumerationResult<OntologyViolation>> ListOntologyViolationsAsync(string subjectId, OntologyViolationStatusEnum? status = null, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            string path = AppendQuery("/v1.0/subjects/" + Escape(subjectId) + "/ontology-violations" + (query?.ToQueryString() ?? string.Empty), "status", status?.ToString());
+            return SendAsync<EnumerationResult<OntologyViolation>>(HttpMethod.Get, path, null, token);
+        }
+
+        /// <summary>Release a quarantined element into the graph.</summary>
+        /// <param name="violationId">Violation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The violation.</returns>
+        public Task<OntologyViolation> ReleaseOntologyViolationAsync(string violationId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyViolation>(HttpMethod.Post, "/v1.0/ontology-violations/" + Escape(violationId) + "/release", null, token);
+        }
+
+        /// <summary>Dismiss a quarantined element.</summary>
+        /// <param name="violationId">Violation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The violation.</returns>
+        public Task<OntologyViolation> DismissOntologyViolationAsync(string violationId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyViolation>(HttpMethod.Post, "/v1.0/ontology-violations/" + Escape(violationId) + "/dismiss", null, token);
+        }
+
+        /// <summary>List a subject's ontology operations.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="query">Optional paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of operations.</returns>
+        public Task<EnumerationResult<OntologyOperation>> ListOntologyOperationsAsync(string subjectId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return SendAsync<EnumerationResult<OntologyOperation>>(HttpMethod.Get, "/v1.0/subjects/" + Escape(subjectId) + "/ontology-operations" + (query?.ToQueryString() ?? string.Empty), null, token);
+        }
+
+        /// <summary>Queue a background ontology operation (Validate, Retag, or DriftCheck).</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="request">The operation.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The queued operation.</returns>
+        public Task<OntologyOperation> StartOntologyOperationAsync(string subjectId, OntologyOperationRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return SendAsync<OntologyOperation>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/ontology-operations", request, token);
+        }
+
+        /// <summary>Get an ontology operation with its items.</summary>
+        /// <param name="operationId">Operation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The operation.</returns>
+        public Task<OntologyOperationDetail> GetOntologyOperationAsync(string operationId, CancellationToken token = default)
+        {
+            return SendAsync<OntologyOperationDetail>(HttpMethod.Get, "/v1.0/ontology-operations/" + Escape(operationId), null, token);
+        }
+
+        /// <summary>Export a subject's graph.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="format">"json" (default), "jsonld", "turtle", or "graphml".</param>
+        /// <param name="baseIri">Optional absolute base IRI for the RDF formats.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The document.</returns>
+        public async Task<string> ExportSubjectGraphAsync(string subjectId, string format = "json", string? baseIri = null, CancellationToken token = default)
+        {
+            string path = AppendQuery(AppendQuery("/v1.0/subjects/" + Escape(subjectId) + "/graph/export", "format", format), "baseIri", baseIri);
+            return await SendCoreAsync(HttpMethod.Get, path, null, token).ConfigureAwait(false) ?? string.Empty;
+        }
+
+        /// <summary>Remove the classification cache entries a subject stored.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>How many entries were removed.</returns>
+        public Task<ClassificationCacheClearResult> ClearClassificationCacheAsync(string subjectId, CancellationToken token = default)
+        {
+            return SendAsync<ClassificationCacheClearResult>(HttpMethod.Delete, "/v1.0/subjects/" + Escape(subjectId) + "/classification-cache", null, token);
+        }
+
+        #endregion
+
         #region Public-Methods-Model-Runners
 
         /// <summary>List model runners (admin).</summary>
@@ -1453,6 +1740,33 @@ namespace Pneuma.Sdk
                         throw new PneumaException(status, responseBody, error);
                     }
 
+                    return responseBody;
+                }
+            }
+        }
+
+        private async Task<string?> SendTextCoreAsync(HttpMethod method, string path, string text, string contentType, CancellationToken token)
+        {
+            using (HttpRequestMessage request = new HttpRequestMessage(method, BaseUrl + path))
+            {
+                if (!string.IsNullOrEmpty(Token))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+                request.Content = new StringContent(text, Encoding.UTF8, contentType);
+
+                using (HttpResponseMessage response = await _Http.SendAsync(request, token).ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                    int status = (int)response.StatusCode;
+                    if (status < 200 || status > 299)
+                    {
+                        ErrorResponse? error = null;
+                        if (!string.IsNullOrWhiteSpace(responseBody))
+                        {
+                            try { error = JsonSerializer.Deserialize<ErrorResponse>(responseBody, _Json); }
+                            catch (JsonException) { error = null; }
+                        }
+                        throw new PneumaException(status, responseBody, error);
+                    }
                     return responseBody;
                 }
             }

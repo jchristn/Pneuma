@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Responses
 {
     using System;
+    using System.Collections.Generic;
 
     /// <summary>
     /// Standard error response body.
@@ -17,6 +18,9 @@ namespace Pneuma.Core.Responses
 
         /// <summary>Optional additional context.</summary>
         public string? Context { get; set; } = null;
+
+        /// <summary>Individual problems behind the error (for example each validation failure), or null.</summary>
+        public List<string>? Problems { get; set; } = null;
 
         #endregion
 

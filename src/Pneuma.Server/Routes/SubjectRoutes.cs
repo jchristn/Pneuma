@@ -135,6 +135,8 @@ namespace Pneuma.Server.Routes
                 return;
             }
             subject.TenantId = rc.TenantId;
+            // A pinned ontology version is set through PUT /v1.0/subjects/{id}/ontology, which checks it is approved and audits it.
+            subject.OntologyVersionId = null;
             if (String.IsNullOrWhiteSpace(subject.GraphRootNodeId)) subject.GraphRootNodeId = SlugHelper.Slugify(subject.DisplayName);
             if (String.IsNullOrWhiteSpace(subject.Tagline)) subject.Tagline = Subject.DefaultTagline;
             if (String.IsNullOrWhiteSpace(subject.RerankingPrompt)) subject.RerankingPrompt = Subject.DefaultRerankingPrompt;
@@ -254,6 +256,8 @@ namespace Pneuma.Server.Routes
             existing.ChunkMaxTokens = update.ChunkMaxTokens;
             existing.ChunkOverlapTokens = update.ChunkOverlapTokens;
             existing.ChunkHeaders = update.ChunkHeaders;
+            existing.ClassificationTemperature = update.ClassificationTemperature;
+            existing.ClassificationCacheEnabled = update.ClassificationCacheEnabled;
             existing.RerankingPrompt = update.RerankingPrompt;
             existing.PromptRewritePrompt = update.PromptRewritePrompt;
             existing.RetrievalFilterJson = update.RetrievalFilterJson;

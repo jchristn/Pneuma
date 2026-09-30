@@ -6,8 +6,10 @@ namespace Pneuma.Core.Database
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Integrations;
     using Pneuma.Core.Models;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Ontologies;
     using Pneuma.Core.Security;
 
     /// <summary>
@@ -91,7 +93,11 @@ namespace Pneuma.Core.Database
             foreach (string roleName in BuiltInRoles.Names())
             {
                 UserRole? existing = await db.Roles.ReadByNameAsync(null, roleName, token).ConfigureAwait(false);
-                if (existing != null) continue;
+                if (existing != null)
+                {
+                    await HealRolePermissionsAsync(db, existing, roleName, token).ConfigureAwait(false);
+                    continue;
+                }
 
                 UserRole role = new UserRole
                 {
@@ -131,6 +137,46 @@ namespace Pneuma.Core.Database
                 // Create the role and all of its permissions and maps in one transaction so a role is never
                 // left half-provisioned if seeding is interrupted mid-write.
                 await db.Roles.CreateWithPermissionsAsync(role, permissions, maps, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Give an existing built-in role any default permission added to it since it was seeded (for example the
+        /// Ontology permissions of Editor and Viewer), so upgraded deployments match new ones. A default is present when a
+        /// permission of the role permits all of its resource types and operations; built-in permissions are protected,
+        /// so this never re-adds one an operator removed.
+        /// </summary>
+        private static async Task HealRolePermissionsAsync(DatabaseDriverBase db, UserRole role, string roleName, CancellationToken token)
+        {
+            if (!role.IsBuiltIn) return;
+            List<Permission> current = await db.Permissions.EnumerateByRoleAsync(role.Id, token).ConfigureAwait(false);
+            foreach (PermissionSpec spec in BuiltInRoles.DefaultPermissions(roleName))
+            {
+                bool present = current.Exists(p => p.PermissionType == spec.PermissionType
+                    && spec.ResourceTypes.TrueForAll(r => p.ResourceTypes.Contains(r))
+                    && spec.OperationTypes.TrueForAll(o => p.OperationTypes.Contains(o)));
+                if (present) continue;
+
+                Permission permission = new Permission
+                {
+                    TenantId = null,
+                    Name = roleName + " defaults",
+                    ResourceTypes = spec.ResourceTypes,
+                    OperationTypes = spec.OperationTypes,
+                    PermissionType = spec.PermissionType,
+                    IsProtected = true,
+                    Active = true
+                };
+                await db.Permissions.CreateAsync(permission, token).ConfigureAwait(false);
+                await db.RolePermissionMaps.CreateAsync(new RolePermissionMap
+                {
+                    TenantId = null,
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    IsProtected = true,
+                    Active = true
+                }, token).ConfigureAwait(false);
+                current.Add(permission);
             }
         }
 
@@ -204,6 +250,17 @@ namespace Pneuma.Core.Database
                 "edge. Only assert what the source supports.", token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "ontology.definition", "Ontology Definition", DefaultOntologyDefinitionPrompt, token).ConfigureAwait(false);
+
+            // The JSON shape the classifier must return, shown and editable like any other prompt. The parser expects
+            // this shape, so an edit that changes it fails classification visibly (a warning on the job).
+            await SeedPromptAsync(db, "ontology.classify.format", "Ontology Classification Output Format", PolyPromptClassifier.DefaultOutputContract, token).ConfigureAwait(false);
+
+            // Taxonomy concepts matched in a document are listed after this introduction in the classifier's input.
+            await SeedPromptAsync(db, "taxonomy.hint", "Taxonomy Hint", ClassificationSetupBuilder.DefaultTaxonomyHint, token).ConfigureAwait(false);
+
+            // The ontology authoring assistant's task and the JSON shape it must return.
+            await SeedPromptAsync(db, "ontology.propose", "Ontology Proposal", OntologyProposer.DefaultTask, token).ConfigureAwait(false);
+            await SeedPromptAsync(db, "ontology.propose.format", "Ontology Proposal Output Format", OntologyProposer.DefaultFormat, token).ConfigureAwait(false);
 
             await SeedPromptAsync(db, "cell.summarize", "Cell Summarization",
                 "Summarize the following content faithfully and concisely, preserving names, dates, places, and claims. " +

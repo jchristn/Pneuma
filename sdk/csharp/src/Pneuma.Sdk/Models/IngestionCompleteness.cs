@@ -35,5 +35,14 @@ namespace Pneuma.Sdk.Models
 
         /// <summary>Chunks stored in the search index.</summary>
         public int ChunksIndexed { get; set; } = 0;
+
+        /// <summary>Classification calls answered from the classification cache.</summary>
+        public int ClassificationCacheHits { get; set; } = 0;
+
+        /// <summary>Elements that broke a rule of the subject's pinned ontology version.</summary>
+        public int OntologyViolations { get; set; } = 0;
+
+        /// <summary>Taxonomy concept matches found in the document's cells.</summary>
+        public int TaxonomyMatches { get; set; } = 0;
     }
 }

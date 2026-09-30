@@ -1,6 +1,6 @@
 # Adding crawlers
 
-Branch: `feature/crawlers`. Source plan: `INGESTION_IMPROVEMENTS.md`. Requirements: `C:\Code\agents\requirements`.
+Branch: `feature/crawlers`. Source plan: `archive/INGESTION_IMPROVEMENTS.md`. Requirements: `C:\Code\agents\requirements`.
 
 Pneuma ingests one URL at a time. This plan adds the crawling infrastructure that AssistantHub has (scheduled
 sources, a delta sync against the previous run, a web crawler, and CIFS and NFS file-share crawlers), plus the

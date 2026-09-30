@@ -62,6 +62,7 @@ Pneuma ships as a fully orchestrated **Docker Compose** stack: one command bring
 
 - **Ingestion pipeline** — Submit a document or URL and Pneuma runs it through an explicit **Categorize** phase (fetch → type-detect → extract semantic cells → classify into the ontology) and a **Hydrate** phase (merge into the graph, chunk, embed, and index), with per-stage live logs, prompt-provenance capture for reproducibility, and best-effort artifact storage (source, atoms, chunks, vectors, subgraph) in S3. Chunking (the **TextChunker** library), embedding, and summarization all run in-process — no external processing service.
 - **Editable, natural-language ontology** — The ontology that drives classification is a **prompt you can rewrite** — reshape the graph's node and edge types (Subject, Person, Organization, Work, Collection, Event, Place, Topic, …) without touching code. The graph merge accepts whatever types your ontology defines.
+- **Governed ontologies** — Define **versioned, approved ontologies** per tenant (node and edge types, constraint rules, and a SKOS-compatible taxonomy), draft them by hand or have a model **propose** one from your content, and pin an approved version to each subject. Rules warn, drop, quarantine for review, or reverse bad edges; the taxonomy tags content **deterministically** with no model call; classification is **reproducible** (per-subject temperature, a classification cache, drift checks); and graphs and ontologies **export** as JSON, JSON-LD, Turtle, GraphML, OWL, and SKOS. See [`ONTOLOGY.md`](ONTOLOGY.md).
 - **Knowledge graph** — Every source becomes provenance-anchored nodes and edges in **LiteGraph**, with entity resolution (canonical-name dedup), per-tenant isolation, and a node explorer for contents, links, adjacent nodes, relationships, rights, and authority.
 - **Hybrid retrieval & grounded answers** — Blends lexical (full-text) and semantic (vector) search over **RecallDB** (Postgres + pgvector) with optional **graph-neighbor expansion**, optional **prompt rewrite** and **LLM re-ranking**, and returns a cited answer or an explicit refusal. One shared service backs both the REST and MCP answer paths.
 - **Metadata / facet scoping** — Ingest links with **labels** and **tags** that are stamped onto every chunk and graph node; then scope any search or answer to those facets with a per-request `metadataFilter` (required/excluded labels + tag conditions) merged with a subject's default filter. Distinct labels/tags are discoverable over REST and MCP.
@@ -213,6 +214,7 @@ Pneuma exposes a versioned REST API at `/v1.0/`. Authenticated endpoints take a 
 | Conversations | `/v1.0/threads`, `GET /v1.0/history[/{id}]`, `/v1.0/feedback` | Threads, chat history with telemetry, feedback |
 | Analytics | `GET /v1.0/analytics` | Per-subject windowed rollups |
 | Evaluation | `/v1.0/eval/facts`, `/v1.0/eval/runs[/{id}/{stream,cancel}]` | Ground-truth facts + async LLM-judged runs |
+| Ontologies | `/v1.0/ontologies`, `/v1.0/ontology-versions/{id}[/approve,/diff,/export,/taxonomy/import]`, `/v1.0/subjects/{id}/{ontology,ontology-violations,ontology-operations,graph/export}` | Governed ontology versions, rules, taxonomy, operations, and export |
 | Model runners | `/v1.0/model-runners`, `GET .../health`, `GET /v1.0/ingestion/endpoints` | Model endpoints + health |
 | Prompts & settings | `/v1.0/prompts`, `GET/PUT /v1.0/settings` | Editable prompts; server settings (secrets masked) |
 | Request history | `GET /v1.0/api/request-history[/summary,/{id}]` | Captured requests (secrets redacted) |
@@ -226,6 +228,7 @@ Pneuma serves a **Model Context Protocol** endpoint in-process at `POST /mcp` (J
 
 - **Read/query tools** — `pneuma_capabilities`, `pneuma_search`, `pneuma_get_node`, `pneuma_get_neighbors`, `pneuma_query` (grounded answer, optional `metadataFilter`, optional SSE stream), `pneuma_enumerate_subjects`/`_get_subject`, links, jobs, `pneuma_distinct_labels`/`_tags`.
 - **History & ops** — threads, history turns, feedback, analytics, eval runs/facts, request history, redacted settings, and model-endpoint health.
+- **Ontologies** — `pneuma_enumerate_ontologies`, `pneuma_get_ontology_version`, `pneuma_get_subject_ontology`, `pneuma_enumerate_ontology_violations`, and starting and reading validate, re-tag, and drift-check operations.
 - **Management/write** — create/update subjects, eval facts + runs (start/cancel/delete), thread delete.
 
 Enumerations are **bounded and paged** (`EnumerationResult` envelope: advance `skip` by the page size until `endOfResults`), full objects are fetched one at a time, and secret-bearing tools redact by default. The full tool catalog and RBAC mapping are in [`MCP_API.md`](MCP_API.md).

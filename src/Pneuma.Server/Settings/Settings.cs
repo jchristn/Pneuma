@@ -7,6 +7,7 @@ namespace Pneuma.Server.Settings
     using Pneuma.Core.Ingestion.Configuration;
     using Pneuma.Core.Ingestion.Refresh;
     using Pneuma.Core.Observability;
+    using Pneuma.Core.Ontologies;
 
     /// <summary>
     /// Root application settings.
@@ -74,6 +75,13 @@ namespace Pneuma.Server.Settings
             set { _LinkRefresh = value ?? new LinkRefreshSettings(); }
         }
 
+        /// <summary>Ontology governance limits (operation worker, export and validation size, violations kept per job, proposal and drift samples, cache retention).</summary>
+        public OntologySettings Ontology
+        {
+            get { return _Ontology; }
+            set { _Ontology = value ?? new OntologySettings(); }
+        }
+
         /// <summary>Crawl plan scheduling settings.</summary>
         public CrawlingSettings Crawling
         {
@@ -86,6 +94,7 @@ namespace Pneuma.Server.Settings
         #region Private-Members
 
         private CrawlingSettings _Crawling = new CrawlingSettings();
+        private OntologySettings _Ontology = new OntologySettings();
         private LinkRefreshSettings _LinkRefresh = new LinkRefreshSettings();
 
         #endregion

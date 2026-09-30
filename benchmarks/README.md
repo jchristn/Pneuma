@@ -4,7 +4,7 @@ This directory holds a reproducible benchmark suite for Pneuma. It answers four 
 right documents and passages, do grounded answers come out right (and say "not in the sources" when they should),
 what does the ingestion pipeline keep or lose on the way in, and what do search and ingestion cost in latency and
 throughput. [RESULTS.md](RESULTS.md) has the current numbers; [../BENCHMARKING.md](../BENCHMARKING.md) is the plan
-and the reasoning behind the design; [../RETRIEVAL_IMPROVEMENTS.md](../RETRIEVAL_IMPROVEMENTS.md) is the scored fix
+and the reasoning behind the design; [../archive/RETRIEVAL_IMPROVEMENTS.md](../archive/RETRIEVAL_IMPROVEMENTS.md) is the scored fix
 backlog.
 
 The harness (`src/Test.Benchmark`) is black-box. It talks to Pneuma only over REST (and MCP for the agent

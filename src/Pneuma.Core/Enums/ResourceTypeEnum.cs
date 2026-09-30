@@ -47,6 +47,8 @@ namespace Pneuma.Core.Enums
         /// <summary>Crawl plan resource (a scheduled source a subject is kept in sync with).</summary>
         CrawlPlan,
         /// <summary>Crawl operation resource (one run of a crawl plan).</summary>
-        CrawlOperation
+        CrawlOperation,
+        /// <summary>Ontology resource (a tenant's governed ontology and its versions). Execute approves and retires versions.</summary>
+        Ontology
     }
 }

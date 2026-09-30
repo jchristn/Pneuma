@@ -7,6 +7,39 @@ between releases, and the project will adopt semantic versioning at its stable 1
 ## [Unreleased]
 
 ### Added
+- **Governed ontologies** (see `ONTOLOGY.md`). Tenant ontologies with numbered versions (Draft, Approved, Retired),
+  a diff, and an approval step; a subject pins one approved version (`PUT /v1.0/subjects/{id}/ontology`, audited)
+  and classifies into its rendered definition. New `Ontology` permission resource (Read, Write, Delete, Execute):
+  approving and retiring need Execute, so authoring and approval can be separated. The built-in Editor role gains
+  Ontology Read and Write and the Viewer role Read; existing tenants' built-in roles are updated on the next start.
+  Routes under `/v1.0/ontologies`, `/v1.0/ontology-versions`, and `/v1.0/ontology-templates`.
+- **Constraint rules.** Edge endpoints, maximum outgoing edges, required fields, name patterns, and minimum
+  confidence, each with an action (Warn, Drop, Quarantine, Reverse), plus an action for undeclared types. Violations
+  are recorded per job (`completeness.ontologyViolations`) and listed per subject; quarantined elements can be
+  released into the graph or dismissed.
+- **Reproducible classification.** Per-subject `classificationTemperature` (default 0) and
+  `classificationCacheEnabled` (default on); a tenant-scoped classification cache keyed by the whole request
+  (`completeness.classificationCacheHits`); classification provenance names the ontology version; and a drift check.
+- **Deterministic taxonomy tagging.** Concepts with preferred and alternative labels and a broader concept are
+  matched in every passage without a model call, linked with `ABOUT` and `BROADER` edges
+  (`completeness.taxonomyMatches`), and given to the classifier as hints.
+- **Ontology operations.** Background Validate, Retag, and DriftCheck operations per subject
+  (`/v1.0/subjects/{id}/ontology-operations`), run by a worker that survives restarts.
+- **LLM-assisted authoring.** `POST /v1.0/ontologies/{id}/propose` drafts node types, edge types, endpoint rules, and
+  guidance from a subject's content or sample text.
+- **Export and import.** Subject graphs export as JSON, JSON-LD, Turtle, or GraphML; ontology versions as OWL and
+  SKOS (Turtle or JSON-LD). SKOS taxonomies import into a draft (merge or replace).
+- **New prompts**, all editable and resolved system → tenant → subject: `ontology.classify.format` (the classifier's
+  output contract, previously fixed in code), `taxonomy.hint`, `ontology.propose`, and `ontology.propose.format`.
+- **Ontology surfaces.** Admin dashboard Knowledge → Ontologies tab and a per-subject Ontology view (pin, settings,
+  violations, operations, export, cache); the same in the subject dashboard (English and Spanish); six MCP tools
+  (`pneuma_enumerate_ontologies`, `pneuma_get_ontology_version`, `pneuma_get_subject_ontology`,
+  `pneuma_enumerate_ontology_violations`, `pneuma_start_ontology_operation`, `pneuma_get_ontology_operation`); C#,
+  JavaScript, and Python SDK methods; a Postman folder; and metrics `pneuma_classification_cache_total{outcome}`,
+  `pneuma_ontology_violations_total{rule_type,action}`, `pneuma_taxonomy_links_total{change}`, and
+  `pneuma_ontology_operations_total{kind,outcome}`.
+- **`Ontology` settings** in `pneuma.json` (worker, export node cap, violations kept per job, proposal and drift
+  sample caps, cache retention), with safe defaults.
 - **Benchmark suite** (`benchmarks/`, `src/Test.Benchmark`). A black-box harness modeled on the Isis suite:
   retrieval ranking per search mode against a built-in reference RAG (BM25, dense, RRF), grounded and agentic
   answering with an LLM judge, ingest fidelity, thematic (global) answers, Claude Code over MCP, closed-loop load,
@@ -88,6 +121,10 @@ between releases, and the project will adopt semantic versioning at its stable 1
 - **`--suite` filter for `Test.Automated`** to run named suites only.
 
 ### Changed
+- **Prompts are scoped system → tenant → subject.** `GET /v1.0/prompts` lists the prompt in effect for the tenant
+  (its copy, else the system default) with a computed `isSystemDefault`; `scope=system|tenant` filters. A tenant
+  user's `PUT` on a system prompt now saves a tenant copy instead of changing the shared system row, and deleting the
+  copy resets the tenant. Only system administrators edit system defaults. The dashboards show each prompt's scope.
 - **One retry policy for every model call.** Embeddings, classification, summarization, chat, and reranking now retry an
   endpoint's transient failures (408, 429, 502, 503, 504, or a 500 wrapping one) with jittered exponential backoff that
   honors `Retry-After`, up to the runner's new `maxRetries` (default 5). Previously only embeddings retried, by
@@ -101,6 +138,10 @@ between releases, and the project will adopt semantic versioning at its stable 1
   the failure was invisible; it now throws and the job records a warning.
 
 ### Security
+- Tenant users could previously change system prompts for every tenant; edits are now isolated to a tenant copy
+  (see Changed).
+- New dependency `dotNetRdf.Core` 3.5.2 (MIT) for Turtle and JSON-LD. Remote JSON-LD contexts are never fetched.
+  Its transitive `AngleSharp` is pinned to 1.8.2 to clear advisory GHSA-pgww-w46g-26qg.
 - **Fetch safety (SSRF guard).** Content fetching refuses URLs that resolve to loopback, private, link-local (including
   cloud metadata), carrier-grade NAT, unique-local IPv6, and multicast addresses unless the host is listed in
   `Ingestion.FetchSafety.AllowedPrivateHosts`. The address is checked when each connection opens, so redirects and DNS
@@ -111,6 +152,8 @@ between releases, and the project will adopt semantic versioning at its stable 1
   `FetchBlocked` audit record. Deployments that ingest intranet sites must add those hosts to the allow-list.
 
 ### Fixed
+- C# SDK: `Subject.Id` and `Subject.TenantId` are now nullable and omitted when unset, so `CreateSubjectAsync` no
+  longer sends empty ids the server rejects.
 - **Re-ingesting a link left the old version searchable.** A re-ingest created new chunks and Source and Cell nodes
   but never removed the previous job's, so search returned stale text beside current text; retries within a job also
   duplicated nodes. Once a new job indexes a link, earlier jobs' chunks and Source and Cell nodes are now removed

@@ -1,4 +1,6 @@
 // Translation resources. English is the baseline catalog for this pass.
+import { ontologyEn } from './ontology';
+
 const en = {
   translation: {
     app: {
@@ -77,6 +79,7 @@ const en = {
       subjects: 'Subjects',
       links: 'Links',
       collections: 'Collections',
+      ontologies: 'Ontologies',
       search: 'Search',
       ingestionLive: 'Ingestion Live',
       jobs: 'Ingestion Queue',
@@ -315,6 +318,12 @@ const en = {
       defaultRefresh: 'Default Link Refresh',
       defaultRefreshTip: 'How often links in this subject are re-checked for changes unless a link sets its own schedule. Changed pages are re-ingested; unchanged pages are not. Off by default.',
       viewLinks: 'View Links',
+      ontology: 'Ontology',
+      ontologyTip: 'Pin an approved ontology version, review violations, run validate/re-tag/drift operations, clear the classification cache, and export the graph.',
+      classificationTemperature: 'Classification Temperature',
+      classificationTemperatureTip: 'Sampling temperature for ingestion classification (0 to 2). 0, the default, gives the most repeatable graph; raise it only for exploratory subjects.',
+      classificationCache: 'Cache Classification Results',
+      classificationCacheTip: 'Reuse the stored result when an identical passage is classified again with the same model, prompts, ontology version, and temperature. Saves model calls on re-ingestion and keeps results stable. On by default.',
       concurrencyOverrides: 'Concurrency overrides (advanced)',
       concurrencyOverridesTip: 'Optional per-subject ingestion concurrency. Each knob overrides the system default for this subject only; leave a field blank to inherit the current default (shown as its placeholder).',
       concurrencyOverridesHint: 'Advanced. Blank fields inherit the system default shown as the placeholder. Only the fields you set are saved as overrides.',
@@ -668,13 +677,17 @@ const en = {
     },
     prompts: {
       title: 'Prompts',
-      subtitle: 'Manage system and ingestion prompts',
+      subtitle: 'Every prompt the platform sends to a model, including ingestion classification and ontology proposal. Editing a system default creates a copy for your tenant (system administrators edit the default itself); delete the copy to return to the system default. Subjects can further append to or replace any prompt.',
+      systemDefault: 'System default',
+      systemDefaultTip: 'The platform default shipped with Pneuma. Editing it as a tenant user creates a tenant copy; only system administrators change the default for all tenants.',
+      tenantCopy: 'Tenant copy',
+      tenantCopyTip: 'Your tenant’s copy of this prompt. It overrides the system default for every subject in the tenant. Delete it to return to the system default.',
       subjectSubtitle: 'Override global prompts for a single subject, or inherit the global defaults.',
       content: 'Content',
       scope: 'Scope',
       scopeGlobal: 'Global',
       scopeSubject: 'Subject',
-      scopeGlobalTip: 'The platform-wide prompt templates used everywhere unless a subject overrides them.',
+      scopeGlobalTip: 'The prompts your tenant uses: the system default, or your tenant’s copy where one exists. Used everywhere unless a subject overrides them.',
       scopeSubjectTip: 'Per-subject prompt overrides. Pick a subject to see and edit its prompts.',
       subject: 'Subject',
       selectSubject: 'Select a subject',
@@ -872,6 +885,7 @@ const en = {
       allCrawlPlans: 'Any source',
       noCrawlPlan: 'Not crawled'
     },
+    ontology: ontologyEn,
     resource: {
       addTitle: 'Create {{name}}',
       duplicateTitle: 'Duplicate {{name}}',

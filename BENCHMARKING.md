@@ -143,7 +143,7 @@ benchmarks/
   run-baseline.{sh,bat}
   start-bench-server.{sh,bat}
 src/Test.Benchmark/        black-box CLI; not referenced by, and not referencing, Pneuma assemblies
-RETRIEVAL_IMPROVEMENTS.md  the scored fix backlog, linked from RESULTS.md
+archive/RETRIEVAL_IMPROVEMENTS.md  the scored fix backlog (archived), linked from RESULTS.md
 ```
 
 `src/Test.Benchmark` joins `Pneuma.sln` so it builds, but it has **no project reference** to `Pneuma.Core` or

@@ -80,6 +80,8 @@ namespace Pneuma.Core.Ingestion.Graph
         public const string EdgeHasMedia = "HAS_MEDIA";
         /// <summary>Mentions another entity (entity-resolution link).</summary>
         public const string EdgeMentions = "MENTIONS";
+        /// <summary>A taxonomy concept has a broader (parent) concept (narrower -&gt; broader).</summary>
+        public const string EdgeBroader = "BROADER";
 
         #endregion
 
@@ -111,6 +113,14 @@ namespace Pneuma.Core.Ingestion.Graph
         public const string TagCommunityId = "communityId";
         /// <summary>Number of member entities a community summary was built from.</summary>
         public const string TagMemberCount = "memberCount";
+        /// <summary>What asserted an element when it was not the classifier (for example "taxonomy").</summary>
+        public const string TagAssertedBy = "assertedBy";
+        /// <summary>The <see cref="TagAssertedBy"/> value for elements created by deterministic taxonomy tagging.</summary>
+        public const string AssertedByTaxonomy = "taxonomy";
+        /// <summary>The taxonomy concept key an element was created for.</summary>
+        public const string TagTaxonomyConcept = "taxonomyConcept";
+        /// <summary>The ontology version an element was checked against when it was asserted.</summary>
+        public const string TagOntologyVersion = "ontologyVersion";
 
         #endregion
 
@@ -173,7 +183,7 @@ namespace Pneuma.Core.Ingestion.Graph
             {
                 EdgeHasPart, EdgeCreatedBy, EdgeContributedTo, EdgePublishedBy, EdgeAffiliatedWith, EdgeCollaboratedWith,
                 EdgeLocatedAt, EdgeOccurredOn, EdgeAbout, EdgeInfluencedBy, EdgeDerivedFromSource, EdgeHasCell, EdgeHasChunk,
-                EdgeHasMedia, EdgeMentions
+                EdgeHasMedia, EdgeMentions, EdgeBroader
             };
             Dictionary<string, string> index = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string type in types) index[NormalizeKey(type)] = type;
@@ -181,9 +191,12 @@ namespace Pneuma.Core.Ingestion.Graph
         }
 
         /// <summary>Uppercase and strip every non-alphanumeric character, producing a match key.</summary>
-        private static string NormalizeKey(string value)
+        /// <param name="value">The type name.</param>
+        /// <returns>The match key (empty for null or empty input).</returns>
+        public static string NormalizeKey(string? value)
         {
-            StringBuilder builder = new StringBuilder(value.Length);
+            if (String.IsNullOrEmpty(value)) return String.Empty;
+            StringBuilder builder = new StringBuilder(value!.Length);
             foreach (char c in value)
             {
                 if (Char.IsLetterOrDigit(c)) builder.Append(Char.ToUpperInvariant(c));
@@ -211,7 +224,9 @@ namespace Pneuma.Core.Ingestion.Graph
         }
 
         /// <summary>Normalize to UPPER_SNAKE_CASE: uppercase, non-alphanumeric runs become a single underscore.</summary>
-        private static string ToUpperSnake(string value)
+        /// <param name="value">The type name.</param>
+        /// <returns>The UPPER_SNAKE_CASE form.</returns>
+        public static string ToUpperSnake(string value)
         {
             StringBuilder builder = new StringBuilder(value.Length);
             bool pendingUnderscore = false;

@@ -191,6 +191,131 @@ class ApiClient {
     return this._request('POST', `/v1.0/${resource}/delete`, { body: { ids } });
   }
 
+  // ------------------------------------------------------ Ontologies
+  listOntologyTemplates() {
+    return this._request('GET', '/v1.0/ontology-templates');
+  }
+
+  listOntologies() {
+    return this._request('GET', '/v1.0/ontologies', { query: { maxResults: 1000 } });
+  }
+
+  createOntology(body) {
+    return this._request('POST', '/v1.0/ontologies', { body });
+  }
+
+  getOntology(id) {
+    return this._request('GET', `/v1.0/ontologies/${encodeURIComponent(id)}`);
+  }
+
+  updateOntology(id, body) {
+    return this._request('PUT', `/v1.0/ontologies/${encodeURIComponent(id)}`, { body });
+  }
+
+  deleteOntology(id) {
+    return this._request('DELETE', `/v1.0/ontologies/${encodeURIComponent(id)}`);
+  }
+
+  createOntologyDraft(id, basedOnVersionId = null) {
+    return this._request('POST', `/v1.0/ontologies/${encodeURIComponent(id)}/versions`, { body: { basedOnVersionId } });
+  }
+
+  proposeOntology(id, body) {
+    return this._request('POST', `/v1.0/ontologies/${encodeURIComponent(id)}/propose`, { body });
+  }
+
+  getOntologyVersion(versionId) {
+    return this._request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`);
+  }
+
+  updateOntologyVersion(versionId, body) {
+    return this._request('PUT', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`, { body });
+  }
+
+  deleteOntologyVersion(versionId) {
+    return this._request('DELETE', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}`);
+  }
+
+  approveOntologyVersion(versionId, changeSummary = null) {
+    return this._request('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/approve`, { body: { changeSummary } });
+  }
+
+  retireOntologyVersion(versionId) {
+    return this._request('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/retire`);
+  }
+
+  diffOntologyVersion(versionId, against = null) {
+    return this._request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/diff`, { query: { against } });
+  }
+
+  getOntologyDefinition(versionId) {
+    return this._request('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/definition`);
+  }
+
+  // Export and import move raw documents (Turtle, JSON-LD, GraphML), so they bypass the JSON request helper.
+  async exportOntologyVersion(versionId, format = 'turtle') {
+    return this._raw('GET', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/export`, { format });
+  }
+
+  async importTaxonomy(versionId, document, format = 'turtle', mode = 'merge') {
+    const text = await this._raw('POST', `/v1.0/ontology-versions/${encodeURIComponent(versionId)}/taxonomy/import`, { format, mode },
+      document, format === 'jsonld' ? 'application/ld+json' : 'text/turtle');
+    return text ? JSON.parse(text) : null;
+  }
+
+  getSubjectOntology(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology`);
+  }
+
+  setSubjectOntology(subjectId, ontologyVersionId, retag = true) {
+    return this._request('PUT', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology`, { body: { ontologyVersionId, retag } });
+  }
+
+  listOntologyViolations(subjectId, status = null) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-violations`, { query: { status, maxResults: 1000 } });
+  }
+
+  releaseOntologyViolation(id) {
+    return this._request('POST', `/v1.0/ontology-violations/${encodeURIComponent(id)}/release`);
+  }
+
+  dismissOntologyViolation(id) {
+    return this._request('POST', `/v1.0/ontology-violations/${encodeURIComponent(id)}/dismiss`);
+  }
+
+  listOntologyOperations(subjectId) {
+    return this._request('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-operations`, { query: { maxResults: 100 } });
+  }
+
+  startOntologyOperation(subjectId, kind, sampleSize = 10) {
+    return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/ontology-operations`, { body: { kind, sampleSize } });
+  }
+
+  getOntologyOperation(id) {
+    return this._request('GET', `/v1.0/ontology-operations/${encodeURIComponent(id)}`);
+  }
+
+  async exportSubjectGraph(subjectId, format = 'json') {
+    return this._raw('GET', `/v1.0/subjects/${encodeURIComponent(subjectId)}/graph/export`, { format });
+  }
+
+  clearClassificationCache(subjectId) {
+    return this._request('DELETE', `/v1.0/subjects/${encodeURIComponent(subjectId)}/classification-cache`);
+  }
+
+  async _raw(method, path, query = null, text = null, contentType = null) {
+    const headers = this._headers(contentType ? { 'Content-Type': contentType } : {});
+    const response = await fetch(`${this.baseUrl}${path}${this.buildQuery(query)}`, { method, headers, body: text });
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    const body = await response.text().catch(() => '');
+    if (!response.ok) {
+      let parsed = null;
+      try { parsed = body ? JSON.parse(body) : null; } catch { /* not json */ }
+      throw new ApiError(response.status, body, parsed);
+    }
+    return body;
+  }
+
   // ------------------------------------------------------ Crawl plans and operations
   listCrawlPlanTypes() {
     return this._request('GET', '/v1.0/crawl-plan-types');

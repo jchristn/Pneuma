@@ -63,6 +63,18 @@ stay bounded.
 - `pneuma_link_refresh_total{outcome}`: scheduled and on-demand link refresh checks, by outcome (Unchanged, Queued,
   Failed, Busy, Skipped).
 
+### Ontologies
+
+See [`ONTOLOGY.md`](ONTOLOGY.md).
+
+- `pneuma_classification_cache_total{outcome}`: classification cache lookups during ingestion (`hit`, `miss`). A
+  falling hit rate on re-ingestion means prompts, the pinned version, the model, or the temperature changed.
+- `pneuma_ontology_violations_total{rule_type,action}`: rule violations found during ingestion, by rule type
+  (`Undeclared` for an undeclared type) and the action applied (Warn, Drop, Quarantine, Reverse).
+- `pneuma_taxonomy_links_total{change}`: taxonomy `ABOUT` links `added` (ingestion and re-tag) or `removed` (re-tag).
+- `pneuma_ontology_operations_total{kind,outcome}`: finished ontology operations by kind (Validate, Retag,
+  DriftCheck) and final status (Succeeded, Failed).
+
 ### Retrieval & Answer
 - `pneuma_chat_answers_total{outcome}` — answered chat/query turns by outcome.
 - `pneuma_chat_answer_duration_seconds{outcome}` — total answer-latency histogram.

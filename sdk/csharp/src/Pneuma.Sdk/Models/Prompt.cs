@@ -13,6 +13,9 @@ namespace Pneuma.Sdk.Models
         /// <summary>Owning tenant identifier. Null for global prompts.</summary>
         public string? TenantId { get; set; } = null;
 
+        /// <summary>Whether this is a system default shared by every tenant (as opposed to the tenant's own copy). Read-only.</summary>
+        public bool IsSystemDefault { get; set; } = false;
+
         /// <summary>Stable key identifying the prompt's role (e.g. "ontology.classify", "user.answer").</summary>
         public string Key { get; set; } = string.Empty;
 

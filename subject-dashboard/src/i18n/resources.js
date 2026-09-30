@@ -4,6 +4,9 @@
  * runtime. Missing keys fall back to English.
  */
 
+import { ontologyEn } from './ontology';
+import { ontologyEs } from './ontology.es';
+
 const en = {
   translation: {
     app: {
@@ -24,6 +27,7 @@ const en = {
       assistant: 'Assistant',
       overview: 'Overview',
       subjects: 'My Subjects',
+      ontologies: 'Ontologies',
       links: 'Links',
       ingestion: 'Ingestion',
       ask: 'Ask',
@@ -63,6 +67,13 @@ const en = {
       mergeReplace: 'Replace',
       mergeModeTip: 'Append adds the override after the global default; Replace uses the override instead of the global default.',
       resetToGlobal: 'Reset to global',
+      systemDefault: 'System default',
+      systemDefaultTip: 'The platform default shipped with Pneuma. Saving it creates a copy for your tenant; only system administrators change the default for all tenants.',
+      tenantCopy: 'Tenant copy',
+      tenantCopyTip: 'Your tenant’s copy of this prompt. It overrides the system default for every subject in the tenant.',
+      resetToSystem: 'Reset to system default',
+      resetToSystemTip: 'Delete your tenant’s copy and return to the system default.',
+      resetToSystemConfirm: 'Delete your tenant’s copy of “{{key}}” and return to the system default?',
       resetTip: 'Remove this subject override and revert to the global default.',
       resetConfirm: 'Remove the subject override for “{{key}}” and revert to the global default?'
     },
@@ -154,7 +165,13 @@ const en = {
       submitLinkCta: 'Submit a Link',
       viewIngestionCta: 'View Ingestion'
     },
+    ontology: ontologyEn,
     subjects: {
+      ontology: 'Ontology',
+      classificationTemperature: 'Classification temperature',
+      classificationTemperatureTip: 'Sampling temperature for ingestion classification (0 to 2). 0, the default, gives the most repeatable graph; raise it only for exploratory subjects.',
+      classificationCache: 'Cache classification results',
+      classificationCacheTip: 'Reuse the stored result when an identical passage is classified again with the same model, prompts, ontology version, and temperature. Saves model calls on re-ingestion and keeps results stable. On by default.',
       defaultRefresh: 'Default Link Refresh',
       defaultRefreshTip: 'How often links in this subject are re-checked for changes unless a link sets its own schedule. Changed pages are re-ingested; unchanged pages are not. Off by default.',
       chunkHeaders: 'Chunk Headers',
@@ -753,6 +770,7 @@ const es = {
       assistant: 'Asistente',
       overview: 'Resumen',
       subjects: 'Mis Creadores',
+      ontologies: 'Ontologías',
       ask: 'Preguntar',
       links: 'Enlaces',
       ingestion: 'Ingesta',
@@ -796,7 +814,13 @@ const es = {
       actions: 'Acciones',
       status: 'Estado'
     },
+    ontology: ontologyEs,
     subjects: {
+      ontology: 'Ontología',
+      classificationTemperature: 'Temperatura de clasificación',
+      classificationTemperatureTip: 'Temperatura de muestreo para la clasificación durante la ingesta (0 a 2). 0, el valor por defecto, da el grafo más repetible; súbala solo en temas exploratorios.',
+      classificationCache: 'Guardar en caché los resultados de clasificación',
+      classificationCacheTip: 'Reutilizar el resultado guardado cuando un pasaje idéntico se vuelve a clasificar con el mismo modelo, prompts, versión de ontología y temperatura. Ahorra llamadas al modelo al reingerir y mantiene resultados estables. Activado por defecto.',
       chunkHeaders: 'Encabezados de fragmento',
       chunkHeadersTip: 'Contexto que se incrusta delante de cada fragmento: el titulo del documento y los encabezados de su seccion. El texto almacenado no cambia. Se aplica a las ingestas nuevas.',
       chunkHeadersTitleAndHeadings: 'Titulo y encabezados',

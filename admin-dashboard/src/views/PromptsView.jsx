@@ -204,6 +204,11 @@ function PromptsView() {
 
   const columns = [
     { key: 'key', label: 'Key', render: (r) => <code className="cell-id">{r.key || r.name || '—'}</code> },
+    { key: 'isSystemDefault', label: t('prompts.scope'), render: (r) => (
+      <span className={`pill ${r.isSystemDefault ? 'pill-neutral' : 'pill-info'}`} title={r.isSystemDefault ? t('prompts.systemDefaultTip') : t('prompts.tenantCopyTip')}>
+        {r.isSystemDefault ? t('prompts.systemDefault') : t('prompts.tenantCopy')}
+      </span>
+    ) },
     { key: 'description', label: 'Description', cellClass: 'wrap', sortable: false, render: (r) => r.description || '—' },
     { key: 'content', label: 'Content', cellClass: 'wrap', sortable: false, render: (r) => {
       const c = r.content || r.text || '';

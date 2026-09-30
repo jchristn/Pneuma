@@ -12,6 +12,7 @@ export const WORKSPACE_TABS = {
   knowledge: [
     { key: 'subjects', view: 'subjects', labelKey: 'nav.subjects' },
     { key: 'collections', view: 'collections', labelKey: 'nav.collections' },
+    { key: 'ontologies', view: 'ontologies', labelKey: 'nav.ontologies' },
     { key: 'search', view: 'search', labelKey: 'nav.search' }
   ],
   // Source material: the links a subject is built from, and the crawl plans (and their runs) that keep links in
@@ -62,7 +63,7 @@ export const NAV_GROUPS = [
     labelKey: 'nav.groupWorkspace',
     items: [
       { section: 'home', labelKey: 'nav.home', icon: 'home', tip: 'Dashboard overview: key counts, recent activity, and system health at a glance.' },
-      { section: 'knowledge', labelKey: 'nav.knowledge', icon: 'database', tip: 'The knowledge base: subjects, the retrieval collections, and full-text search.' },
+      { section: 'knowledge', labelKey: 'nav.knowledge', icon: 'database', tip: 'The knowledge base: subjects, the retrieval collections, the ontologies subjects classify into, and full-text search.' },
       { section: 'sources', labelKey: 'nav.sources', icon: 'link', tip: 'Source material: the links each subject is built from, and the crawl plans that keep them in sync with web sites, repositories, buckets, shares, and folders.' },
       { section: 'ingestion', labelKey: 'nav.ingestion', icon: 'queue', tip: 'The ingestion pipeline: the live view, the queue, and full job history.' },
       { section: 'assistant', labelKey: 'nav.assistant', icon: 'chat', tip: 'Chat with the corpus, browse conversations and history, review feedback, and evaluate answer quality.' }
@@ -98,6 +99,7 @@ export const LEGACY_REDIRECTS = {
   'crawl-plans': { section: 'sources', tab: 'crawl-plans' },
   'crawl-operations': { section: 'sources', tab: 'crawl-operations' },
   collections: { section: 'knowledge', tab: 'collections' },
+  ontologies: { section: 'knowledge', tab: 'ontologies' },
   search: { section: 'knowledge', tab: 'search' },
   'ingestion-live': { section: 'ingestion', tab: 'live' },
   jobs: { section: 'ingestion', tab: 'queue' },

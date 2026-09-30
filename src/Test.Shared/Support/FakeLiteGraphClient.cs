@@ -198,6 +198,13 @@ namespace Test.Shared.Support
         }
 
         /// <inheritdoc />
+        public Task DeleteEdgeAsync(string edgeId, CancellationToken token = default)
+        {
+            _Edges.RemoveAll(edge => edge.Id == edgeId);
+            return Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
         public Task DeleteNodeAsync(string nodeId, CancellationToken token = default)
         {
             _Nodes.Remove(nodeId);

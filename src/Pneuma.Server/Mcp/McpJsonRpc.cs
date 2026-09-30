@@ -49,6 +49,20 @@ namespace Pneuma.Server.Mcp
             return String.Empty;
         }
 
+        /// <summary>Read an optional integer argument from a tool arguments object.</summary>
+        /// <param name="arguments">The arguments element.</param>
+        /// <param name="name">The property name.</param>
+        /// <param name="fallback">The value when the argument is absent or not an integer.</param>
+        /// <returns>The integer value, or the fallback.</returns>
+        public static int GetIntArgument(JsonElement arguments, string name, int fallback)
+        {
+            if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed))
+            {
+                return parsed;
+            }
+            return fallback;
+        }
+
         /// <summary>True when the tool arguments request a streaming (SSE) response.</summary>
         /// <param name="arguments">The arguments element.</param>
         /// <returns>True when <c>stream</c> is present and true.</returns>

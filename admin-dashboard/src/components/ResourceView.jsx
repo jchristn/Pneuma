@@ -61,7 +61,10 @@ function FieldInput({ field, value, onChange, editing = false }) {
     disabled: field.readOnly,
     required: !!field.required,
     placeholder: field.placeholder || '',
-    title: tip
+    title: tip,
+    step: field.step,
+    min: field.min,
+    max: field.max
   };
   if (field.type === 'checkbox') {
     return (

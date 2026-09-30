@@ -485,6 +485,13 @@ namespace Pneuma.Core.Integrations.Implementations
         }
 
         /// <inheritdoc />
+        public Task DeleteEdgeAsync(string edgeId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(edgeId)) return Task.CompletedTask;
+            return DeleteResourceAsync("edges", edgeId, token);
+        }
+
+        /// <inheritdoc />
         public async Task DeleteByJobAsync(string jobId, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(jobId)) throw new ArgumentNullException(nameof(jobId));

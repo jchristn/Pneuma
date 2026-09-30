@@ -1,0 +1,23 @@
+/* Ontology editors: compact editable tables inside modals. */
+.modal-container.onto-modal-xl { max-width: 1080px; }
+.onto-edit-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.onto-edit-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); padding: 4px 6px; border-bottom: 1px solid var(--border-color); }
+.onto-edit-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+.onto-edit-table input, .onto-edit-table select { width: 100%; min-width: 6rem; }
+.onto-edit-table td.onto-narrow { width: 1%; white-space: nowrap; }
+.onto-edit-table td.onto-narrow input { min-width: 0; width: auto; }
+.onto-scroll { overflow-x: auto; max-height: 26rem; overflow-y: auto; }
+.onto-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.onto-toolbar .onto-spacer { flex: 1; }
+.onto-problems { background: var(--bg-secondary); border: 1px solid var(--border-color); border-left: 3px solid var(--color-warning); border-radius: var(--radius-md); padding: 8px 12px; margin: 8px 0; font-size: 0.85rem; }
+.onto-problems ul { margin: 4px 0 0 16px; padding: 0; }
+.onto-counts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.onto-diff h4 { margin: 12px 0 4px; font-size: 0.85rem; }
+.onto-diff ul { margin: 0 0 0 16px; padding: 0; font-size: 0.85rem; }
+.onto-pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px; max-height: 22rem; overflow: auto; }
+.onto-section { margin-top: 16px; }
+.onto-section .kv-grid { margin-bottom: 12px; }
+.onto-error, .onto-section .error-message { white-space: pre-wrap; color: var(--color-danger); background: var(--color-danger-bg); border-radius: var(--radius-md); padding: 8px 12px; margin: 8px 0; font-size: 0.85rem; }
+.error-message.onto-error { display: block; }
+.onto-edit-table .empty-message, .onto-section .empty-message { color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; }
+@media (max-width: 480px) { .onto-edit-table input, .onto-edit-table select { min-width: 5rem; } }

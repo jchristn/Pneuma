@@ -54,7 +54,7 @@ tools/call pneuma_enumerate_subjects { "maxResults": 50, "skip": 200 } → endOf
 tools/call pneuma_get_subject { "id": "sub_abc123" }                   → the full subject
 ```
 
-Every `pneuma_enumerate_*` tool follows this exact protocol — `pneuma_enumerate_subjects`, `pneuma_enumerate_jobs`, `pneuma_enumerate_links`, `pneuma_enumerate_threads`, `pneuma_enumerate_feedback`, `pneuma_enumerate_eval_runs`, `pneuma_enumerate_eval_facts`, `pneuma_enumerate_request_history`, and `pneuma_enumerate_model_runner_health` all take `maxResults`/`skip`/`order`, return the `EnumerationResult` envelope (`totalRecords`/`recordsRemaining`/`endOfResults`) with small summaries, and pair with a matching `pneuma_get_*` tool for the full object. Start at `skip: 0` and advance `skip` by your page size until `endOfResults` is `true`.
+Every `pneuma_enumerate_*` tool follows this exact protocol — `pneuma_enumerate_subjects`, `pneuma_enumerate_jobs`, `pneuma_enumerate_links`, `pneuma_enumerate_threads`, `pneuma_enumerate_feedback`, `pneuma_enumerate_eval_runs`, `pneuma_enumerate_eval_facts`, `pneuma_enumerate_request_history`, `pneuma_enumerate_ontologies`, `pneuma_enumerate_ontology_violations`, and `pneuma_enumerate_model_runner_health` all take `maxResults`/`skip`/`order`, return the `EnumerationResult` envelope (`totalRecords`/`recordsRemaining`/`endOfResults`) with small summaries, and pair with a matching `pneuma_get_*` tool for the full object. Start at `skip: 0` and advance `skip` by your page size until `endOfResults` is `true`.
 
 ## Tools
 
@@ -109,6 +109,12 @@ The current tool set is small and growing; `pneuma_capabilities` and `tools/list
 | `pneuma_request_history_summary` | Summarize request history over an optional filter (`tenantId?`, `method?`, `pathContains?`, `statusCode?`): totals, status-code breakdown, latency. | System administrator only |
 | `pneuma_get_settings` | Return the server settings with every secret field redacted. | System administrator only |
 | `pneuma_enumerate_model_runner_health` | Enumerate model-endpoint health summaries (embedding + completion; paged; `EnumerationResult` out). | ModelRunner / Read |
+| `pneuma_enumerate_ontologies` | Enumerate the tenant's governed ontologies (paged; `EnumerationResult` out), each with its versions (id, number, status). See [`ONTOLOGY.md`](ONTOLOGY.md). | Ontology / Read |
+| `pneuma_get_ontology_version` | Fetch one ontology version: node and edge types, constraint rules and their actions, taxonomy concepts, and a draft's approval problems (`id` required). | Ontology / Read |
+| `pneuma_get_subject_ontology` | Show how a subject classifies (`subjectId` required): the pinned version or the prompt definition, the exact definition text the classifier sees, temperature, cache setting and entries, and quarantined count. | Subject / Read |
+| `pneuma_enumerate_ontology_violations` | Enumerate a subject's ontology rule violations (paged; `EnumerationResult` out; `subjectId` required; `status?` Recorded, Quarantined, Released, or Dismissed). | Subject / Read |
+| `pneuma_start_ontology_operation` | Queue `Validate`, `Retag`, or `DriftCheck` on a subject (`subjectId`, `kind` required; `sampleSize?` for a drift check). Returns the queued operation; poll `pneuma_get_ontology_operation`. | Subject / Update |
+| `pneuma_get_ontology_operation` | Fetch one ontology operation with its progress, findings, and items (`id` required). | Subject / Read |
 | `pneuma_get_model_runner_health` | Fetch the health of one model endpoint by id (uptime, latency, last status; `id` required). | ModelRunner / Read |
 
 Further tools (ingest a link) follow the same contract as they land. The grounded-answer logic is shared with the REST `/v1.0/query` endpoint, so the two surfaces cannot drift.

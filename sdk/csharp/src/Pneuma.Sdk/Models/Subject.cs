@@ -7,11 +7,11 @@ namespace Pneuma.Sdk.Models
     /// </summary>
     public class Subject
     {
-        /// <summary>Subject identifier (prefix "sub_").</summary>
-        public string Id { get; set; } = string.Empty;
+        /// <summary>Subject identifier (prefix "sub_"). Null on a subject being created (the server assigns it).</summary>
+        public string? Id { get; set; } = null;
 
-        /// <summary>Owning tenant identifier.</summary>
-        public string TenantId { get; set; } = string.Empty;
+        /// <summary>Owning tenant identifier. Null on a subject being created (the server sets it from the caller).</summary>
+        public string? TenantId { get; set; } = null;
 
         /// <summary>Display name of the subject.</summary>
         public string DisplayName { get; set; } = string.Empty;
@@ -37,6 +37,15 @@ namespace Pneuma.Sdk.Models
 
         /// <summary>Subject-specific ontology classification prompt, appended after the global one during ingestion.</summary>
         public string? OntologyClassifyPrompt { get; set; } = null;
+
+        /// <summary>The approved ontology version the subject classifies against (set with SetSubjectOntologyAsync; ignored by subject create and update).</summary>
+        public string? OntologyVersionId { get; set; } = null;
+
+        /// <summary>Model temperature for ontology classification, 0 to 2 (default 0).</summary>
+        public double ClassificationTemperature { get; set; } = 0;
+
+        /// <summary>Reuse classification results for identical requests (default true).</summary>
+        public bool ClassificationCacheEnabled { get; set; } = true;
 
         /// <summary>Subject-specific ontology definition, appended after the global one during ingestion.</summary>
         public string? OntologyDefinitionPrompt { get; set; } = null;

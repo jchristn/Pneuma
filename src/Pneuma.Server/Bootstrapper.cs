@@ -193,6 +193,8 @@ namespace Pneuma.Server
                 artifactStore, fetcher, authentication.Cipher, settings.Ingestion, concurrency, logging, telemetry);
             // Crawled links are opened through the crawler of the plan that created them.
             processor.Resolver.CrawlSource = server.CrawlContent;
+            // Ontology limits (violations recorded per job) come from the server's Ontology settings.
+            processor.Ontology = settings.Ontology;
             IngestionWorkerService worker = new IngestionWorkerService(database, processor, settings.Ingestion, concurrency, logging);
 
             using (CancellationTokenSource shutdown = new CancellationTokenSource())

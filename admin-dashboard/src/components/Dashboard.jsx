@@ -39,6 +39,7 @@ import AnalyticsView from '../views/AnalyticsView';
 import EvalView from '../views/EvalView';
 import CrawlPlansView from '../views/CrawlPlansView';
 import CrawlOperationsView from '../views/CrawlOperationsView';
+import OntologiesView from '../views/OntologiesView';
 
 const VIEWS = {
   home: HomeView,
@@ -50,6 +51,7 @@ const VIEWS = {
   jobs: IngestionQueueView,
   'ingestion-jobs': IngestionJobsView,
   'crawl-plans': CrawlPlansView,
+  ontologies: OntologiesView,
   'crawl-operations': CrawlOperationsView,
   'model-runners': ModelRunnersView,
   prompts: PromptsView,

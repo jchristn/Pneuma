@@ -25,6 +25,12 @@ namespace Pneuma.Sdk.Enums
         /// <summary>Authorization was bypassed through an approved administrative path.</summary>
         AuthorizationBypass,
         /// <summary>A role, permission, or assignment changed.</summary>
-        RoleChanged
+        RoleChanged,
+        /// <summary>A URL was refused by the fetch-safety policy.</summary>
+        FetchBlocked,
+        /// <summary>A crawl plan's credentials or security-relevant settings changed.</summary>
+        CrawlPlanSecurityChanged,
+        /// <summary>An ontology version was approved or retired, or a subject's pinned version changed.</summary>
+        OntologyGovernance
     }
 }

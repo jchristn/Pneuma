@@ -136,6 +136,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 "DELETE FROM tenants WHERE id = " + t + ";"
             };
 
+            statements.InsertRange(0, OntologyMethods.DeleteByTenantSql(tenantId));
             await QueryTransaction(statements, token).ConfigureAwait(false);
             return existing.Rows.Count > 0;
         }

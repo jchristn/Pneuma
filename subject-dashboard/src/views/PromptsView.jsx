@@ -30,7 +30,22 @@ function GlobalPromptCard({ prompt, onChanged }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [confirmReset, setConfirmReset] = useState(false);
+
   useEffect(() => { setContent(prompt.content || prompt.text || ''); }, [prompt.content, prompt.text, prompt.id]);
+
+  // Deleting the tenant's copy returns the tenant to the system default.
+  const reset = async () => {
+    setError('');
+    try {
+      await apiClient.delete(`/v1.0/prompts/${encodeURIComponent(prompt.id)}`);
+      setConfirmReset(false);
+      await onChanged();
+    } catch (err) {
+      setConfirmReset(false);
+      setError(err?.message || 'Reset failed');
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -50,6 +65,10 @@ function GlobalPromptCard({ prompt, onChanged }) {
       <div className="prompt-card-head">
         <code className="prompt-key">{prompt.key || prompt.name || prompt.id}</code>
         {prompt.description && <span className="prompt-name">{prompt.description}</span>}
+        <span className={`prompt-badge ${prompt.isSystemDefault ? 'prompt-badge-global' : 'prompt-badge-override'}`}
+          title={prompt.isSystemDefault ? t('prompts.systemDefaultTip') : t('prompts.tenantCopyTip')}>
+          {prompt.isSystemDefault ? t('prompts.systemDefault') : t('prompts.tenantCopy')}
+        </span>
       </div>
       <div className="prompt-field">
         <label htmlFor={`gp-${prompt.id}`}>{t('prompts.content')}</label>
@@ -60,7 +79,14 @@ function GlobalPromptCard({ prompt, onChanged }) {
         <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
           {saving ? t('common.loading') : t('common.save')}
         </button>
+        {prompt.isSystemDefault === false && (
+          <button type="button" className="btn btn-secondary" onClick={() => setConfirmReset(true)} disabled={saving} title={t('prompts.resetToSystemTip')}>
+            {t('prompts.resetToSystem')}
+          </button>
+        )}
       </div>
+      <ConfirmModal isOpen={confirmReset} onClose={() => setConfirmReset(false)} onConfirm={reset}
+        title={t('prompts.resetToSystem')} message={t('prompts.resetToSystemConfirm', { key: prompt.key })} confirmLabel={t('prompts.resetToSystem')} />
     </div>
   );
 }
