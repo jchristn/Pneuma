@@ -84,11 +84,16 @@ function Dashboard() {
 
   // An old single-view URL (e.g. /dashboard/subjects, /dashboard/jobs) redirects to its consolidated tab home,
   // preserving any query string (e.g. /dashboard/ask?thread=...).
+  // A tab that moved to another workspace (e.g. /dashboard/ingestion/crawl-plans) redirects the same way. The target
+  // is a string so the effect below only re-runs when the destination actually changes.
   const moved = MOVED_TABS[section] && tab ? MOVED_TABS[section][tab] : null;
-  const legacy = !WORKSPACE_TABS[section] ? LEGACY_REDIRECTS[section] : (moved ? { section: moved, tab } : null);
+  const legacy = !WORKSPACE_TABS[section] ? LEGACY_REDIRECTS[section] : null;
+  let redirectTo = null;
+  if (legacy) redirectTo = `/dashboard/${legacy.section}/${legacy.tab}`;
+  else if (moved) redirectTo = `/dashboard/${moved}/${tab}`;
   useEffect(() => {
-    if (legacy) navigate(`/dashboard/${legacy.section}/${legacy.tab}${location.search || ''}`, { replace: true });
-  }, [legacy, navigate, location.search]);
+    if (redirectTo) navigate(`${redirectTo}${location.search || ''}`, { replace: true });
+  }, [redirectTo, navigate, location.search]);
 
   // Resolve the active workspace, its (role-filtered) tabs, and the active tab's view component.
   const allTabs = WORKSPACE_TABS[section] || null;
@@ -126,7 +131,7 @@ function Dashboard() {
   const selectTab = (selected) => navigate(`/dashboard/${section}/${selected.key}`);
 
   // While a legacy URL is redirecting, render nothing to avoid a flash of NotFound.
-  if (legacy) return null;
+  if (redirectTo) return null;
 
   return (
     <div className="shell">
