@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { STEPS, MIN_QUESTIONS, loadState, saveState, clearState, emptyState, listOf, questionsKey } from './wizardDraft';
+import { STEPS, MIN_QUESTIONS, loadState, saveState, clearState, emptyState, listOf, questionsKey, stepModel, formatDuration, hasCapability } from './wizardDraft';
+import WizardProgressPanel from './WizardProgressPanel';
 import WizardDescribeStep from './WizardDescribeStep';
 import WizardBriefStep from './WizardBriefStep';
 import WizardQuestionsStep from './WizardQuestionsStep';
@@ -30,7 +31,9 @@ function SubjectWizard({ onClose, onCreated }) {
   const [warnings, setWarnings] = useState([]);
   const [lastModel, setLastModel] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [progress, setProgress] = useState(null);
   const stateRef = useRef(state);
+  const abortRef = useRef(null);
   const requestSeq = useRef(0);
   const autoTried = useRef(new Set());
 
@@ -61,7 +64,7 @@ function SubjectWizard({ onClose, onCreated }) {
         draft.brief = value;
         if (result.groundingExcerpt) {
           draft.groundingText = [draft.groundingText, result.groundingExcerpt].filter((x) => x && x.trim()).join('\n\n');
-          draft.groundingUrl = '';
+          draft.groundingUrls = [''];
         }
       } else if (step === 'questions') draft.questions = value || [];
       else if (step === 'ontology') {
@@ -79,31 +82,61 @@ function SubjectWizard({ onClose, onCreated }) {
     setBusy(step);
     setError('');
     setWarnings([]);
+    const startedAt = Date.now();
+    setProgress({ phase: step === 'brief' ? 'reading' : 'waiting', attempt: 1, characters: 0, startedAt });
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const current = stateRef.current;
       const body = {
-        draft: current.draft,
-        modelRunnerId: current.settings.modelRunnerId || null,
+        draft: { ...current.draft, groundingUrls: (current.draft.groundingUrls || []).filter((u) => u && u.trim()) },
+        modelRunnerId: stepModel(current.settings, step) || null,
         guidance: guidance || null,
         mode: mode || null,
         count: count || 0
       };
-      const result = await apiClient.wizardGenerate(step, body);
+      let result = null;
+      let failure = null;
+      // Streamed so the progress panel can show the phase and how much the model has written.
+      await apiClient.wizardGenerateStream(step, body, {
+        signal: controller.signal,
+        onEvent: (ev) => {
+          if (seq !== requestSeq.current || !ev) return;
+          if (ev.type === 'progress') setProgress((prev) => ({ ...prev, ...ev, startedAt }));
+          else if (ev.type === 'complete') result = ev.result;
+          else if (ev.type === 'error') failure = ev.message || t('wizard.generateFailed');
+        }
+      });
       if (seq !== requestSeq.current) return;
+      if (failure || !result) throw new Error(failure || t('wizard.generateFailed'));
       apply(step, result);
+      const took = result.elapsedMs || (Date.now() - startedAt);
+      update((s) => ({ ...s, stepTimes: { ...(s.stepTimes || {}), [step]: took } }));
       setWarnings(result.warnings || []);
-      setLastModel({ model: result.model, elapsedMs: result.elapsedMs });
+      setLastModel({ model: result.model, elapsedMs: took });
     } catch (err) {
-      if (seq === requestSeq.current) setError(err?.message || t('wizard.generateFailed'));
+      if (seq === requestSeq.current && err?.name !== 'AbortError') setError(err?.message || t('wizard.generateFailed'));
     } finally {
-      if (seq === requestSeq.current) setBusy(null);
+      if (seq === requestSeq.current) {
+        setBusy(null);
+        setProgress(null);
+        abortRef.current = null;
+      }
     }
-  }, [apiClient, apply, t]);
+  }, [apiClient, apply, t, update]);
 
   const cancel = () => {
     requestSeq.current += 1;
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = null;
     setBusy(null);
+    setProgress(null);
   };
+
+  const completionRunners = runners.filter((r) => hasCapability(r, 'Completion'));
+  const runnerName = (id) => (completionRunners.find((r) => r.id === id)?.name) || null;
+  const setStepModel = (step, id) => update((s) => ({ ...s, settings: { ...s.settings, stepModels: { ...(s.settings.stepModels || {}), [step]: id } } }));
+  const totalMs = Object.values(state.stepTimes || {}).reduce((sum, ms) => sum + (ms || 0), 0);
 
   // Draft a step automatically the first time it is opened with nothing in it.
   useEffect(() => {
@@ -149,7 +182,7 @@ function SubjectWizard({ onClose, onCreated }) {
       const s = stateRef.current;
       const result = await apiClient.wizardCommit({
         draft: s.draft,
-        inferenceModel: s.settings.modelRunnerId || null,
+        inferenceModel: s.settings.modelRunnerId || s.settings.draftModel || null,
         embeddingModel: s.settings.embeddingModel || null,
         collection: s.settings.collection || null,
         ontologyMode: s.settings.ontologyMode || options?.defaultOntologyMode || 'Prompt'
@@ -180,7 +213,13 @@ function SubjectWizard({ onClose, onCreated }) {
     setWarnings([]);
   };
 
-  const stepProps = { state, update, updateDraft, generate, busy, options, runners, collections, apiClient, t, goTo };
+  const stepProps = {
+    state, update, updateDraft, generate, busy, options, runners, collections, apiClient, t, goTo,
+    completionRunners,
+    stepModelFor: (step) => (state.settings.stepModels || {})[step] || '',
+    setStepModel,
+    defaultModelLabel: state.settings.draftModel ? t('wizard.defaultModel', { model: runnerName(state.settings.draftModel) || state.settings.draftModel }) : t('wizard.describe.firstAvailable')
+  };
   const renderStep = () => {
     switch (state.step) {
       case 'brief': return <WizardBriefStep {...stepProps} />;
@@ -206,7 +245,8 @@ function SubjectWizard({ onClose, onCreated }) {
           <div>
             <h2>{created ? (created.subject?.displayName || t('wizard.title')) : t('wizard.title')}</h2>
             <div className="sw-subtitle">
-              {lastModel?.model ? t('wizard.draftedWith', { model: lastModel.model, seconds: Math.max(1, Math.round((lastModel.elapsedMs || 0) / 1000)) }) : t('wizard.subtitle')}
+              {lastModel?.model ? t('wizard.draftedWith', { model: lastModel.model, time: formatDuration(lastModel.elapsedMs) }) : t('wizard.subtitle')}
+              {totalMs > 0 && <span className="sw-total" title={t('wizard.progress.totalTip')}> · {t('wizard.progress.total', { time: formatDuration(totalMs) })}</span>}
             </div>
           </div>
           <button type="button" className="sw-icon-btn" onClick={close} aria-label={t('common.close')} title={created ? t('wizard.closeDone') : t('wizard.closeKeep')}>✕</button>
@@ -220,6 +260,7 @@ function SubjectWizard({ onClose, onCreated }) {
                     disabled={!reachable(i) || !!busy} onClick={() => goTo(step)} aria-current={step === state.step ? 'step' : undefined}>
                     <span className="sw-rail-num">{i + 1}</span>
                     <span>{t(`wizard.step.${step}`)}</span>
+                    {state.stepTimes?.[step] ? <span className="sw-rail-time" title={t('wizard.progress.stepTimeTip')}>{formatDuration(state.stepTimes[step])}</span> : null}
                   </button>
                 </li>
               ))}
@@ -236,11 +277,8 @@ function SubjectWizard({ onClose, onCreated }) {
               </div>
             )}
             {busy && busy !== 'commit' && (
-              <div className="sw-busy" role="status">
-                <span className="sw-spinner" aria-hidden="true" />
-                <span>{t(`wizard.busy.${busy}`)}</span>
-                <button type="button" className="sw-btn sw-btn-secondary sw-btn-sm" onClick={cancel}>{t('common.cancel')}</button>
-              </div>
+              <WizardProgressPanel t={t} step={busy} progress={progress} lastMs={state.stepTimes?.[busy]} onCancel={cancel}
+                modelName={runnerName(stepModel(state.settings, busy)) || (completionRunners[0]?.name ?? null)} />
             )}
             {renderStep()}
           </main>

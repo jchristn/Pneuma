@@ -12,7 +12,10 @@ namespace Pneuma.Sdk.Models
         /// <summary>Optional reference text.</summary>
         public string? GroundingText { get; set; } = null;
 
-        /// <summary>Optional reference web page.</summary>
+        /// <summary>Optional reference web pages (at most the server's MaxGroundingUrls).</summary>
+        public List<string> GroundingUrls { get; set; } = new List<string>();
+
+        /// <summary>A single reference web page (older form of <see cref="GroundingUrls"/>).</summary>
         public string? GroundingUrl { get; set; } = null;
 
         /// <summary>The brief.</summary>

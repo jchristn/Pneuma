@@ -1,9 +1,12 @@
 // English strings for the new subject wizard and starter questions. Kept in their own module and merged into the
 // translation bundle as `wizard`.
 export const wizardEn = {
+  modelLabel: 'Model',
+  modelTip: 'The model that drafts this step. Leave it on the default to use the drafting model chosen on the first step.',
+  defaultModel: 'Drafting model ({{model}})',
   title: 'New subject',
   subtitle: 'Describe the subject; a model drafts the rest and you shape it.',
-  draftedWith: 'Last draft by {{model}} in {{seconds}} s',
+  draftedWith: 'Last draft by {{model}} in {{time}}',
   optionsFailed: 'Could not load the wizard options.',
   generateFailed: 'The model could not draft this step.',
   commitFailed: 'The subject could not be created.',
@@ -55,6 +58,13 @@ export const wizardEn = {
     starterQuestionsTip: 'Example questions shown as suggestions on the ask page and used by the coverage check.'
   },
   describe: {
+    sameAsDrafting: 'Same as the drafting model',
+    addUrl: '+ Add another link',
+    referenceUrlN: 'Reference page {{n}}',
+    referenceUrls: 'Reference web pages (up to {{count}})',
+    draftModelHint: 'Each later step has its own model choice next to its Regenerate button, if you want a different model for it.',
+    draftModelTip: 'The completion model that drafts the brief, questions, ontology, and prompts. Each step can use a different one.',
+    draftModel: 'Model that drafts',
     title: 'What is this subject?',
     intro: 'A sentence or two is enough. Say what the subject is and who will ask about it; the model drafts the rest.',
     label: 'Description',
@@ -65,8 +75,8 @@ export const wizardEn = {
     referenceUrl: 'Reference web page',
     referenceText: 'Reference text',
     advanced: 'Advanced settings',
-    model: 'Model that drafts and answers',
-    modelTip: 'The completion model endpoint used to draft this wizard and, afterwards, for the subject\'s ingestion and answers.',
+    model: 'Model that answers for the subject',
+    modelTip: 'The completion model the subject uses for ingestion and answers once it exists. Defaults to the drafting model.',
     embedding: 'Embedding model',
     embeddingTip: 'The embedding endpoint that vectorizes the subject\'s content. Its dimensionality must match the collection.',
     collection: 'Collection',
@@ -227,5 +237,23 @@ export const wizardEn = {
     intro: 'Shown as suggestions on the ask page and asked by the coverage check.',
     empty: 'No starter questions yet.',
     saved: 'Starter questions saved.'
+  },
+  progress: {
+    elapsedTip: 'Time since this step started',
+    phases: 'Progress',
+    phase: {
+      reading: 'Reading the reference pages',
+      waiting: 'Waiting for the model',
+      writing: 'Model writing',
+      checking: 'Checking the result'
+    },
+    written: '{{chars}} characters written (about {{tokens}} tokens)',
+    waitingHint: 'The model is reading the request. Large or local models can take a while before the first words appear.',
+    retry: 'Attempt {{n}} of 2.',
+    model: 'Model: {{model}}',
+    lastTime: 'last time this step took {{time}}',
+    total: 'model time so far {{time}}',
+    totalTip: 'Total time the model has spent drafting this subject',
+    stepTimeTip: 'How long the model took for this step'
   }
 };

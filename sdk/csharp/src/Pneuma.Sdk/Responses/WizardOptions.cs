@@ -23,6 +23,9 @@ namespace Pneuma.Sdk.Responses
         /// <summary>Most questions the coverage check asks.</summary>
         public int CoverageMaxQuestions { get; set; } = 12;
 
+        /// <summary>Most reference URLs the brief step reads.</summary>
+        public int MaxGroundingUrls { get; set; } = 5;
+
         /// <summary>True when reference URLs can be read.</summary>
         public bool GroundingUrlEnabled { get; set; } = true;
 

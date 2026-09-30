@@ -330,3 +330,13 @@ the proposal plus the model and elapsed time so the dashboard can show what prod
   moved to the footer; the ontology table columns and the add-question row were resized; the coverage check stops when
   the wizard closes; the rail is left-aligned in the admin dashboard. Full suite before the fixes: 339 cases, 336
   passed, 3 skipped; the SubjectWizard suite passes after them. The simulated user session (Phase 5) is still to do.
+- **2026-09-30. Model choice, several links, and progress** (the user's requests after trying the images). The first
+  step now picks the drafting model and takes up to `Wizard.MaxGroundingUrls` (5) reference links; each later step has
+  its own model picker next to its Regenerate button; the model that answers for the subject stays in Advanced and
+  defaults to the drafting model. Drafting steps stream progress from new `/v1.0/subject-wizard/{step}/stream` routes
+  (`WizardModelCaller` streams the reply and times out only after `TimeoutSeconds` without output, or three times that in
+  all; `WizardGroundingReader` reads the pages). The dashboards show a progress panel (phase chips, live timer, characters
+  written, attempt, model, and the step's last time), each finished step's time in the rail, and the total model time in
+  the header. Found while checking: the model pickers never listed endpoints (the model-runner list returns `type`, not
+  `capabilities`); fixed. A 12,000-character Wikipedia excerpt stalled gemma3:4b, so `MaxGroundingCharacters` now
+  defaults to 6000. Suite SubjectWizard: 12 cases.

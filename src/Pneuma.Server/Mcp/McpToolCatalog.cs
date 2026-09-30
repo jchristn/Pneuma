@@ -118,7 +118,8 @@ namespace Pneuma.Server.Mcp
                         {
                             description = new { type = "string", description = "What the subject is and who will ask about it (required)." },
                             groundingText = new { type = "string", description = "Optional reference text about the subject." },
-                            groundingUrl = new { type = "string", description = "Optional web page about the subject to read first (subject to the server's fetch-safety policy)." },
+                            groundingUrls = new { type = "array", items = new { type = "string" }, description = "Optional web pages about the subject to read first (subject to the server's fetch-safety policy; at most Wizard.MaxGroundingUrls)." },
+                            groundingUrl = new { type = "string", description = "A single reference web page (same as one entry of groundingUrls)." },
                             modelRunnerId = new { type = "string", description = "Completion model endpoint to draft with; defaults to the tenant's first active one." },
                             questionCount = new { type = "integer", description = "How many example questions to draft (default 12)." },
                             guidance = new { type = "string", description = "Optional guidance for the model." }

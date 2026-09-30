@@ -565,6 +565,18 @@ class ApiClient {
     return this._request('POST', `/v1.0/subject-wizard/${encodeURIComponent(step)}`, { body });
   }
 
+  // Same as wizardGenerate, streamed: onEvent receives { type: 'progress', phase, attempt, characters, elapsedMs, message }
+  // while the model works, then { type: 'complete', result } or { type: 'error', statusCode, message }.
+  wizardGenerateStream(step, body, { onEvent, signal } = {}) {
+    return streamSse(`${this.baseUrl}/v1.0/subject-wizard/${encodeURIComponent(step)}/stream`, {
+      method: 'POST',
+      headers: this._headers({ Accept: 'text/event-stream' }),
+      body,
+      signal,
+      onEvent
+    });
+  }
+
   // Clean up a draft ontology and render it as the classifier will see it (no model call).
   wizardRenderOntology(draft) {
     return this._request('POST', '/v1.0/subject-wizard/render-ontology', { body: { draft } });

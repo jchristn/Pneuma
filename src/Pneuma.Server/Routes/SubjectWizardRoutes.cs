@@ -11,6 +11,7 @@ namespace Pneuma.Server.Routes
     using Pneuma.Core.Security;
     using Pneuma.Core.Wizard;
     using Pneuma.Server.Services;
+    using Pneuma.Server.Streaming;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -75,6 +76,18 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Draft the subject's additions to the answering, classification, query rewriting, and reranking prompts", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/sources", SourcesAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Suggest where content for the subject might come from", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
+            // Streaming variants: server-sent events report progress (phase, attempt, characters written, time so far) and end
+            // with { type: "complete", result } or { type: "error", statusCode, message }.
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/brief/stream", ctx => StreamAsync(ctx, (tenant, request, progress) => _Wizard.BriefAsync(tenant, request, ctx.Token, progress)), RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Draft the brief, streaming progress as server-sent events", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/questions/stream", ctx => StreamAsync(ctx, (tenant, request, progress) => _Wizard.QuestionsAsync(tenant, request, ctx.Token, progress)), RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Draft example questions, streaming progress as server-sent events", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/ontology/stream", ctx => StreamAsync(ctx, (tenant, request, progress) => _Wizard.OntologyAsync(tenant, request, ctx.Token, progress)), RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Draft the ontology, streaming progress as server-sent events", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/prompts/stream", ctx => StreamAsync(ctx, (tenant, request, progress) => _Wizard.PromptsAsync(tenant, request, ctx.Token, progress)), RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Draft the prompt additions, streaming progress as server-sent events", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/sources/stream", ctx => StreamAsync(ctx, (tenant, request, progress) => _Wizard.SourcesAsync(tenant, request, ctx.Token, progress)), RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Suggest sources, streaming progress as server-sent events", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/render-ontology", RenderOntologyAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Clean up a draft ontology and render it as the classifier will see it (no model call)", tag).WithRequestBody(OpenApiBodies.Json<WizardGenerateRequest>("The draft so far")));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.POST, "/v1.0/subject-wizard/commit", CommitAsync, RouteHelper.ExceptionAsync,
@@ -103,6 +116,7 @@ namespace Pneuma.Server.Routes
                 MaxQuestions = _Settings.MaxQuestions,
                 CoverageMaxQuestions = _Settings.CoverageMaxQuestions,
                 GroundingUrlEnabled = _GroundingUrlEnabled,
+                MaxGroundingUrls = _Settings.MaxGroundingUrls,
                 HasCompletionModel = runners.Any(r => r.Active && r.Capabilities.Contains(ModelCapabilityEnum.Completion))
             };
             await RouteHelper.SendJsonAsync(ctx, 200, options).ConfigureAwait(false);
@@ -245,12 +259,40 @@ namespace Pneuma.Server.Routes
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "The wizard draft is required.").ConfigureAwait(false);
                 return null;
             }
-            if (!_GroundingUrlEnabled && !String.IsNullOrWhiteSpace(request.Draft.GroundingUrl))
+            if (!_GroundingUrlEnabled && WizardGroundingReader.UrlsOf(request.Draft).Count > 0)
             {
                 await RouteHelper.SendErrorAsync(ctx, 400, "BadRequest", "Reading reference URLs is not available on this server; paste the text instead.").ConfigureAwait(false);
                 return null;
             }
             return request;
+        }
+
+        private async Task StreamAsync<T>(HttpContextBase ctx, Func<string, WizardGenerateRequest, Func<WizardProgress, Task>, Task<WizardResult<T>>> run) where T : class
+        {
+            WizardGenerateRequest? request = await ReadGenerateAsync(ctx).ConfigureAwait(false);
+            if (request == null) return;
+            SseWriter sse = new SseWriter(ctx);
+            Func<WizardProgress, Task> progress = p => sse.SendAsync(new
+            {
+                type = "progress",
+                phase = p.Phase,
+                attempt = p.Attempt,
+                characters = p.Characters,
+                elapsedMs = p.ElapsedMs,
+                message = p.Message
+            }, false, ctx.Token);
+            WizardResult<T> result;
+            try
+            {
+                result = await run(RouteHelper.Context(ctx).TenantId!, request, progress).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException))
+            {
+                await sse.SendAsync(new { type = "error", statusCode = 500, message = "The wizard step failed: " + e.Message }, true, ctx.Token).ConfigureAwait(false);
+                return;
+            }
+            if (result.Success) await sse.SendAsync(new { type = "complete", result }, true, ctx.Token).ConfigureAwait(false);
+            else await sse.SendAsync(new { type = "error", statusCode = result.StatusCode, message = result.Error ?? "The wizard step failed." }, true, ctx.Token).ConfigureAwait(false);
         }
 
         private static async Task SendAsync<T>(HttpContextBase ctx, WizardResult<T> result) where T : class

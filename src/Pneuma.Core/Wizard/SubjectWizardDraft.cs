@@ -14,7 +14,10 @@ namespace Pneuma.Core.Wizard
         /// <summary>Optional text about the subject for the model to read (pasted, or the excerpt returned from a grounding URL).</summary>
         public string? GroundingText { get; set; } = null;
 
-        /// <summary>Optional web page about the subject; the brief step fetches it and returns an excerpt to keep as grounding text.</summary>
+        /// <summary>Optional web pages about the subject; the brief step reads them and returns an excerpt to keep as grounding text.</summary>
+        public List<string> GroundingUrls { get; set; } = new List<string>();
+
+        /// <summary>A single reference web page (kept for older clients; read together with <see cref="GroundingUrls"/>).</summary>
         public string? GroundingUrl { get; set; } = null;
 
         /// <summary>The brief, once drafted.</summary>

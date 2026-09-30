@@ -125,11 +125,28 @@
 .sw-confirm { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .sw-confirm-box { background: var(--sw-bg); border: 1px solid var(--sw-border); border-radius: 10px; padding: 16px 18px; max-width: 420px; }
 
+/* Progress while the model drafts a step. */
+.sw-progress { border: 1px solid var(--sw-border); border-left: 3px solid var(--sw-primary); border-radius: var(--sw-radius); padding: 10px 12px; margin-bottom: 14px; background: var(--sw-surface); }
+.sw-progress .sw-row { margin: 0; }
+.sw-progress-time { font-family: var(--sw-mono); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.sw-phases { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 6px; padding: 0; }
+.sw-phases li { font-size: 0.75rem; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--sw-border); color: var(--sw-muted); }
+.sw-phases li.done { color: var(--sw-success); border-color: var(--sw-success); }
+.sw-phases li.active { color: var(--sw-primary); border-color: var(--sw-primary); background: var(--sw-primary-soft); font-weight: 600; }
+.sw-progress-detail { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; margin-bottom: 4px; }
+.sw-progress-warn { color: var(--sw-warning); }
+.sw-rail-time { margin-left: auto; font-size: 0.72rem; color: var(--sw-muted); font-variant-numeric: tabular-nums; }
+.sw-total { white-space: nowrap; }
+.sw-step select.sw-model, select.sw-model { width: auto; max-width: 260px; flex: 0 1 auto; }
+.sw-url-row { margin: 4px 0; flex-wrap: nowrap; }
+.sw-url-row input { flex: 1; }
+
 @media (max-width: 900px) {
   .sw-body { flex-direction: column; }
   .sw-rail { width: auto; border-right: 0; border-bottom: 1px solid var(--sw-border); flex-direction: row; align-items: center; padding: 6px; overflow-x: auto; overflow-y: hidden; }
   .sw-rail ol { display: flex; gap: 2px; }
   .sw-rail-item { white-space: nowrap; padding: 6px 8px; }
+  .sw-rail-time { display: none; }
   .sw-grid, .sw-grid.sw-panel-inset { grid-template-columns: minmax(0, 1fr); }
 }
 

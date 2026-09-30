@@ -165,7 +165,8 @@
     "defaultQuestionCount": 12,
     "maxQuestions": 40,
     "maxOntologyTypes": 60,
-    "maxGroundingCharacters": 12000,
+    "maxGroundingCharacters": 6000,
+    "maxGroundingUrls": 5,
     "maxPromptCharacters": 4000,
     "timeoutSeconds": 300,
     "coverageMaxQuestions": 12

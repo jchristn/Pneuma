@@ -48,19 +48,28 @@ namespace Test.Shared.Suites
                             }
                         }),
 
-                    new TestCaseDescriptor("SubjectWizard", "Brief_GroundingUrl", "A grounding URL is read as plain text and returned as an excerpt; a private address is refused under the default policy",
+                    new TestCaseDescriptor("SubjectWizard", "Brief_GroundingUrl", "Reference URLs are read as plain text into one excerpt; a page that cannot be read is a warning; only when none can be read (a private address under the default policy) does the step fail; too many URLs is a 400",
                         executeAsync: async ct =>
                         {
                             await using (WizardRig rig = await WizardRig.CreateAsync(ct))
                             {
                                 rig.Site.Html("/bird", "<html><head><title>x</title></head><body><script>var secret=1;</script><h1>Charlie Parker</h1><p>Born in Kansas City &amp; raised there.</p></body></html>");
                                 rig.Model.ChatText = BriefJson;
+                                rig.Site.Html("/savoy", "<p>The Savoy sessions of 1945.</p>");
                                 WizardGenerateRequest request = rig.Request();
-                                request.Draft.GroundingUrl = rig.Site.Url("/bird");
-                                WizardResult<WizardBrief> result = await rig.Service.BriefAsync(rig.H.TenantId, request, ct);
+                                request.Draft.GroundingUrls = new List<string> { rig.Site.Url("/bird"), rig.Site.Url("/missing"), rig.Site.Url("/savoy") };
+                                List<WizardProgress> phases = new List<WizardProgress>();
+                                WizardResult<WizardBrief> result = await rig.Service.BriefAsync(rig.H.TenantId, request, ct, p => { phases.Add(p); return Task.CompletedTask; });
                                 Expect(result.Success, "succeeds: " + result.Error);
                                 Expect(result.GroundingExcerpt != null && result.GroundingExcerpt.Contains("Born in Kansas City & raised there.") && !result.GroundingExcerpt.Contains("secret"), "page text extracted: " + result.GroundingExcerpt);
+                                Expect(result.GroundingExcerpt!.Contains("Source: " + rig.Site.Url("/savoy")) && result.GroundingExcerpt.Contains("Savoy sessions"), "every readable page is included with its URL");
+                                Expect(result.Warnings.Any(w => w.Contains("/missing")), "the unreadable page is a warning: " + String.Join(" | ", result.Warnings));
                                 Expect(rig.Model.LastChatBody.Contains("Kansas City"), "the page text reached the model");
+                                Expect(phases.Select(p => p.Phase).Distinct().SequenceEqual(new[] { "reading", "waiting", "writing", "checking" }) || phases.Any(p => p.Phase == "reading") && phases.Any(p => p.Phase == "checking"), "progress reported: " + String.Join(",", phases.Select(p => p.Phase)));
+
+                                WizardGenerateRequest tooMany = rig.Request();
+                                for (int i = 0; i < rig.Settings.MaxGroundingUrls + 1; i++) tooMany.Draft.GroundingUrls.Add(rig.Site.Url("/p" + i));
+                                Expect((await rig.Service.BriefAsync(rig.H.TenantId, tooMany, ct)).StatusCode == 400, "too many URLs is a 400");
                             }
                             await using (WizardRig strict = await WizardRig.CreateAsync(ct, allowLoopback: false))
                             {
@@ -315,6 +324,35 @@ namespace Test.Shared.Suites
                                 ApiResult missingSubject = await ApiClientHelper.CallAsync(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/facts/bulk", token, "{\"facts\":[{\"subjectId\":\"sub_missing\",\"question\":\"Q\",\"expectedAnswer\":\"A\"}]}", ct);
                                 Expect(missingSubject.StatusCode == 404, "unknown subject is 404");
                                 Expect((await ApiClientHelper.CallAsync(HttpMethod.Post, server.BaseUrl + "/v1.0/eval/facts/bulk", token, "{\"facts\":[]}", ct)).StatusCode == 400, "empty list is 400");
+                            }
+                        }),
+
+                    new TestCaseDescriptor("SubjectWizard", "Api_Streaming", "A streaming drafting route sends progress events (waiting, then checking) and ends with the result; a bad draft ends with an error event",
+                        executeAsync: async ct =>
+                        {
+                            using (StubModelServer model = new StubModelServer())
+                            await using (TestServer server = await TestServer.CreateAsync(ct))
+                            {
+                                string token = await ApiClientHelper.LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                                ModelRunner runner = await server.Database.ModelRunners.CreateAsync(new ModelRunner
+                                {
+                                    Name = "stub-stream-wizard",
+                                    Provider = ModelRunnerProviderEnum.Ollama,
+                                    BaseUrl = model.BaseUrl,
+                                    ApiType = "Ollama",
+                                    Capabilities = new List<ModelCapabilityEnum> { ModelCapabilityEnum.Completion },
+                                    DefaultModel = "stub",
+                                    MaxRetries = 0,
+                                    Active = true,
+                                    HealthCheckEnabled = false
+                                }, ct);
+                                model.ChatText = BriefJson;
+                                ApiResult streamed = await ApiClientHelper.CallAsync(HttpMethod.Post, server.BaseUrl + "/v1.0/subject-wizard/brief/stream", token, "{\"modelRunnerId\":\"" + runner.Id + "\",\"draft\":{\"description\":\"Charlie Parker\"}}", ct);
+                                Expect(streamed.StatusCode == 200, "stream opened: " + streamed.StatusCode);
+                                Expect(streamed.Body.Contains("\"type\":\"progress\"") && streamed.Body.Contains("\"phase\":\"waiting\"") && streamed.Body.Contains("\"phase\":\"checking\""), "progress events: " + streamed.Body);
+                                Expect(streamed.Body.Contains("\"type\":\"complete\"") && streamed.Body.Contains("\"displayName\":\"Charlie Parker\""), "ends with the result: " + streamed.Body);
+                                ApiResult bad = await ApiClientHelper.CallAsync(HttpMethod.Post, server.BaseUrl + "/v1.0/subject-wizard/ontology/stream", token, "{\"draft\":{\"description\":\"x\"}}", ct);
+                                Expect(bad.Body.Contains("\"type\":\"error\"") && bad.Body.Contains("\"statusCode\":400"), "a bad draft ends with an error event: " + bad.Body);
                             }
                         }),
 

@@ -51,7 +51,7 @@ namespace Pneuma.Server.Mcp
         /// <param name="ctx">HTTP context (for error responses).</param>
         /// <param name="rc">Request context.</param>
         /// <param name="id">JSON-RPC request id.</param>
-        /// <param name="arguments">description (required), groundingText, groundingUrl, modelRunnerId, questionCount, guidance.</param>
+        /// <param name="arguments">description (required), groundingText, groundingUrls, groundingUrl, modelRunnerId, questionCount, guidance.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The draft and what each step reported, or null when an error response was sent.</returns>
         public async Task<object?> DraftSubjectAsync(HttpContextBase ctx, RequestContext rc, object? id, JsonElement arguments, CancellationToken token)
@@ -66,7 +66,8 @@ namespace Pneuma.Server.Mcp
                 {
                     Description = McpJsonRpc.GetStringArgument(arguments, "description"),
                     GroundingText = NullIfEmpty(McpJsonRpc.GetStringArgument(arguments, "groundingText")),
-                    GroundingUrl = NullIfEmpty(McpJsonRpc.GetStringArgument(arguments, "groundingUrl"))
+                    GroundingUrl = NullIfEmpty(McpJsonRpc.GetStringArgument(arguments, "groundingUrl")),
+                    GroundingUrls = StringArray(arguments, "groundingUrls")
                 }
             };
             List<string> warnings = new List<string>();
@@ -77,6 +78,7 @@ namespace Pneuma.Server.Mcp
             request.Draft.Brief = brief.Value;
             if (!String.IsNullOrWhiteSpace(brief.GroundingExcerpt)) request.Draft.GroundingText = brief.GroundingExcerpt;
             request.Draft.GroundingUrl = null;
+            request.Draft.GroundingUrls = new List<string>();
             warnings.AddRange(brief.Warnings);
             elapsed += brief.ElapsedMs;
 
@@ -190,6 +192,17 @@ namespace Pneuma.Server.Mcp
             int code = result.StatusCode == 400 ? -32602 : (result.StatusCode == 409 ? -32009 : -32000);
             await McpJsonRpc.SendErrorAsync(ctx, id, code, "The " + step + " step failed: " + (result.Error ?? "unknown error")).ConfigureAwait(false);
             return false;
+        }
+
+        private static List<string> StringArray(JsonElement arguments, string name)
+        {
+            List<string> values = new List<string>();
+            if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty(name, out JsonElement element) || element.ValueKind != JsonValueKind.Array) return values;
+            foreach (JsonElement item in element.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String && !String.IsNullOrWhiteSpace(item.GetString())) values.Add(item.GetString()!.Trim());
+            }
+            return values;
         }
 
         private static string? NullIfEmpty(string? value)

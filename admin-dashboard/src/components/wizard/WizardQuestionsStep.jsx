@@ -4,7 +4,7 @@ import { GuidanceBar, LockButton } from './WizardParts';
 
 // Step 3: the example questions, the spine of the wizard. Editing a question makes it the user's (kept on
 // regeneration); locking keeps a model question as it is.
-function WizardQuestionsStep({ state, updateDraft, generate, busy, options, t }) {
+function WizardQuestionsStep({ state, updateDraft, generate, busy, options, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const questions = state.draft.questions;
   const [adding, setAdding] = useState('');
   const max = options?.maxQuestions || 40;
@@ -57,7 +57,7 @@ function WizardQuestionsStep({ state, updateDraft, generate, busy, options, t })
           disabled={!!busy || questions.length >= max} aria-label={t('wizard.questions.add')} />
         <button type="button" className="sw-btn sw-btn-secondary" onClick={add} disabled={!!busy || !adding.trim() || questions.length >= max}>{t('wizard.questions.add')}</button>
       </div>
-      <GuidanceBar t={t} busy={busy}
+      <GuidanceBar t={t} busy={busy} models={completionRunners} model={stepModelFor('questions')} onModelChange={(id) => setStepModel('questions', id)} defaultModelLabel={defaultModelLabel}
         regenerateLabel={questions.length === 0 ? t('wizard.questions.draft') : t('wizard.questions.regenerate')}
         onRegenerate={(guidance) => generate('questions', { guidance, mode: 'replace', count: Math.max(questions.length, options?.defaultQuestionCount || 12) })}
         extraAction={{ label: t('wizard.questions.more'), tip: t('wizard.questions.moreTip'), onClick: (guidance) => generate('questions', { guidance, mode: 'more' }) }}

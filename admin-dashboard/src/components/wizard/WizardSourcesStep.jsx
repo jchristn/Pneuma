@@ -7,7 +7,7 @@ const TABS = ['links', 'text', 'crawl'];
 
 // Step 7: the subject exists. The model suggests where its content usually lives; the user adds links, pastes text,
 // or sets up a crawl plan, and watches ingestion progress. Ingestion carries on if the wizard is closed.
-function WizardSourcesStep({ state, generate, busy, apiClient, t }) {
+function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const subject = state.created?.subject;
   const [tab, setTab] = useState('links');
   const [urls, setUrls] = useState('');
@@ -81,7 +81,7 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t }) {
           </ul>
         </div>
       )}
-      <GuidanceBar t={t} busy={busy} regenerateLabel={t('wizard.sources.suggestAgain')} onRegenerate={(guidance) => generate('sources', { guidance })}
+      <GuidanceBar t={t} busy={busy} models={completionRunners} model={stepModelFor('sources')} onModelChange={(id) => setStepModel('sources', id)} defaultModelLabel={defaultModelLabel} regenerateLabel={t('wizard.sources.suggestAgain')} onRegenerate={(guidance) => generate('sources', { guidance })}
         placeholder={t('wizard.sources.guidancePlaceholder')} />
 
       <div className="sw-tabs" role="tablist">

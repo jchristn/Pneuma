@@ -1,10 +1,25 @@
 import { useState } from 'react';
+import { runnerLabel } from './wizardDraft';
 
-// A line of optional guidance for the model plus the regenerate action(s) for a step.
-export function GuidanceBar({ t, busy, onRegenerate, regenerateLabel, extraAction = null, placeholder }) {
+// Pick a completion model. An empty value means the wizard's default (the drafting model, else the first available).
+export function ModelPicker({ t, models, value, onChange, disabled, id, defaultLabel }) {
+  return (
+    <select id={id} className="sw-model" value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}
+      aria-label={t('wizard.modelLabel')} title={t('wizard.modelTip')}>
+      <option value="">{defaultLabel || t('wizard.describe.firstAvailable')}</option>
+      {(models || []).map((r) => <option key={r.id} value={r.id}>{runnerLabel(r)}</option>)}
+    </select>
+  );
+}
+
+// A line of optional guidance for the model, the model to draft with, and the regenerate action(s) for a step.
+export function GuidanceBar({ t, busy, onRegenerate, regenerateLabel, extraAction = null, placeholder, models = null, model = '', onModelChange = null, defaultModelLabel = null }) {
   const [guidance, setGuidance] = useState('');
   return (
     <div className="sw-guidance">
+      {models && onModelChange && (
+        <ModelPicker t={t} models={models} value={model} onChange={onModelChange} disabled={!!busy} defaultLabel={defaultModelLabel} />
+      )}
       <input
         type="text"
         value={guidance}

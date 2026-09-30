@@ -63,7 +63,7 @@ function WizardReviewStep({ state, update, busy, options, runners, collections, 
       <div className="sw-card">
         <h4>{t('wizard.review.settings')}</h4>
         <dl className="sw-dl">
-          <dt>{t('wizard.describe.model')}</dt><dd>{name(settings.modelRunnerId, runners) || t('wizard.describe.firstAvailable')}</dd>
+          <dt>{t('wizard.describe.model')}</dt><dd>{name(settings.modelRunnerId, runners) || name(settings.draftModel, runners) || t('wizard.describe.firstAvailable')}</dd>
           <dt>{t('wizard.describe.embedding')}</dt><dd>{name(settings.embeddingModel, runners) || t('wizard.describe.firstAvailable')}</dd>
           <dt>{t('wizard.describe.collection')}</dt><dd>{name(settings.collection, collections) || t('wizard.describe.defaultCollection')}</dd>
         </dl>

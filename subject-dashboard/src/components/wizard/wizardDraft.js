@@ -26,13 +26,17 @@ export function emptyState() {
     draft: {
       description: '',
       groundingText: '',
-      groundingUrl: '',
+      groundingUrls: [''],
       brief: null,
       questions: [],
       ontology: null,
       prompts: null
     },
-    settings: { modelRunnerId: '', embeddingModel: '', collection: '', ontologyMode: '' },
+    // draftModel drafts every step unless stepModels names another for that step; modelRunnerId is the model that
+    // answers for the subject once it exists.
+    settings: { draftModel: '', stepModels: {}, modelRunnerId: '', embeddingModel: '', collection: '', ontologyMode: '' },
+    // Milliseconds the model took for each drafting step, for the rail and the total in the header.
+    stepTimes: {},
     // Question texts the ontology was drafted from, to flag an ontology that no longer matches the questions.
     ontologyQuestionsKey: null,
     sources: null,
@@ -47,7 +51,10 @@ export function loadState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       const base = emptyState();
-      return { ...base, ...parsed, draft: { ...base.draft, ...(parsed.draft || {}) }, settings: { ...base.settings, ...(parsed.settings || {}) } };
+      const draft = { ...base.draft, ...(parsed.draft || {}) };
+      if (!Array.isArray(draft.groundingUrls) || draft.groundingUrls.length === 0) draft.groundingUrls = [draft.groundingUrl || ''];
+      delete draft.groundingUrl;
+      return { ...base, ...parsed, draft, settings: { ...base.settings, ...(parsed.settings || {}) } };
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
   return emptyState();
@@ -94,6 +101,34 @@ export function ontologyCoverage(ontology, questions) {
 // Parse "1, 3 4" into [1, 3, 4].
 export function parseNumbers(text) {
   return Array.from(new Set(String(text || '').split(/[^0-9]+/).filter(Boolean).map((n) => parseInt(n, 10)).filter((n) => n > 0))).sort((a, b) => a - b);
+}
+
+// Model endpoints as /v1.0/model-runners returns them ({ type: 'Completion' | 'Embedding', model, name }); older
+// shapes carried a capabilities list instead.
+export function hasCapability(runner, capability) {
+  if (!runner || runner.active === false) return false;
+  if (runner.type) return String(runner.type) === capability;
+  return (runner.capabilities || []).includes(capability);
+}
+
+export function runnerLabel(runner) {
+  const model = runner?.model || runner?.defaultModel || runner?.defaultEmbeddingModel || '';
+  return model && model !== runner?.name ? `${runner?.name} (${model})` : (runner?.name || runner?.id || '');
+}
+
+// The model a step drafts with: its own choice, else the drafting model, else the server's first available.
+export function stepModel(settings, step) {
+  return (settings?.stepModels || {})[step] || settings?.draftModel || '';
+}
+
+// "4:07" style duration.
+export function formatDuration(ms) {
+  const total = Math.max(0, Math.round((ms || 0) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 export function promptValue(prompts, key) {

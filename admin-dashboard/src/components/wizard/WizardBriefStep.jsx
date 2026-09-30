@@ -10,7 +10,7 @@ const FIELDS = [
 ];
 
 // Step 2: the model's brief as a small editable form. Mostly a chance to catch a misunderstanding early.
-function WizardBriefStep({ state, updateDraft, generate, busy, t }) {
+function WizardBriefStep({ state, updateDraft, generate, busy, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const brief = state.draft.brief;
   const set = (key, value) => updateDraft({ brief: { ...(brief || {}), [key]: value } });
 
@@ -34,7 +34,7 @@ function WizardBriefStep({ state, updateDraft, generate, busy, t }) {
           ))}
         </div>
       )}
-      <GuidanceBar t={t} busy={busy} onRegenerate={(guidance) => generate('brief', { guidance })}
+      <GuidanceBar t={t} busy={busy} onRegenerate={(guidance) => generate('brief', { guidance })} models={completionRunners} model={stepModelFor('brief')} onModelChange={(id) => setStepModel('brief', id)} defaultModelLabel={defaultModelLabel}
         placeholder={t('wizard.brief.guidancePlaceholder')} />
     </section>
   );

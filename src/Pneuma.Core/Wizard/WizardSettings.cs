@@ -28,11 +28,18 @@ namespace Pneuma.Core.Wizard
             set { _MaxOntologyTypes = Math.Clamp(value, 10, 200); }
         }
 
-        /// <summary>Most characters of grounding text sent to the model. Default 12000; clamped to [1000, 100000].</summary>
+        /// <summary>Most characters of grounding text sent to the model, shared between the reference pages. Default 6000 (small local models have short contexts); clamped to [1000, 100000].</summary>
         public int MaxGroundingCharacters
         {
             get { return _MaxGroundingCharacters; }
             set { _MaxGroundingCharacters = Math.Clamp(value, 1000, 100000); }
+        }
+
+        /// <summary>Most reference URLs the brief step reads. Default 5; clamped to [1, 20].</summary>
+        public int MaxGroundingUrls
+        {
+            get { return _MaxGroundingUrls; }
+            set { _MaxGroundingUrls = Math.Clamp(value, 1, 20); }
         }
 
         /// <summary>Most characters in one drafted prompt addition. Default 4000; clamped to [500, 20000].</summary>
@@ -63,8 +70,9 @@ namespace Pneuma.Core.Wizard
         private int _DefaultQuestionCount = 12;
         private int _MaxQuestions = 40;
         private int _MaxOntologyTypes = 60;
-        private int _MaxGroundingCharacters = 12000;
+        private int _MaxGroundingCharacters = 6000;
         private int _MaxPromptCharacters = 4000;
+        private int _MaxGroundingUrls = 5;
         private int _TimeoutSeconds = 300;
         private int _CoverageMaxQuestions = 12;
 

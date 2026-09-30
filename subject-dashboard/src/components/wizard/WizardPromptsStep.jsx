@@ -4,7 +4,7 @@ import { GuidanceBar, LockButton } from './WizardParts';
 
 // Step 5: the subject's additions to four prompts, each shown with the global prompt it is appended to. Editing an
 // addition locks it; "use the default" leaves the global prompt alone for that one.
-function WizardPromptsStep({ state, updateDraft, generate, busy, apiClient, t }) {
+function WizardPromptsStep({ state, updateDraft, generate, busy, apiClient, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const prompts = state.draft.prompts || { locked: [] };
   const locked = new Set(prompts.locked || []);
   const [globals, setGlobals] = useState({});
@@ -62,7 +62,7 @@ function WizardPromptsStep({ state, updateDraft, generate, busy, apiClient, t })
           </div>
         );
       })}
-      <GuidanceBar t={t} busy={busy} regenerateLabel={t('wizard.regenerateRest')} onRegenerate={(guidance) => generate('prompts', { guidance })}
+      <GuidanceBar t={t} busy={busy} models={completionRunners} model={stepModelFor('prompts')} onModelChange={(id) => setStepModel('prompts', id)} defaultModelLabel={defaultModelLabel} regenerateLabel={t('wizard.regenerateRest')} onRegenerate={(guidance) => generate('prompts', { guidance })}
         placeholder={t('wizard.prompts.guidancePlaceholder')} />
     </section>
   );

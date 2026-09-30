@@ -43,7 +43,8 @@ namespace Pneuma.Core.Wizard
         private static readonly string[] _PromptKeys = new[] { "systemPrompt", "classifyPrompt", "rewritePrompt", "rerankingPrompt" };
         private readonly DatabaseDriverBase _Db;
         private readonly Aes256Cipher _Cipher;
-        private readonly CrawlHttpClient? _Http;
+        private readonly WizardGroundingReader _Grounding;
+        private readonly WizardModelCaller _Caller;
         private readonly WizardSettings _Settings;
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[SubjectWizardService] ";
@@ -63,22 +64,24 @@ namespace Pneuma.Core.Wizard
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
-            _Http = http;
+            _Grounding = new WizardGroundingReader(http, settings ?? throw new ArgumentNullException(nameof(settings)));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Caller = new WizardModelCaller(_Cipher, _Settings, _Logging);
         }
 
         #endregion
 
         #region Public-Methods
 
-        /// <summary>Draft the brief. Reads the grounding URL when one is given and returns the text it read.</summary>
+        /// <summary>Draft the brief. Reads the reference URLs when given and returns the text it read.</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="request">The request.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="progress">Called as the step runs (phase, attempt, characters written, time so far); null for none.</param>
         /// <returns>The brief, or 400/502.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-        public async Task<WizardResult<WizardBrief>> BriefAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default)
+        public async Task<WizardResult<WizardBrief>> BriefAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default, Func<WizardProgress, Task>? progress = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             string? problem = CheckDraft(request);
@@ -86,23 +89,15 @@ namespace Pneuma.Core.Wizard
 
             WizardResult<WizardBrief> result = new WizardResult<WizardBrief>();
             string? grounding = Bound(request.Draft.GroundingText, _Settings.MaxGroundingCharacters);
-            if (!String.IsNullOrWhiteSpace(request.Draft.GroundingUrl))
+            List<string> urls = WizardGroundingReader.UrlsOf(request.Draft);
+            if (urls.Count > _Settings.MaxGroundingUrls) return WizardResult<WizardBrief>.Fail(400, "Give at most " + _Settings.MaxGroundingUrls + " reference URLs.");
+            if (urls.Count > 0)
             {
-                string? fetchProblem = null;
-                string? fetched = null;
-                try
-                {
-                    fetched = await FetchGroundingAsync(request.Draft.GroundingUrl!.Trim(), token).ConfigureAwait(false);
-                }
-                catch (FetchBlockedException e)
-                {
-                    fetchProblem = "The reference URL was refused: " + e.Message;
-                }
-                catch (Exception e) when (!(e is OperationCanceledException))
-                {
-                    fetchProblem = "The reference URL could not be read: " + e.Message;
-                }
-                if (fetchProblem != null) return WizardResult<WizardBrief>.Fail(400, fetchProblem);
+                if (progress != null) await progress(new WizardProgress { Phase = "reading", Message = String.Join(", ", urls) }).ConfigureAwait(false);
+                List<string> readWarnings = new List<string>();
+                string? fetched = await _Grounding.ReadAsync(urls, readWarnings, token).ConfigureAwait(false);
+                if (fetched == null) return WizardResult<WizardBrief>.Fail(400, "None of the reference URLs could be read: " + String.Join(" ", readWarnings));
+                result.Warnings.AddRange(readWarnings);
                 result.GroundingExcerpt = fetched;
                 grounding = Bound(String.Join("\n\n", new[] { grounding, fetched }.Where(s => !String.IsNullOrWhiteSpace(s))), _Settings.MaxGroundingCharacters);
             }
@@ -110,7 +105,7 @@ namespace Pneuma.Core.Wizard
             ModelRunner? runner = await ResolveRunnerAsync(tenantId, request.ModelRunnerId, token).ConfigureAwait(false);
             if (runner == null) return WizardResult<WizardBrief>.Fail(400, "No completion model endpoint is available. Add one under Model Endpoints first.");
             string system = await SystemPromptAsync(tenantId, SubjectWizardPrompts.BriefKey, SubjectWizardPrompts.DefaultBrief, SubjectWizardPrompts.BriefFormatKey, SubjectWizardPrompts.DefaultBriefFormat, token).ConfigureAwait(false);
-            WizardBrief? brief = await CallAsync<WizardBrief, WizardBrief>("brief", runner, system, WizardMessageBuilder.Brief(request.Draft, grounding, Guidance(request)), result, token).ConfigureAwait(false);
+            WizardBrief? brief = await CallAsync<WizardBrief, WizardBrief>("brief", runner, system, WizardMessageBuilder.Brief(request.Draft, grounding, Guidance(request)), result, progress, token).ConfigureAwait(false);
             if (brief == null) return result;
 
             brief.DisplayName = Clip(brief.DisplayName, 200) ?? Clip(request.Draft.Description, 60);
@@ -127,9 +122,10 @@ namespace Pneuma.Core.Wizard
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="request">The request.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="progress">Called as the step runs (phase, attempt, characters written, time so far); null for none.</param>
         /// <returns>The full question list (kept questions first), or 400/502.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-        public async Task<WizardResult<List<WizardQuestion>>> QuestionsAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default)
+        public async Task<WizardResult<List<WizardQuestion>>> QuestionsAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default, Func<WizardProgress, Task>? progress = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             string? problem = CheckDraft(request);
@@ -154,7 +150,7 @@ namespace Pneuma.Core.Wizard
             if (runner == null) return WizardResult<List<WizardQuestion>>.Fail(400, "No completion model endpoint is available. Add one under Model Endpoints first.");
             string system = await SystemPromptAsync(tenantId, SubjectWizardPrompts.QuestionsKey, SubjectWizardPrompts.DefaultQuestions, SubjectWizardPrompts.QuestionsFormatKey, SubjectWizardPrompts.DefaultQuestionsFormat, token).ConfigureAwait(false);
             string user = WizardMessageBuilder.Questions(request.Draft, Bound(request.Draft.GroundingText, _Settings.MaxGroundingCharacters), Guidance(request), kept, wanted);
-            WizardQuestionsOutput? output = await CallAsync<WizardQuestionsOutput, List<WizardQuestion>>("questions", runner, system, user, result, token).ConfigureAwait(false);
+            WizardQuestionsOutput? output = await CallAsync<WizardQuestionsOutput, List<WizardQuestion>>("questions", runner, system, user, result, progress, token).ConfigureAwait(false);
             if (output == null) return result;
 
             List<WizardQuestion> questions = new List<WizardQuestion>(kept);
@@ -175,9 +171,10 @@ namespace Pneuma.Core.Wizard
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="request">The request.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="progress">Called as the step runs (phase, attempt, characters written, time so far); null for none.</param>
         /// <returns>The normalized ontology, or 400/502.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-        public async Task<WizardResult<WizardOntology>> OntologyAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default)
+        public async Task<WizardResult<WizardOntology>> OntologyAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default, Func<WizardProgress, Task>? progress = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             string? problem = CheckDraft(request);
@@ -197,7 +194,7 @@ namespace Pneuma.Core.Wizard
             WizardResult<WizardOntology> result = new WizardResult<WizardOntology>();
             string system = await SystemPromptAsync(tenantId, SubjectWizardPrompts.OntologyKey, SubjectWizardPrompts.DefaultOntology, SubjectWizardPrompts.OntologyFormatKey, SubjectWizardPrompts.DefaultOntologyFormat, token).ConfigureAwait(false);
             string user = WizardMessageBuilder.Ontology(request.Draft, Guidance(request), WizardOntologyBuilder.FromTemplate(), kept);
-            WizardOntologyOutput? output = await CallAsync<WizardOntologyOutput, WizardOntology>("ontology", runner, system, user, result, token).ConfigureAwait(false);
+            WizardOntologyOutput? output = await CallAsync<WizardOntologyOutput, WizardOntology>("ontology", runner, system, user, result, progress, token).ConfigureAwait(false);
             if (output == null) return result;
 
             WizardOntology ontology = new WizardOntology { NodeTypes = new List<WizardNodeType>(kept.NodeTypes), EdgeTypes = new List<WizardEdgeType>(kept.EdgeTypes) };
@@ -223,9 +220,10 @@ namespace Pneuma.Core.Wizard
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="request">The request.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="progress">Called as the step runs (phase, attempt, characters written, time so far); null for none.</param>
         /// <returns>The prompts, or 400/502.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-        public async Task<WizardResult<WizardPrompts>> PromptsAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default)
+        public async Task<WizardResult<WizardPrompts>> PromptsAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default, Func<WizardProgress, Task>? progress = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             string? problem = CheckDraft(request);
@@ -240,7 +238,7 @@ namespace Pneuma.Core.Wizard
             ModelRunner? runner = await ResolveRunnerAsync(tenantId, request.ModelRunnerId, token).ConfigureAwait(false);
             if (runner == null) return WizardResult<WizardPrompts>.Fail(400, "No completion model endpoint is available. Add one under Model Endpoints first.");
             string system = await SystemPromptAsync(tenantId, SubjectWizardPrompts.PromptsKey, SubjectWizardPrompts.DefaultPrompts, SubjectWizardPrompts.PromptsFormatKey, SubjectWizardPrompts.DefaultPromptsFormat, token).ConfigureAwait(false);
-            WizardPrompts? output = await CallAsync<WizardPrompts, WizardPrompts>("prompts", runner, system, WizardMessageBuilder.Prompts(request.Draft, Guidance(request), kept), result, token).ConfigureAwait(false);
+            WizardPrompts? output = await CallAsync<WizardPrompts, WizardPrompts>("prompts", runner, system, WizardMessageBuilder.Prompts(request.Draft, Guidance(request), kept), result, progress, token).ConfigureAwait(false);
             if (output == null) return result;
 
             WizardPrompts prompts = new WizardPrompts
@@ -260,9 +258,10 @@ namespace Pneuma.Core.Wizard
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="request">The request.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="progress">Called as the step runs (phase, attempt, characters written, time so far); null for none.</param>
         /// <returns>The suggestions, or 400/502.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
-        public async Task<WizardResult<List<WizardSourceSuggestion>>> SourcesAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default)
+        public async Task<WizardResult<List<WizardSourceSuggestion>>> SourcesAsync(string tenantId, WizardGenerateRequest request, CancellationToken token = default, Func<WizardProgress, Task>? progress = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             string? problem = CheckDraft(request);
@@ -272,7 +271,7 @@ namespace Pneuma.Core.Wizard
             if (runner == null) return WizardResult<List<WizardSourceSuggestion>>.Fail(400, "No completion model endpoint is available. Add one under Model Endpoints first.");
             WizardResult<List<WizardSourceSuggestion>> result = new WizardResult<List<WizardSourceSuggestion>>();
             string system = await SystemPromptAsync(tenantId, SubjectWizardPrompts.SourcesKey, SubjectWizardPrompts.DefaultSources, SubjectWizardPrompts.SourcesFormatKey, SubjectWizardPrompts.DefaultSourcesFormat, token).ConfigureAwait(false);
-            WizardSourcesOutput? output = await CallAsync<WizardSourcesOutput, List<WizardSourceSuggestion>>("sources", runner, system, WizardMessageBuilder.Sources(request.Draft, Guidance(request)), result, token).ConfigureAwait(false);
+            WizardSourcesOutput? output = await CallAsync<WizardSourcesOutput, List<WizardSourceSuggestion>>("sources", runner, system, WizardMessageBuilder.Sources(request.Draft, Guidance(request)), result, progress, token).ConfigureAwait(false);
             if (output == null) return result;
 
             List<WizardSourceSuggestion> suggestions = new List<WizardSourceSuggestion>();
@@ -319,7 +318,7 @@ namespace Pneuma.Core.Wizard
                 (String.IsNullOrWhiteSpace(format.EffectiveContent) ? formatDefault : format.EffectiveContent);
         }
 
-        private async Task<TParsed?> CallAsync<TParsed, TOut>(string step, ModelRunner runner, string system, string user, WizardResult<TOut> result, CancellationToken token)
+        private async Task<TParsed?> CallAsync<TParsed, TOut>(string step, ModelRunner runner, string system, string user, WizardResult<TOut> result, Func<WizardProgress, Task>? progress, CancellationToken token)
             where TParsed : class
             where TOut : class
         {
@@ -332,7 +331,9 @@ namespace Pneuma.Core.Wizard
                 string? parseError;
                 try
                 {
-                    string text = await CompleteAsync(runner, system, prompt, token).ConfigureAwait(false);
+                    await ReportAsync(progress, "waiting", attempt, watch, null).ConfigureAwait(false);
+                    string text = await _Caller.CompleteAsync(runner, system, prompt, attempt, watch, progress, token).ConfigureAwait(false);
+                    await ReportAsync(progress, "checking", attempt, watch, null).ConfigureAwait(false);
                     TParsed? parsed = Parse<TParsed>(text, out parseError);
                     if (parsed != null)
                     {
@@ -348,7 +349,7 @@ namespace Pneuma.Core.Wizard
                 {
                     parseError = null;
                     result.StatusCode = 504;
-                    result.Error = "The model did not answer within " + _Settings.TimeoutSeconds + " seconds.";
+                    result.Error = "The model did not finish in time (nothing new for " + _Settings.TimeoutSeconds + " seconds, or more than " + (_Settings.TimeoutSeconds * 3) + " seconds in all). Try a faster model or regenerate.";
                     break;
                 }
                 catch (Exception e) when (!(e is OperationCanceledException))
@@ -361,29 +362,17 @@ namespace Pneuma.Core.Wizard
                 result.StatusCode = 502;
                 result.Error = "The model did not return the expected JSON: " + parseError;
                 prompt = user + "\n\nYour previous reply could not be used (" + parseError + "). Reply again with only the JSON object in the required shape.";
+                if (attempt == 1) await ReportAsync(progress, "retrying", attempt + 1, watch, "The reply could not be used (" + parseError + "); asking again.").ConfigureAwait(false);
             }
             result.ElapsedMs = watch.ElapsedMilliseconds;
             WizardMetrics.RecordGeneration(step, "failed", watch.Elapsed.TotalSeconds);
             return null;
         }
 
-        private async Task<string> CompleteAsync(ModelRunner runner, string system, string user, CancellationToken token)
+        private static async Task ReportAsync(Func<WizardProgress, Task>? progress, string phase, int attempt, Stopwatch watch, string? message)
         {
-            string? apiKey = null;
-            if (!String.IsNullOrEmpty(runner.AuthMaterialEncrypted))
-            {
-                try { apiKey = _Cipher.Decrypt(runner.AuthMaterialEncrypted); }
-                catch (Exception) { apiKey = null; }
-            }
-            CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
-            ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.4, MaxTokens = 4096, SystemPrompt = system };
-            using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
-            {
-                timeout.CancelAfter(TimeSpan.FromSeconds(_Settings.TimeoutSeconds));
-                ChatResponse response = await client.ChatAsync(user, options, timeout.Token).ConfigureAwait(false);
-                if (response == null || !response.Success || String.IsNullOrWhiteSpace(response.Text)) throw ModelResponseErrors.ToException("subject wizard", response?.Error);
-                return response.Text;
-            }
+            if (progress == null) return;
+            await progress(new WizardProgress { Phase = phase, Attempt = attempt, ElapsedMs = watch.ElapsedMilliseconds, Message = message }).ConfigureAwait(false);
         }
 
         private static T? Parse<T>(string text, out string? error) where T : class
@@ -408,15 +397,6 @@ namespace Pneuma.Core.Wizard
                 error = e.Message;
                 return null;
             }
-        }
-
-        private async Task<string?> FetchGroundingAsync(string url, CancellationToken token)
-        {
-            if (_Http == null) throw new InvalidOperationException("Reading reference URLs is not available on this server.");
-            CrawlHttpResponse response = await _Http.GetAsync(url, null, token).ConfigureAwait(false);
-            string? text = HtmlTextExtractor.Extract(response.Bytes, response.ContentType, _Settings.MaxGroundingCharacters);
-            if (text == null) throw new InvalidOperationException("only web pages and text can be read (the URL returned " + (response.ContentType ?? "an unknown type") + ").");
-            return text;
         }
 
         private static string? Guidance(WizardGenerateRequest request)

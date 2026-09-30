@@ -3,7 +3,7 @@ import { GuidanceBar, LockButton } from './WizardParts';
 
 // Step 4: node and relationship types drafted to answer the questions. Editing a type locks it (kept on
 // regeneration). The warnings tie the graph back to the questions: what nobody can answer, and what nothing needs.
-function WizardOntologyStep({ state, update, updateDraft, generate, busy, t }) {
+function WizardOntologyStep({ state, update, updateDraft, generate, busy, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const { draft } = state;
   const ontology = draft.ontology || { nodeTypes: [], edgeTypes: [], guidance: '' };
   const questions = draft.questions;
@@ -95,7 +95,7 @@ function WizardOntologyStep({ state, update, updateDraft, generate, busy, t }) {
 
       <label className="sw-label" htmlFor="sw-guidance-text">{t('wizard.ontology.guidance')}</label>
       <textarea id="sw-guidance-text" rows={3} maxLength={2000} value={ontology.guidance || ''} onChange={(e) => setOntology({ guidance: e.target.value })} disabled={!!busy} />
-      <GuidanceBar t={t} busy={busy} regenerateLabel={ontology.nodeTypes.length === 0 ? t('wizard.ontology.draft') : t('wizard.regenerateRest')} onRegenerate={regenerate} placeholder={t('wizard.ontology.guidancePlaceholder')} />
+      <GuidanceBar t={t} busy={busy} models={completionRunners} model={stepModelFor('ontology')} onModelChange={(id) => setStepModel('ontology', id)} defaultModelLabel={defaultModelLabel} regenerateLabel={ontology.nodeTypes.length === 0 ? t('wizard.ontology.draft') : t('wizard.regenerateRest')} onRegenerate={regenerate} placeholder={t('wizard.ontology.guidancePlaceholder')} />
     </section>
   );
 }

@@ -1,8 +1,11 @@
 // Spanish strings for the new subject wizard and starter questions, merged into the bundle as `wizard`.
 export const wizardEs = {
+  modelLabel: 'Modelo',
+  modelTip: 'El modelo que redacta este paso. Déjelo en el predeterminado para usar el modelo de redacción elegido en el primer paso.',
+  defaultModel: 'Modelo de redacción ({{model}})',
   title: 'Nuevo tema',
   subtitle: 'Describa el tema; un modelo redacta el resto y usted lo ajusta.',
-  draftedWith: 'Último borrador de {{model}} en {{seconds}} s',
+  draftedWith: 'Último borrador de {{model}} en {{time}}',
   optionsFailed: 'No se pudieron cargar las opciones del asistente.',
   generateFailed: 'El modelo no pudo redactar este paso.',
   commitFailed: 'No se pudo crear el tema.',
@@ -54,6 +57,13 @@ export const wizardEs = {
     starterQuestionsTip: 'Preguntas de ejemplo que se muestran como sugerencias y que usa la comprobación de cobertura.'
   },
   describe: {
+    sameAsDrafting: 'El mismo que el modelo de redacción',
+    addUrl: '+ Añadir otro enlace',
+    referenceUrlN: 'Página de referencia {{n}}',
+    referenceUrls: 'Páginas web de referencia (hasta {{count}})',
+    draftModelHint: 'Cada paso posterior tiene su propia elección de modelo junto al botón Regenerar, si quiere otro modelo para él.',
+    draftModelTip: 'El modelo de completado que redacta el resumen, las preguntas, la ontología y los prompts. Cada paso puede usar otro.',
+    draftModel: 'Modelo que redacta',
     title: '¿De qué trata este tema?',
     intro: 'Basta con una o dos frases. Diga qué es el tema y quién preguntará por él; el modelo redacta el resto.',
     label: 'Descripción',
@@ -64,8 +74,8 @@ export const wizardEs = {
     referenceUrl: 'Página web de referencia',
     referenceText: 'Texto de referencia',
     advanced: 'Ajustes avanzados',
-    model: 'Modelo que redacta y responde',
-    modelTip: 'El endpoint de completado que redacta este asistente y después ingiere y responde para el tema.',
+    model: 'Modelo que responde por el tema',
+    modelTip: 'El modelo de completado que usa el tema para la ingesta y las respuestas. Por defecto, el modelo de redacción.',
     embedding: 'Modelo de embeddings',
     embeddingTip: 'El endpoint que vectoriza el contenido del tema. Su dimensionalidad debe coincidir con la colección.',
     collection: 'Colección',
@@ -226,5 +236,23 @@ export const wizardEs = {
     intro: 'Se muestran como sugerencias en la página de preguntas y las usa la comprobación de cobertura.',
     empty: 'Todavía no hay preguntas iniciales.',
     saved: 'Preguntas iniciales guardadas.'
+  },
+  progress: {
+    elapsedTip: 'Tiempo desde que empezó este paso',
+    phases: 'Progreso',
+    phase: {
+      reading: 'Leyendo las páginas de referencia',
+      waiting: 'Esperando al modelo',
+      writing: 'El modelo escribe',
+      checking: 'Comprobando el resultado'
+    },
+    written: '{{chars}} caracteres escritos (unos {{tokens}} tokens)',
+    waitingHint: 'El modelo está leyendo la petición. Los modelos grandes o locales pueden tardar antes de escribir las primeras palabras.',
+    retry: 'Intento {{n}} de 2.',
+    model: 'Modelo: {{model}}',
+    lastTime: 'la última vez este paso tardó {{time}}',
+    total: 'tiempo de modelo hasta ahora {{time}}',
+    totalTip: 'Tiempo total que el modelo ha dedicado a redactar este tema',
+    stepTimeTip: 'Cuánto tardó el modelo en este paso'
   }
 };
