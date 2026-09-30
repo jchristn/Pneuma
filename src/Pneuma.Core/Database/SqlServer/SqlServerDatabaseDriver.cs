@@ -160,6 +160,7 @@ namespace Pneuma.Core.Database.SqlServer
         /// <inheritdoc />
         public override Task CloseAsync(CancellationToken token = default)
         {
+            ReleasePool();
             return Task.CompletedTask;
         }
 
@@ -172,12 +173,30 @@ namespace Pneuma.Core.Database.SqlServer
         {
             if (_Disposed) return;
             _Disposed = true;
+            if (disposing) ReleasePool();
             base.Dispose(disposing);
         }
 
         #endregion
 
         #region Private-Methods
+
+        private void ReleasePool()
+        {
+            // Close this driver's idle pooled connections. The pool outlives the driver otherwise, and a process that
+            // opens many short-lived drivers (one database per test case, for example) runs the server out of connections.
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(_ConnectionString))
+                {
+                    SqlConnection.ClearPool(connection);
+                }
+            }
+            catch (Exception)
+            {
+                // Best effort: the pool is released at process exit regardless.
+            }
+        }
 
         private async Task ApplyMigrationsAsync(CancellationToken token)
         {

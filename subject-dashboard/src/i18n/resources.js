@@ -18,7 +18,10 @@ const en = {
       back: 'Back to dashboard'
     },
     nav: {
-      crawlers: 'Crawlers',
+      crawlers: 'Crawl Plans',
+      knowledge: 'Knowledge',
+      sources: 'Sources',
+      assistant: 'Assistant',
       overview: 'Overview',
       subjects: 'My Subjects',
       links: 'Links',
@@ -478,7 +481,7 @@ const en = {
     },
     crawl: {
       plansTitle: 'Crawl Plans',
-      plansSubtitle: 'Sources kept in sync with a subject: web sites, sitemaps, S3 buckets, and CIFS or NFS shares.',
+      plansSubtitle: 'Sources kept in sync with a subject: web sites, sitemaps, GitHub repositories, S3, Azure Blob, and Google Cloud Storage buckets, CIFS and NFS shares, and server folders.',
       operationsTitle: 'Crawl Operations',
       operationsSubtitle: 'Runs of crawl plans: what each run found, ingested, deleted, and skipped.',
       createPlan: 'Create Crawl Plan',
@@ -744,7 +747,10 @@ const es = {
       errorGeneric: 'No se pudo agregar el contenido.'
     },
     nav: {
-      crawlers: 'Rastreadores',
+      crawlers: 'Planes de rastreo',
+      knowledge: 'Conocimiento',
+      sources: 'Fuentes',
+      assistant: 'Asistente',
       overview: 'Resumen',
       subjects: 'Mis Creadores',
       ask: 'Preguntar',
@@ -829,7 +835,7 @@ const es = {
     },
     crawl: {
       plansTitle: 'Planes de rastreo',
-      plansSubtitle: 'Fuentes sincronizadas con un tema: sitios web, mapas de sitio, buckets de S3 y recursos compartidos CIFS o NFS.',
+      plansSubtitle: 'Fuentes sincronizadas con un tema: sitios web, mapas de sitio, repositorios de GitHub, buckets de S3, Azure Blob y Google Cloud Storage, recursos compartidos CIFS y NFS, y carpetas del servidor.',
       operationsTitle: 'Operaciones de rastreo',
       operationsSubtitle: 'Ejecuciones de planes de rastreo: qué encontró, ingirió, eliminó y omitió cada una.',
       createPlan: 'Crear plan de rastreo',

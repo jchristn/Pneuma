@@ -161,6 +161,7 @@ namespace Pneuma.Core.Database.Mysql
         /// <inheritdoc />
         public override Task CloseAsync(CancellationToken token = default)
         {
+            ReleasePool();
             return Task.CompletedTask;
         }
 
@@ -173,12 +174,30 @@ namespace Pneuma.Core.Database.Mysql
         {
             if (_Disposed) return;
             _Disposed = true;
+            if (disposing) ReleasePool();
             base.Dispose(disposing);
         }
 
         #endregion
 
         #region Private-Methods
+
+        private void ReleasePool()
+        {
+            // Close this driver's idle pooled connections. The pool outlives the driver otherwise, and a process that
+            // opens many short-lived drivers (one database per test case, for example) runs the server out of connections.
+            try
+            {
+                using (MySqlConnection connection = new MySqlConnection(_ConnectionString))
+                {
+                    MySqlConnection.ClearPool(connection);
+                }
+            }
+            catch (Exception)
+            {
+                // Best effort: the pool is released at process exit regardless.
+            }
+        }
 
         private async Task ApplyMigrationsAsync(CancellationToken token)
         {

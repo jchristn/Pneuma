@@ -65,6 +65,7 @@ const en = {
       groupObservability: 'Observability',
       groupSystem: 'System',
       knowledge: 'Knowledge',
+      sources: 'Sources',
       ingestion: 'Ingestion',
       assistant: 'Assistant',
       access: 'Access',
@@ -697,7 +698,7 @@ const en = {
     },
     crawl: {
       plansTitle: 'Crawl Plans',
-      plansSubtitle: 'Sources kept in sync with a subject: web sites, sitemaps, S3 buckets, and CIFS or NFS shares.',
+      plansSubtitle: 'Sources kept in sync with a subject: web sites, sitemaps, GitHub repositories, S3, Azure Blob, and Google Cloud Storage buckets, CIFS and NFS shares, and server folders.',
       operationsTitle: 'Crawl Operations',
       operationsSubtitle: 'Runs of crawl plans: what each run found, ingested, deleted, and skipped.',
       createPlan: 'Create Crawl Plan',

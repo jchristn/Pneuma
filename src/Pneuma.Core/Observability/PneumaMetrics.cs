@@ -29,28 +29,28 @@ namespace Pneuma.Core.Observability
         private static readonly string[] _BucketLabels = BuildBucketLabels();
 
         private static readonly ConcurrentDictionary<string, long> _HttpRequests = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _HttpDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _HttpDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static readonly ConcurrentDictionary<string, long> _IngestionJobs = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _IngestionStages = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _IngestionStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _IngestionStageDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static readonly ConcurrentDictionary<string, long> _IntegrationRequests = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _IntegrationDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _IntegrationDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static readonly ConcurrentDictionary<string, long> _AuthzDecisions = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _ChatAnswers = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatAnswerDuration = new ConcurrentDictionary<string, HistogramSeries>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _ChatStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _RetrievalStageDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _ChatAnswerDuration = new ConcurrentDictionary<string, MetricHistogram>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _ChatStageDuration = new ConcurrentDictionary<string, MetricHistogram>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _RetrievalStageDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static readonly ConcurrentDictionary<string, long> _RetrievalLegFailures = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _IngestionFailures = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _IngestionPartial = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _ModelRetries = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _IngestionRetired = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _IngestionRechunk = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _ModelLimiterWait = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _ModelLimiterWait = new ConcurrentDictionary<string, MetricHistogram>();
         private static readonly ConcurrentDictionary<string, long> _CrawlOperations = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _CrawlObjects = new ConcurrentDictionary<string, long>();
         private static readonly ConcurrentDictionary<string, long> _CrawlBytes = new ConcurrentDictionary<string, long>();
-        private static readonly ConcurrentDictionary<string, HistogramSeries> _CrawlDuration = new ConcurrentDictionary<string, HistogramSeries>();
+        private static readonly ConcurrentDictionary<string, MetricHistogram> _CrawlDuration = new ConcurrentDictionary<string, MetricHistogram>();
         private static long _CrawlRunning = 0;
         private static readonly ConcurrentDictionary<string, long> _LinkRefresh = new ConcurrentDictionary<string, long>();
 
@@ -344,9 +344,9 @@ namespace Pneuma.Core.Observability
 
         #region Private-Methods
 
-        private static HistogramSeries CreateHistogram(string key)
+        private static MetricHistogram CreateHistogram(string key)
         {
-            return new HistogramSeries();
+            return new MetricHistogram(_Buckets, _BucketLabels);
         }
 
         private static void Increment(ConcurrentDictionary<string, long> family, string labelKey)
@@ -408,19 +408,14 @@ namespace Pneuma.Core.Observability
             }
         }
 
-        private static void AppendHistogramFamily(StringBuilder sb, string name, string help, ConcurrentDictionary<string, HistogramSeries> family)
+        private static void AppendHistogramFamily(StringBuilder sb, string name, string help, ConcurrentDictionary<string, MetricHistogram> family)
         {
             sb.Append("# HELP ").Append(name).Append(' ').Append(help).Append('\n');
             sb.Append("# TYPE ").Append(name).Append(" histogram\n");
-            foreach (System.Collections.Generic.KeyValuePair<string, HistogramSeries> series in family)
+            foreach (System.Collections.Generic.KeyValuePair<string, MetricHistogram> series in family)
             {
                 series.Value.AppendTo(sb, name, series.Key);
             }
-        }
-
-        private static string FormatDouble(double value)
-        {
-            return value.ToString(CultureInfo.InvariantCulture);
         }
 
         private static string Escape(string value)
@@ -435,76 +430,6 @@ namespace Pneuma.Core.Observability
                 else sb.Append(c);
             }
             return sb.ToString();
-        }
-
-        #endregion
-
-        #region Nested-Types
-
-        /// <summary>
-        /// A single bucketed histogram series. Bucket counts are non-cumulative per index (rendered
-        /// cumulatively) with a trailing +Inf bucket; sum and sample count are maintained alongside.
-        /// </summary>
-        private sealed class HistogramSeries
-        {
-            private readonly long[] _Counts = new long[_Buckets.Length + 1];
-            private readonly object _Lock = new object();
-            private long _SampleCount = 0;
-            private double _Sum = 0.0;
-
-            /// <summary>Observe a single sample value (seconds).</summary>
-            /// <param name="value">Sample value.</param>
-            public void Observe(double value)
-            {
-                int index = _Buckets.Length;
-                for (int i = 0; i < _Buckets.Length; i++)
-                {
-                    if (value <= _Buckets[i])
-                    {
-                        index = i;
-                        break;
-                    }
-                }
-
-                lock (_Lock)
-                {
-                    _Counts[index] = _Counts[index] + 1L;
-                    _SampleCount = _SampleCount + 1L;
-                    _Sum = _Sum + value;
-                }
-            }
-
-            /// <summary>Append this series to the exposition output.</summary>
-            /// <param name="sb">Target builder.</param>
-            /// <param name="name">Metric family name.</param>
-            /// <param name="innerLabels">Escaped label content without surrounding braces.</param>
-            public void AppendTo(StringBuilder sb, string name, string innerLabels)
-            {
-                long[] snapshot = new long[_Counts.Length];
-                long sampleCount;
-                double sum;
-                lock (_Lock)
-                {
-                    Array.Copy(_Counts, snapshot, _Counts.Length);
-                    sampleCount = _SampleCount;
-                    sum = _Sum;
-                }
-
-                long cumulative = 0;
-                for (int i = 0; i < _Buckets.Length; i++)
-                {
-                    cumulative = cumulative + snapshot[i];
-                    sb.Append(name).Append("_bucket{").Append(innerLabels).Append(",le=\"").Append(_BucketLabels[i]).Append("\"} ")
-                      .Append(cumulative.ToString(CultureInfo.InvariantCulture)).Append('\n');
-                }
-
-                cumulative = cumulative + snapshot[_Buckets.Length];
-                sb.Append(name).Append("_bucket{").Append(innerLabels).Append(",le=\"+Inf\"} ")
-                  .Append(cumulative.ToString(CultureInfo.InvariantCulture)).Append('\n');
-
-                sb.Append(name).Append("_sum{").Append(innerLabels).Append("} ").Append(FormatDouble(sum)).Append('\n');
-                sb.Append(name).Append("_count{").Append(innerLabels).Append("} ").Append(sampleCount.ToString(CultureInfo.InvariantCulture)).Append('\n');
-            }
         }
 
         #endregion

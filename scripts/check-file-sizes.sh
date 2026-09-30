@@ -26,6 +26,13 @@ BACKEND_ALLOWLIST=(
   # A single test suite: many independent TestCaseDescriptors in one static class.
   "src/Test.Shared/Suites/ApiSuite.cs"
   "src/Test.Shared/Suites/DatabaseSuite.cs"
+  "src/Test.Shared/Suites/ExternalServicesSuite.cs"
+  # The crawl suites: one case per connector behavior (web, sitemap, GitHub, S3, Azure, Google Cloud, CIFS, NFS,
+  # local folders) and per framework rule (settings codec, delta planner, scheduler), with their shared plan builders.
+  "src/Test.Shared/Suites/CrawlersSuite.cs"
+  "src/Test.Shared/Suites/CrawlFrameworkSuite.cs"
+  # The benchmark harness's single HTTP client for the Pneuma API (one method per endpoint the benchmarks call).
+  "src/Test.Benchmark/Client/PneumaClient.cs"
   # The per-stage ingestion suite: success + failure case per pipeline stage, plus the shared test fakes.
   "src/Test.Shared/Suites/IngestionStagesSuite.cs"
   # A single cohesive class of MCP entity/report tool handlers (one method per tool).

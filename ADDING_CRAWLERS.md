@@ -364,14 +364,15 @@ P10 comes first because P3, P4, P5, and the crawlers all report failures through
   `pneuma_crawl_operation_duration_seconds{type}`, `pneuma_crawl_bytes_total{type}`, `pneuma_crawl_running`; a root span
   per operation (`crawl <type>`) with `stage:Enumerate` and `stage:Dispatch` children.
 - [x] Grafana: `assets/grafana/pneuma-crawling.json` and the factory profile copy.
-- [x] Admin dashboard: Ingestion workspace tabs "Crawl Plans" (`CrawlPlansView`: subject filter, row action menu with
+- [x] Admin dashboard: Sources workspace tabs "Crawl Plans" (`CrawlPlansView`: subject filter, row action menu with
   View, Edit, View JSON, Duplicate, Start, Stop, Test, Preview, Operations, Delete; bulk delete; delete with an
   optional "also delete links") and "Crawl Operations" (`CrawlOperationsView`: plan and status filters). The
   schema-driven `CrawlPlanFormModal` shows secrets as set or not set, sends them only when typed, can clear them, and
   tests the draft before saving. `CrawlOperationModal` shows counts, per-object results by action, and the
   confirm-deletions flow. `LinksView` gained a crawl plan column and filter.
-  Route inventory: `/dashboard/ingestion/crawl-plans`, `/dashboard/ingestion/crawl-operations`.
-- [x] Subject dashboard: "Crawlers" view (`/dashboard/crawlers`) with plans and their recent operations, scoped by
+  Route inventory: `/dashboard/sources/crawl-plans`, `/dashboard/sources/crawl-operations` (first shipped under the
+  Ingestion workspace; see the 2026-09-29 layout entry).
+- [x] Subject dashboard: "Crawl Plans" view (`/dashboard/crawlers`, in the Sources group) with plans and their recent operations, scoped by
   subject, using the same form, test, preview, and operation modals.
 - [x] i18n keys for every new string: admin `en`; subject `en` and `es`.
 - [-] SDKs (C#, JS, Python): every crawl-plan and crawl-operation operation is in all three. The loopback harness
@@ -645,3 +646,9 @@ Newest entries last. Each entry names what was done and how it was verified.
   removed, and the direct OpenCIFS.Client and OpenNFS.Client references dropped (Blobject brings them). Keys and
   version tokens are unchanged, so existing links are not re-ingested; the NFS test now checks that too. The NFS mount
   port accepts 0 to ask the portmapper. Crawl suites: 62 cases, 59 passed, 3 skipped (the gated live cases).
+- **2026-09-29. Dashboard layout** (the user's request: links and crawl plans are both source material and belong
+  together). Admin: a new Sources workspace holds Links, Crawl Plans, and Crawl Operations; Knowledge keeps Subjects,
+  Collections, and Search; Ingestion keeps Live, Queue, and Jobs. Old URLs (`/dashboard/links`,
+  `/dashboard/knowledge/links`, `/dashboard/ingestion/crawl-plans`, `/dashboard/ingestion/crawl-operations`) redirect.
+  Subject dashboard: the single Content group is split into Knowledge (My Subjects), Sources (Links, Crawl Plans,
+  Ingestion), and Assistant (Ask through Feedback); "Crawlers" is now "Crawl Plans" to match its page title.

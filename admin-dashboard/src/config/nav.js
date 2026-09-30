@@ -11,16 +11,20 @@ export const WORKSPACE_TABS = {
   ],
   knowledge: [
     { key: 'subjects', view: 'subjects', labelKey: 'nav.subjects' },
-    { key: 'links', view: 'links', labelKey: 'nav.links' },
     { key: 'collections', view: 'collections', labelKey: 'nav.collections' },
     { key: 'search', view: 'search', labelKey: 'nav.search' }
+  ],
+  // Source material: the links a subject is built from, and the crawl plans (and their runs) that keep links in
+  // sync with a web site, bucket, share, repository, or folder.
+  sources: [
+    { key: 'links', view: 'links', labelKey: 'nav.links' },
+    { key: 'crawl-plans', view: 'crawl-plans', labelKey: 'nav.crawlPlans' },
+    { key: 'crawl-operations', view: 'crawl-operations', labelKey: 'nav.crawlOperations' }
   ],
   ingestion: [
     { key: 'live', view: 'ingestion-live', labelKey: 'nav.ingestionLive' },
     { key: 'queue', view: 'jobs', labelKey: 'nav.jobs' },
-    { key: 'jobs', view: 'ingestion-jobs', labelKey: 'nav.ingestionJobs' },
-    { key: 'crawl-plans', view: 'crawl-plans', labelKey: 'nav.crawlPlans' },
-    { key: 'crawl-operations', view: 'crawl-operations', labelKey: 'nav.crawlOperations' }
+    { key: 'jobs', view: 'ingestion-jobs', labelKey: 'nav.ingestionJobs' }
   ],
   assistant: [
     { key: 'ask', view: 'ask', labelKey: 'nav.ask' },
@@ -51,14 +55,16 @@ export const WORKSPACE_TABS = {
   ]
 };
 
-// The sidebar: seven workspaces in two groups. Each item's `section` selects a workspace in WORKSPACE_TABS.
+// The sidebar: eight workspaces in two groups, in the order an operator works: define a subject, add its sources,
+// watch them ingest, then ask. Each item's `section` selects a workspace in WORKSPACE_TABS.
 export const NAV_GROUPS = [
   {
     labelKey: 'nav.groupWorkspace',
     items: [
       { section: 'home', labelKey: 'nav.home', icon: 'home', tip: 'Dashboard overview: key counts, recent activity, and system health at a glance.' },
-      { section: 'knowledge', labelKey: 'nav.knowledge', icon: 'database', tip: 'The knowledge base: subjects and their source links, the retrieval collections, and full-text search.' },
-      { section: 'ingestion', labelKey: 'nav.ingestion', icon: 'queue', tip: 'The ingestion pipeline: the live view, the queue, full job history, and the crawl plans that keep subjects in sync with their sources.' },
+      { section: 'knowledge', labelKey: 'nav.knowledge', icon: 'database', tip: 'The knowledge base: subjects, the retrieval collections, and full-text search.' },
+      { section: 'sources', labelKey: 'nav.sources', icon: 'link', tip: 'Source material: the links each subject is built from, and the crawl plans that keep them in sync with web sites, repositories, buckets, shares, and folders.' },
+      { section: 'ingestion', labelKey: 'nav.ingestion', icon: 'queue', tip: 'The ingestion pipeline: the live view, the queue, and full job history.' },
       { section: 'assistant', labelKey: 'nav.assistant', icon: 'chat', tip: 'Chat with the corpus, browse conversations and history, review feedback, and evaluate answer quality.' }
     ]
   },
@@ -76,6 +82,7 @@ export const NAV_GROUPS = [
 export const SECTION_META = {
   home: { titleKey: 'home.title', subtitleKey: 'home.subtitle' },
   knowledge: { titleKey: 'nav.knowledge' },
+  sources: { titleKey: 'nav.sources' },
   ingestion: { titleKey: 'nav.ingestion' },
   assistant: { titleKey: 'nav.assistant' },
   access: { titleKey: 'nav.access' },
@@ -87,7 +94,9 @@ export const SECTION_META = {
 // links (e.g. /dashboard/subjects, /dashboard/jobs) redirect to the consolidated tabbed location.
 export const LEGACY_REDIRECTS = {
   subjects: { section: 'knowledge', tab: 'subjects' },
-  links: { section: 'knowledge', tab: 'links' },
+  links: { section: 'sources', tab: 'links' },
+  'crawl-plans': { section: 'sources', tab: 'crawl-plans' },
+  'crawl-operations': { section: 'sources', tab: 'crawl-operations' },
   collections: { section: 'knowledge', tab: 'collections' },
   search: { section: 'knowledge', tab: 'search' },
   'ingestion-live': { section: 'ingestion', tab: 'live' },
@@ -112,4 +121,11 @@ export const LEGACY_REDIRECTS = {
   processing: { section: 'system', tab: 'processing' },
   requests: { section: 'system', tab: 'requests' },
   explorer: { section: 'system', tab: 'explorer' }
+};
+
+// Tabs that moved to another workspace: { section: { tab: newSection } }. /dashboard/<section>/<tab> redirects to
+// /dashboard/<newSection>/<tab>, so bookmarks from before Sources was split out keep working.
+export const MOVED_TABS = {
+  knowledge: { links: 'sources' },
+  ingestion: { 'crawl-plans': 'sources', 'crawl-operations': 'sources' }
 };

@@ -22,28 +22,40 @@ function Sidebar() {
       ]
     },
     {
-      title: t('nav.content'),
+      title: t('nav.knowledge'),
       items: [
         {
           id: 'subjects',
           label: t('nav.subjects'),
           icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 12 0v1" /></>)
-        },
+        }
+      ]
+    },
+    {
+      // Source material and how it gets in: individual links, the crawl plans that keep links in sync with a
+      // site, repository, bucket, share, or folder, and the ingestion of both.
+      title: t('nav.sources'),
+      items: [
         {
           id: 'links',
           label: t('nav.links'),
           icon: icon(<><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></>)
         },
         {
-          id: 'ingestion',
-          label: t('nav.ingestion'),
-          icon: icon(<><path d="M12 2v13" /><path d="m19 9-7 7-7-7" /><path d="M5 20h14" /></>)
-        },
-        {
           id: 'crawlers',
           label: t('nav.crawlers'),
           icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15 15 0 0 1 0 18" /><path d="M12 3a15 15 0 0 0 0 18" /></>)
         },
+        {
+          id: 'ingestion',
+          label: t('nav.ingestion'),
+          icon: icon(<><path d="M12 2v13" /><path d="m19 9-7 7-7-7" /><path d="M5 20h14" /></>)
+        }
+      ]
+    },
+    {
+      title: t('nav.assistant'),
+      items: [
         {
           id: 'ask',
           label: t('nav.ask'),

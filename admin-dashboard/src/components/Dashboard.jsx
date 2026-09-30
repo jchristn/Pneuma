@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { SECTION_META, WORKSPACE_TABS, LEGACY_REDIRECTS } from '../config/nav';
+import { SECTION_META, WORKSPACE_TABS, LEGACY_REDIRECTS, MOVED_TABS } from '../config/nav';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import Sidebar from './Sidebar';
@@ -84,7 +84,8 @@ function Dashboard() {
 
   // An old single-view URL (e.g. /dashboard/subjects, /dashboard/jobs) redirects to its consolidated tab home,
   // preserving any query string (e.g. /dashboard/ask?thread=...).
-  const legacy = !WORKSPACE_TABS[section] ? LEGACY_REDIRECTS[section] : null;
+  const moved = MOVED_TABS[section] && tab ? MOVED_TABS[section][tab] : null;
+  const legacy = !WORKSPACE_TABS[section] ? LEGACY_REDIRECTS[section] : (moved ? { section: moved, tab } : null);
   useEffect(() => {
     if (legacy) navigate(`/dashboard/${legacy.section}/${legacy.tab}${location.search || ''}`, { replace: true });
   }, [legacy, navigate, location.search]);

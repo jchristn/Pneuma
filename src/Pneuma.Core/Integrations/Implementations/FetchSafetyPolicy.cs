@@ -64,6 +64,8 @@ namespace Pneuma.Core.Integrations.Implementations
         {
             if (String.IsNullOrWhiteSpace(url)) return "invalid-url";
             if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri? uri)) return "invalid-url";
+            // On Linux and macOS a rooted path such as "/docs/a" parses as an absolute file URI; it is a relative URL.
+            if (uri.IsFile && !url.Trim().StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return "invalid-url";
             if (!String.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
                 && !String.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return "scheme";
             if (String.IsNullOrEmpty(uri.Host)) return "invalid-url";

@@ -246,6 +246,7 @@ namespace Pneuma.Server
             new IngestionJobRoutes(_Database, _Authorization).Register(_Server);
             new LinkRefreshRoutes(_Database, _Authorization, _LinkRefresh).Register(_Server);
             new CrawlPlanRoutes(_Database, _Authorization, _Collections, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler).Register(_Server);
+            new CrawlOperationRoutes(_Database, _Authorization, _CrawlSync).Register(_Server);
             new IngestionEndpointRoutes(_Database, _Authorization).Register(_Server);
             new CollectionRoutes(_Authorization, _Collections).Register(_Server);
             HttpCrossEncoderReranker crossEncoderReranker = new HttpCrossEncoderReranker(
