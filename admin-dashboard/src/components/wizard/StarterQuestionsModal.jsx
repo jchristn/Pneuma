@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../Modal';
 import { KINDS, listOf } from './wizardDraft';
+import './SubjectWizard.css';
 
 // A subject's starter questions: suggestions on the ask page and the questions the coverage check asks.
 function StarterQuestionsModal({ subject, onClose }) {
@@ -59,13 +60,13 @@ function StarterQuestionsModal({ subject, onClose }) {
         <>
           {questions.length === 0 && <p className="field-hint">{t('wizard.starter.empty')}</p>}
           {questions.map((q, i) => (
-            <div key={q.id || i} className="field" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select value={q.kind || 'Fact'} onChange={(e) => change(i, { kind: e.target.value })} style={{ width: 150 }} aria-label={t('wizard.questions.kind')}>
+            <div key={q.id || i} className="sq-row">
+              <input type="text" className="sq-question" value={q.question} maxLength={500} onChange={(e) => change(i, { question: e.target.value })}
+                aria-label={t('wizard.questions.question', { n: i + 1 })} />
+              <select className="sq-kind" value={q.kind || 'Fact'} onChange={(e) => change(i, { kind: e.target.value })} aria-label={t('wizard.questions.kind')}>
                 {KINDS.map((k) => <option key={k} value={k}>{t(`wizard.kind.${k}`)}</option>)}
               </select>
-              <input type="text" value={q.question} maxLength={500} onChange={(e) => change(i, { question: e.target.value })} style={{ flex: 1 }}
-                aria-label={t('wizard.questions.question', { n: i + 1 })} />
-              <button type="button" className="button-secondary" onClick={() => setQuestions((qs) => qs.filter((_, j) => j !== i))} aria-label={t('wizard.remove')}>✕</button>
+              <button type="button" className="button-secondary sq-remove" onClick={() => setQuestions((qs) => qs.filter((_, j) => j !== i))} aria-label={t('wizard.remove')}>✕</button>
             </div>
           ))}
           <button type="button" className="button-secondary" onClick={() => setQuestions((qs) => [...qs, { question: '', kind: 'Fact', origin: 'User' }])}>

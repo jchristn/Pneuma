@@ -161,3 +161,14 @@
   .sw-list-row input[type="text"] { flex-basis: 100%; order: 1; }
   .sw-footer { padding: 10px 16px; }
 }
+
+/* Starter Questions modal rows: the question fills the row; its kind and remove button sit to its right. */
+.sq-row { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0 0 8px; }
+.sq-row .sq-question { flex: 1 1 auto; min-width: 0; width: auto; }
+.sq-row .sq-kind { flex: 0 0 150px; width: 150px; }
+.sq-row .sq-remove { flex: 0 0 auto; color: inherit; }
+@media (max-width: 520px) {
+  .sq-row { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid rgba(127, 127, 127, 0.25); }
+  .sq-row .sq-question { flex: 1 1 100%; }
+  .sq-row .sq-kind { flex: 1 1 auto; width: auto; }
+}

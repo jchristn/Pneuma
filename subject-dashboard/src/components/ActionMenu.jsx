@@ -9,15 +9,18 @@ function ActionMenu({ actions = [] }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
+  const menuRef = useRef(null);
 
   const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return undefined;
+    // The dropdown is portalled outside the trigger, so a press inside it is not "outside": closing on it would
+    // unmount the item before its click fires and the action would never run.
     const handleClick = (e) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target)) {
-        close();
-      }
+      if (triggerRef.current && triggerRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      close();
     };
     const handleScroll = () => close();
     document.addEventListener('mousedown', handleClick);
@@ -70,6 +73,7 @@ function ActionMenu({ actions = [] }) {
       {open &&
         createPortal(
           <div
+            ref={menuRef}
             className="action-menu-dropdown"
             role="menu"
             style={{ top: coords.top, left: coords.left, maxHeight: coords.maxHeight, overflowY: 'auto' }}
