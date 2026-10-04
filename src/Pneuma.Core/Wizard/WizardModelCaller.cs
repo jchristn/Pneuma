@@ -70,7 +70,7 @@ namespace Pneuma.Core.Wizard
                 if (streamed != null) return streamed;
             }
 
-            ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.4, MaxTokens = 4096, SystemPrompt = system };
+            CompletionOptions options = new CompletionOptions { Temperature = 0.4, MaxTokens = 4096, SystemPrompt = system };
             using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
                 timeout.CancelAfter(TimeSpan.FromSeconds(_Settings.TimeoutSeconds));
@@ -93,8 +93,7 @@ namespace Pneuma.Core.Wizard
                 Messages = new List<ChatMessage> { ChatMessage.System(system), ChatMessage.User(user) },
                 Tools = new List<ToolDefinition>(),
                 ToolChoice = "none",
-                Temperature = 0.4,
-                MaxTokens = 4096
+                Options = new CompletionOptions { Temperature = 0.4, MaxTokens = 4096 }
             };
             TimeSpan idle = TimeSpan.FromSeconds(_Settings.TimeoutSeconds);
             using (CancellationTokenSource cap = CancellationTokenSource.CreateLinkedTokenSource(token))

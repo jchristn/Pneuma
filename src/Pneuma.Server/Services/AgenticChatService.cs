@@ -254,8 +254,7 @@ namespace Pneuma.Server.Services
                         Messages = messages,
                         Tools = tools,
                         ToolChoice = "auto",
-                        Temperature = 0.2,
-                        MaxTokens = 1024
+                        Options = new CompletionOptions { Temperature = 0.2, MaxTokens = 1024 }
                     };
 
                     // On the final permitted iteration, force a text answer so the loop always terminates.
@@ -626,7 +625,7 @@ namespace Pneuma.Server.Services
             string input = combined.Length > 2000 ? combined.Substring(0, 2000) : combined;
             try
             {
-                ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.2, MaxTokens = 24, SystemPrompt = _TitleSummaryPrompt };
+                CompletionOptions options = new CompletionOptions { Temperature = 0.2, MaxTokens = 24, SystemPrompt = _TitleSummaryPrompt };
                 ChatResponse response = await client.ChatAsync(input, options, token).ConfigureAwait(false);
                 if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text))
                 {
@@ -722,7 +721,7 @@ namespace Pneuma.Server.Services
 
             try
             {
-                ChatCompletionOptions options = new ChatCompletionOptions
+                CompletionOptions options = new CompletionOptions
                 {
                     Temperature = 0.2,
                     MaxTokens = 1024,

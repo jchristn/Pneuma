@@ -300,13 +300,15 @@ REST_API.md · MCP_API.md · TELEMETRY.md · CHANGELOG.md
 
 ## Building images
 
-Pneuma's five images (`jchristn77/pneuma-server`, `-postgres`, `-admin-ui`, `-subject-ui`, `-user-ui`) are built and pushed with the repo-root `build-*.bat` scripts, each taking a version tag:
+Pneuma's five images (`jchristn77/pneuma-server`, `-postgres`, `-admin-ui`, `-subject-ui`, `-user-ui`) are built and pushed with the repo-root `build-*.sh` (macOS/Linux) or `build-*.bat` (Windows) scripts, each taking a version tag:
 
-```bat
-build-all.bat v0.1.0          :: build + push all five
-build-server.bat v0.1.0       :: just the server
-build-admin-ui.bat v0.1.0     :: just the admin dashboard
+```bash
+./build-all.sh v0.1.0         # build + push all five
+./build-server.sh v0.1.0      # just the server
+./build-admin-ui.sh v0.1.0    # just the admin dashboard
 ```
+
+On Windows, use the matching `.bat` script (`build-all.bat v0.1.0`).
 
 Each script uses `docker buildx` to publish multi-architecture (`linux/amd64` + `linux/arm64`) images tagged `:latest` and `:<tag>`. The Compose stack references the pinned images, so a deployment `docker compose pull`s rather than building from source.
 

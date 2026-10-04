@@ -222,7 +222,7 @@ namespace Pneuma.Core.Ontologies
                 catch (Exception) { apiKey = null; }
             }
             CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
-            ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.2, MaxTokens = 4096, SystemPrompt = system };
+            CompletionOptions options = new CompletionOptions { Temperature = 0.2, MaxTokens = 4096, SystemPrompt = system };
             ChatResponse response = await client.ChatAsync(user, options, token).ConfigureAwait(false);
             if (response == null || !response.Success || String.IsNullOrWhiteSpace(response.Text)) throw ModelResponseErrors.ToException("ontology proposal", response?.Error);
 

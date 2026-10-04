@@ -531,6 +531,45 @@ namespace Test.Shared.Suites
                             PolyPrompt.Clients.CompletionClientBase longer = Pneuma.Core.Integrations.ModelClientFactory.Create(patient, null, logging);
                             if (longer.TimeoutMs != 7200000) throw new Exception("a longer configured endpoint timeout should be kept, got " + longer.TimeoutMs + " ms");
                             return Task.CompletedTask;
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "ModelClient_EmbeddingClientUsesRunnerModel", "Embedding clients (PolyPrompt 3) are built per capability, take the runner's embedding model rather than the provider default, and keep the timeout floor",
+                        executeAsync: ct =>
+                        {
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            Pneuma.Core.Models.ModelRunner both = new Pneuma.Core.Models.ModelRunner { Name = "both", Provider = ModelRunnerProviderEnum.Ollama, BaseUrl = "http://127.0.0.1:11434", DefaultModel = "gemma3:4b", DefaultEmbeddingModel = "nomic-embed-text", MaximumTimeoutMs = 60000 };
+                            PolyPrompt.Clients.EmbeddingClientBase embedder = Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(both, null, logging);
+                            if (embedder.Model != "nomic-embed-text") throw new Exception("embedding client should use the runner's embedding model, got " + embedder.Model);
+                            if (embedder.TimeoutMs < 30 * 60 * 1000) throw new Exception("embedding client timeout should be at least 30 minutes, got " + embedder.TimeoutMs + " ms");
+                            PolyPrompt.Clients.CompletionClientBase completer = Pneuma.Core.Integrations.ModelClientFactory.Create(both, null, logging);
+                            if (completer.Model != "gemma3:4b") throw new Exception("completion client should use the runner's default model, got " + completer.Model);
+
+                            Pneuma.Core.Models.ModelRunner embedOnly = new Pneuma.Core.Models.ModelRunner { Name = "embed-only", Provider = ModelRunnerProviderEnum.OpenAICompatible, BaseUrl = "http://127.0.0.1:8080", DefaultModel = "bge-small" };
+                            PolyPrompt.Clients.EmbeddingClientBase fallback = Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(embedOnly, "key", logging);
+                            if (fallback.Model != "bge-small") throw new Exception("embedding client should fall back to the runner's default model, got " + fallback.Model);
+                            return Task.CompletedTask;
+                        }),
+
+                    new TestCaseDescriptor("ExternalServices", "ModelClient_UnsupportedCapabilityRejected", "A provider without a capability fails when its client is built: Anthropic has no embeddings, Voyage AI has no completions",
+                        executeAsync: ct =>
+                        {
+                            LoggingModule logging = new LoggingModule();
+                            logging.Settings.EnableConsole = false;
+                            Pneuma.Core.Models.ModelRunner anthropic = new Pneuma.Core.Models.ModelRunner { Name = "claude", Provider = ModelRunnerProviderEnum.Anthropic, BaseUrl = "https://api.anthropic.com", DefaultModel = "claude-sonnet-5-5" };
+                            Pneuma.Core.Models.ModelRunner voyage = new Pneuma.Core.Models.ModelRunner { Name = "voyage", Provider = ModelRunnerProviderEnum.VoyageAI, BaseUrl = "https://api.voyageai.com", DefaultEmbeddingModel = "voyage-3" };
+                            bool anthropicRejected = false;
+                            try { Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(anthropic, "key", logging); }
+                            catch (NotSupportedException) { anthropicRejected = true; }
+                            if (!anthropicRejected) throw new Exception("an Anthropic embedding client should be rejected");
+                            bool voyageRejected = false;
+                            try { Pneuma.Core.Integrations.ModelClientFactory.Create(voyage, "key", logging); }
+                            catch (NotSupportedException) { voyageRejected = true; }
+                            if (!voyageRejected) throw new Exception("a Voyage AI completion client should be rejected");
+                            PolyPrompt.Clients.CompletionClientBase claude = Pneuma.Core.Integrations.ModelClientFactory.Create(anthropic, "key", logging);
+                            PolyPrompt.Clients.EmbeddingClientBase voyageEmbedder = Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(voyage, "key", logging);
+                            if (claude.Model != "claude-sonnet-5-5" || voyageEmbedder.Model != "voyage-3") throw new Exception("supported capabilities should still be built with the runner's models");
+                            return Task.CompletedTask;
                         })
                 });
         }

@@ -761,7 +761,7 @@ namespace Pneuma.Server.Services
             try
             {
                 CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
-                ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.1, MaxTokens = maxTokens, SystemPrompt = systemPrompt };
+                CompletionOptions options = new CompletionOptions { Temperature = 0.1, MaxTokens = maxTokens, SystemPrompt = systemPrompt };
                 ChatResponse response = await client.ChatAsync(userText, options, token).ConfigureAwait(false);
                 if (response != null && response.Success && !String.IsNullOrWhiteSpace(response.Text)) return response.Text.Trim();
             }
@@ -821,7 +821,7 @@ namespace Pneuma.Server.Services
             try
             {
                 CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
-                ChatCompletionOptions options = new ChatCompletionOptions
+                CompletionOptions options = new CompletionOptions
                 {
                     Temperature = 0.2,
                     MaxTokens = 1024,
@@ -885,8 +885,7 @@ namespace Pneuma.Server.Services
                     Messages = new List<ChatMessage> { ChatMessage.System(systemPrompt), ChatMessage.User(contextText) },
                     Tools = new List<ToolDefinition>(),
                     ToolChoice = "none",
-                    Temperature = 0.2,
-                    MaxTokens = 1024
+                    Options = new CompletionOptions { Temperature = 0.2, MaxTokens = 1024 }
                 };
 
                 ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);

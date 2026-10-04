@@ -149,6 +149,13 @@ namespace Pneuma.Server.Services
             return ModelClientFactory.Create(runner, apiKey, _Logging, sessionToken);
         }
 
+        private EmbeddingClientBase BuildEmbeddingClient(ModelRunner runner)
+        {
+            string? apiKey = DecryptOrNull(runner.AuthMaterialEncrypted);
+            string? sessionToken = DecryptOrNull(runner.SessionTokenEncrypted);
+            return ModelClientFactory.CreateEmbedding(runner, apiKey, _Logging, sessionToken);
+        }
+
         private async Task<ModelEndpointValidationCheck> RunCompletionProbeAsync(CompletionClientBase client, CancellationToken token)
         {
             ModelEndpointValidationCheck check = new ModelEndpointValidationCheck { Name = "Completion" };
@@ -157,7 +164,7 @@ namespace Pneuma.Server.Services
             {
                 try
                 {
-                    ChatCompletionOptions options = new ChatCompletionOptions
+                    CompletionOptions options = new CompletionOptions
                     {
                         Temperature = 0.0,
                         // Reasoning models (e.g. gpt-oss:20b) spend their token budget "thinking" before emitting a
@@ -216,9 +223,8 @@ namespace Pneuma.Server.Services
                         },
                         Tools = new List<ToolDefinition> { BuildProbeTool() },
                         ToolChoice = "auto",
-                        Temperature = 0.0,
                         // Headroom so a reasoning model can think before emitting the tool call.
-                        MaxTokens = 512
+                        Options = new CompletionOptions { Temperature = 0.0, MaxTokens = 512 }
                     };
 
                     ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, cts.Token).ConfigureAwait(false);
@@ -270,7 +276,7 @@ namespace Pneuma.Server.Services
             {
                 try
                 {
-                    CompletionClientBase client = BuildClient(runner);
+                    EmbeddingClientBase client = BuildEmbeddingClient(runner);
                     EmbeddingOptions options = new EmbeddingOptions { Model = runner.DefaultEmbeddingModel ?? runner.DefaultModel };
                     EmbeddingResponse response = await client.EmbedAsync("Pneuma model endpoint validation probe.", options, cts.Token).ConfigureAwait(false);
                     check.DurationMs = stopwatch.Elapsed.TotalMilliseconds;

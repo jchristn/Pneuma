@@ -4,8 +4,10 @@ namespace Test.Shared.Support
     using System.IO;
     using System.Net;
     using System.Net.Sockets;
+    using System.Security.Cryptography;
     using System.Threading;
     using System.Threading.Tasks;
+    using OpenCIFS.Protocol;
     using OpenCIFS.Server;
     using OpenNFS.Server;
     using OpenNFS.Server.FileHandles;
@@ -79,6 +81,8 @@ namespace Test.Shared.Support
                         .WithServerName("pneuma-test")
                         .WithBindAddress("127.0.0.1")
                         .WithBindPort(servers.CifsPort)
+                        // SMB 3.0 sessions encrypt with AES-CCM, which .NET does not support on macOS; there the share stops at SMB 2.1.
+                        .WithDialectRange(SmbDialect.Smb2002, AesCcm.IsSupported ? SmbDialect.Smb311 : SmbDialect.Smb21)
                         .AddAccount(new OpenCifsServerAccount { UserName = servers.CifsUser, UserDomain = "WORKGROUP", Password = servers.CifsPassword })
                         .AddShare(servers.CifsShare, share => share.UseLocalFileSystem(servers.Root))
                         .Build()

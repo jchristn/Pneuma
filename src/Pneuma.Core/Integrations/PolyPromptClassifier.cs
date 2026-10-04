@@ -123,7 +123,7 @@ namespace Pneuma.Core.Integrations
             if (runner == null) throw new ArgumentNullException(nameof(runner));
 
             CompletionClientBase client = ModelClientFactory.Create(runner, apiKey, _Logging);
-            ChatCompletionOptions options = new ChatCompletionOptions
+            CompletionOptions options = new CompletionOptions
             {
                 Temperature = Math.Clamp(temperature, 0.0, 2.0),
                 MaxTokens = 4096,

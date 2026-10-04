@@ -121,8 +121,19 @@ between releases, and the project will adopt semantic versioning at its stable 1
   can add what they learn. Links carry `sourceKind` (`Url`, `Inline`, `Crawl`), `externalKey`, `contentType`, and
   `sizeBytes`.
 - **`--suite` filter for `Test.Automated`** to run named suites only.
+- **`build*.sh` scripts** alongside the `build*.bat` scripts, so images can be built and pushed from macOS and Linux.
 
 ### Changed
+- **PolyPrompt upgraded to 3.1.0.** PolyPrompt 3 splits each provider into one client per capability.
+  `ModelClientFactory.Create` now returns a completion client, and the new `ModelClientFactory.CreateEmbedding` returns
+  an embedding client that always uses the runner's embedding model (PolyPrompt 3's embedding clients otherwise default
+  to their own model, such as `all-minilm` on Ollama). An Anthropic runner used for embeddings, or a Voyage AI runner
+  used for completions, now fails when the client is built rather than on the first call. Sampling settings on tool
+  chat requests move to `ToolChatRequest.Options`. Model calls send the same requests as before, except for
+  PolyPrompt's own fixes (the Gemini API key moves from the URL to the `x-goog-api-key` header).
+- NuGet updates: AngleSharp 1.8.3, AWSSDK.S3 4.0.104.1, Blobject.* 6.1.0, Caching 5.1.2, CrawlSharp 1.2.1,
+  GitHubCrawler 1.2.0, Microsoft.Data.SqlClient 7.1.1, Padlock 1.2.0, SyslogLogging 2.3.1, Timestamps 1.0.13,
+  Watson 7.2.2, and test tooling (coverlet.collector 10.1.0, NUnit 5.0.0, OpenNFS.Server 0.2.0, Touchstone.* 0.2.0).
 - **Prompts are scoped system → tenant → subject.** `GET /v1.0/prompts` lists the prompt in effect for the tenant
   (its copy, else the system default) with a computed `isSystemDefault`; `scope=system|tenant` filters. A tenant
   user's `PUT` on a system prompt now saves a tenant copy instead of changing the shared system row, and deleting the
@@ -154,6 +165,9 @@ between releases, and the project will adopt semantic versioning at its stable 1
   `FetchBlocked` audit record. Deployments that ingest intranet sites must add those hosts to the allow-list.
 
 ### Fixed
+- The CIFS crawler tests failed on macOS (`Algorithm 'AesCcm' is not supported on this platform`): SMB 3.0 sessions
+  encrypt with AES-CCM, which .NET does not provide on macOS. Where AES-CCM is unavailable, the in-process test share
+  now stops at SMB 2.1; elsewhere it still negotiates SMB 3 with encryption.
 - C# SDK: `Subject.Id` and `Subject.TenantId` are now nullable and omitted when unset, so `CreateSubjectAsync` no
   longer sends empty ids the server rejects.
 - **Re-ingesting a link left the old version searchable.** A re-ingest created new chunks and Source and Cell nodes

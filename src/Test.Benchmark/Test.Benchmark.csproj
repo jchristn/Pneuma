@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <!-- Watson hosts the in-process corpus server (serves benchmark documents to Pneuma's URL ingestion) and the stub model server. -->
-    <PackageReference Include="Watson" Version="7.2.0" />
+    <PackageReference Include="Watson" Version="7.2.2" />
   </ItemGroup>
 
 </Project>

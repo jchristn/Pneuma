@@ -69,7 +69,7 @@ namespace Pneuma.Core.Integrations.Implementations
 
             CompletionClientBase client = BuildClient(runner);
             string systemPrompt = String.IsNullOrWhiteSpace(summarizationPrompt) ? "Summarize the following content concisely." : summarizationPrompt!;
-            ChatCompletionOptions options = new ChatCompletionOptions { Temperature = 0.1, MaxTokens = _SummaryMaxTokens, SystemPrompt = systemPrompt };
+            CompletionOptions options = new CompletionOptions { Temperature = 0.1, MaxTokens = _SummaryMaxTokens, SystemPrompt = systemPrompt };
             ChatResponse response = await client.ChatAsync(text, options, token).ConfigureAwait(false);
             if (response == null || !response.Success) throw ModelResponseErrors.ToException("summarization", response?.Error);
             return String.IsNullOrWhiteSpace(response.Text) ? String.Empty : response.Text.Trim();
@@ -134,7 +134,7 @@ namespace Pneuma.Core.Integrations.Implementations
             ModelRunner? runner = await ResolveRunnerAsync(embeddingEndpointId, token).ConfigureAwait(false);
             if (runner == null) throw new InvalidOperationException("No embedding endpoint is available to embed the supplied texts.");
 
-            CompletionClientBase client = BuildClient(runner);
+            EmbeddingClientBase client = BuildEmbeddingClient(runner);
             string? model = String.IsNullOrWhiteSpace(runner.DefaultEmbeddingModel) ? runner.DefaultModel : runner.DefaultEmbeddingModel;
             EmbeddingOptions embeddingOptions = new EmbeddingOptions { Model = model };
 
@@ -203,6 +203,13 @@ namespace Pneuma.Core.Integrations.Implementations
             string? apiKey = DecryptOrNull(runner.AuthMaterialEncrypted);
             string? sessionToken = DecryptOrNull(runner.SessionTokenEncrypted);
             return ModelClientFactory.Create(runner, apiKey, _Logging, sessionToken);
+        }
+
+        private EmbeddingClientBase BuildEmbeddingClient(ModelRunner runner)
+        {
+            string? apiKey = DecryptOrNull(runner.AuthMaterialEncrypted);
+            string? sessionToken = DecryptOrNull(runner.SessionTokenEncrypted);
+            return ModelClientFactory.CreateEmbedding(runner, apiKey, _Logging, sessionToken);
         }
 
         private string? DecryptOrNull(string? payload)
