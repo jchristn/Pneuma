@@ -310,7 +310,7 @@
         },
         {
           "name": "Create Model Endpoint",
-          "description": "Managed natively by Pneuma (no external proxy). type = Embedding|Completion; provider selects the PolyPrompt provider (OpenAI, OpenAICompatible, Gemini, Ollama, AzureOpenAI, Anthropic, Bedrock, VoyageAI, VertexAI) and determines which provider-specific fields apply (deployment/apiVersion for AzureOpenAI, region/accessKeyId for Bedrock, project/region for VertexAI). Secrets (apiKey, secretAccessKey, sessionToken) are write-only and never returned on read.",
+          "description": "Managed natively by Pneuma (no external proxy). type = Embedding|Completion; provider selects the PolyPrompt provider (OpenAI, OpenAICompatible, Gemini, Ollama, AzureOpenAI, Anthropic, Bedrock, VoyageAI, VertexAI, OllamaCloud, XAI) and determines which provider-specific fields apply (deployment/apiVersion for AzureOpenAI, region/accessKeyId for Bedrock, project/region for VertexAI). Secrets (apiKey, secretAccessKey, sessionToken) are write-only and never returned on read.",
           "event": [
             {
               "listen": "test",

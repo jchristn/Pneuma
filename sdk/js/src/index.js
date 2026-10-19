@@ -458,7 +458,7 @@ export class PneumaClient {
      * List the model endpoints available for ingestion, grouped by usage.
      * Each entry has `id`, `type` ("Embedding" | "Completion"), `name`, `model`,
      * `endpoint`, `apiFormat`, `provider` (OpenAI | OpenAICompatible | Gemini |
-     * Ollama | AzureOpenAI | Anthropic | Bedrock | VoyageAI | VertexAI),
+     * Ollama | AzureOpenAI | Anthropic | Bedrock | VoyageAI | VertexAI | OllamaCloud | XAI),
      * `deployment`, `apiVersion`, `region`, `project`, `accessKeyId` and `active`.
      * Secret material (`apiKey`, `secretAccessKey`, `sessionToken`) is write-only
      * and never returned.
@@ -950,7 +950,7 @@ export class PneumaClient {
     /**
      * Create a model runner. `runner` accepts `name`, `provider` (OpenAI |
      * OpenAICompatible | Gemini | Ollama | AzureOpenAI | Anthropic | Bedrock |
-     * VoyageAI | VertexAI), `endpoint`, `apiFormat`, `deployment`, `apiVersion`,
+     * VoyageAI | VertexAI | OllamaCloud | XAI), `endpoint`, `apiFormat`, `deployment`, `apiVersion`,
      * `region`, `project`, `accessKeyId` and `active`. Secret material (`apiKey`,
      * `secretAccessKey`, `sessionToken`) is write-only: it may be sent here but is
      * never returned on reads.

@@ -11,7 +11,7 @@ const TYPES = ['Embedding', 'Completion'];
 // All providers Pneuma can drive natively. Values match the backend ModelEndpoint `provider` enum;
 // labels are provider brand names (not translated).
 const PROVIDERS = [
-  'OpenAI', 'OpenAICompatible', 'Gemini', 'Ollama', 'AzureOpenAI', 'Anthropic', 'Bedrock', 'VoyageAI', 'VertexAI'
+  'OpenAI', 'OpenAICompatible', 'Gemini', 'Ollama', 'AzureOpenAI', 'Anthropic', 'Bedrock', 'VoyageAI', 'VertexAI', 'OllamaCloud', 'XAI'
 ];
 const PROVIDER_LABELS = {
   OpenAI: 'OpenAI',
@@ -22,7 +22,9 @@ const PROVIDER_LABELS = {
   Anthropic: 'Anthropic',
   Bedrock: 'AWS Bedrock',
   VoyageAI: 'Voyage AI',
-  VertexAI: 'Google Vertex AI'
+  VertexAI: 'Google Vertex AI',
+  OllamaCloud: 'Ollama Cloud',
+  XAI: 'xAI (Grok)'
 };
 
 // Anthropic exposes no embeddings API; Voyage AI exposes no completion API. Constrain the picker so an

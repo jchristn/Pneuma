@@ -16,7 +16,7 @@ namespace Test.Shared
         {
             get
             {
-                return new List<TestSuiteDescriptor>
+                List<TestSuiteDescriptor> suites = new List<TestSuiteDescriptor>
                 {
                     SecuritySuite.Build(),
                     DatabaseSuite.Build(),
@@ -49,6 +49,8 @@ namespace Test.Shared
                     OntologyApiSuite.Build(),
                     SubjectWizardSuite.Build()
                 };
+                if (!System.String.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("PNEUMA_TEST_XAI_SIMULATION"))) suites.Add(PolyPromptSimulationSuite.Build());
+                return suites;
             }
         }
     }

@@ -296,3 +296,7 @@ Defaults: `http://127.0.0.1:8080`, `admin@pneuma`, `password`.
 ## License
 
 MIT
+
+### PolyPrompt cloud providers
+
+Model endpoint `provider` also accepts `OllamaCloud` and `XAI` (PolyPrompt 3.4.0). Both require `apiKey` and support completion and embedding endpoints. Supply `endpoint: "https://ollama.com:443"` for Ollama Cloud (fixed by the server) or `endpoint: "https://api.x.ai"` for xAI. Supply `model` explicitly, including an embedding model available to your account. Use the existing model-runner create/update methods; request and response shapes are unchanged. xAI uses native Responses internally and does not store responses at the provider by default.

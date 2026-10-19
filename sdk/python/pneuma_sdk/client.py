@@ -673,7 +673,7 @@ class PneumaClient:
             ``id``, ``type`` ("Embedding" | "Completion"), ``name``, ``model``,
             ``endpoint``, ``apiFormat``, ``provider`` (one of ``OpenAI``,
             ``OpenAICompatible``, ``Gemini``, ``Ollama``, ``AzureOpenAI``,
-            ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``),
+            ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``, ``OllamaCloud``, ``XAI``),
             ``deployment``, ``apiVersion``, ``region``, ``project``,
             ``accessKeyId`` and ``active``. Secret material (``apiKey``,
             ``secretAccessKey``, ``sessionToken``) is write-only and never
@@ -1171,7 +1171,7 @@ class PneumaClient:
 
         ``runner`` accepts ``name``, ``provider`` (one of ``OpenAI``,
         ``OpenAICompatible``, ``Gemini``, ``Ollama``, ``AzureOpenAI``,
-        ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``), ``endpoint``,
+        ``Anthropic``, ``Bedrock``, ``VoyageAI``, ``VertexAI``, ``OllamaCloud``, ``XAI``), ``endpoint``,
         ``apiFormat``, ``deployment``, ``apiVersion``, ``region``, ``project``,
         ``accessKeyId`` and ``active``. Secret material (``apiKey``,
         ``secretAccessKey``, ``sessionToken``) is write-only: it may be sent here

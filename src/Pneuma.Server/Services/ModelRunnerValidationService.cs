@@ -183,7 +183,7 @@ namespace Pneuma.Server.Services
                     string rawText = response?.Text ?? String.Empty;
                     string visibleText = ThinkStrip(rawText);
 
-                    if (response != null && response.Success && !String.IsNullOrWhiteSpace(rawText))
+                    if (response != null && response.Success && (!String.IsNullOrWhiteSpace(rawText) || !String.IsNullOrWhiteSpace(response.Reasoning)))
                     {
                         check.Ok = true;
                         check.Detail = !String.IsNullOrWhiteSpace(visibleText)

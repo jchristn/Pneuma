@@ -25,6 +25,10 @@ namespace Pneuma.Sdk.Enums
         /// <summary>Voyage AI.</summary>
         VoyageAI,
         /// <summary>Google Vertex AI.</summary>
-        VertexAI
+        VertexAI,
+        /// <summary>Ollama Cloud native API. Requires an API key; endpoint is fixed to https://ollama.com:443.</summary>
+        OllamaCloud,
+        /// <summary>xAI native Responses and embeddings APIs. Requires an API key and explicit embedding model.</summary>
+        XAI
     }
 }

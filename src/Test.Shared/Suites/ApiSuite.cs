@@ -32,6 +32,31 @@ namespace Test.Shared.Suites
                 displayName: "HTTP API",
                 cases: new List<TestCaseDescriptor>
                 {
+                    new TestCaseDescriptor("Api", "CloudProviders_RoundTrip", "New cloud providers survive REST creation, persistence, reads, and updates without exposing list secrets",
+                        executeAsync: async ct =>
+                        {
+                            await using TestServer server = await TestServer.CreateAsync(ct);
+                            string token = await LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                            foreach (string provider in new[] { "OllamaCloud", "XAI" })
+                            {
+                                foreach (string type in new[] { "Completion", "Embedding" })
+                                {
+                                    string body = Json.Serialize(new { type, provider, model = "fixture-model", endpoint = "https://api.x.ai", apiKey = "fixture-secret", healthCheckEnabled = false });
+                                    HttpResponseMessage created = await Send(HttpMethod.Post, server.BaseUrl + "/v1.0/model-runners", token, body, ct);
+                                    if (created.StatusCode != HttpStatusCode.Created) throw new Exception("Cloud endpoint creation failed: " + await created.Content.ReadAsStringAsync(ct));
+                                    ModelEndpointDto dto = Json.Deserialize<ModelEndpointDto>(await created.Content.ReadAsStringAsync(ct))!;
+                                    if (dto.Provider.ToString() != provider) throw new Exception("Provider must round-trip.");
+                                    if (provider == "OllamaCloud" && dto.Endpoint != "https://ollama.com:443") throw new Exception("Cloud endpoint must be canonical.");
+                                    HttpResponseMessage updated = await Send(HttpMethod.Put, server.BaseUrl + "/v1.0/model-runners/" + dto.Id, token, body, ct);
+                                    if (updated.StatusCode != HttpStatusCode.OK) throw new Exception("Cloud endpoint update failed.");
+                                    ModelEndpointDto read = Json.Deserialize<ModelEndpointDto>(await (await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/model-runners/" + dto.Id, token, null, ct)).Content.ReadAsStringAsync(ct))!;
+                                    if (read.Provider != dto.Provider || read.Type != type) throw new Exception("Persisted provider or capability changed.");
+                                }
+                            }
+                            string listed = await (await Send(HttpMethod.Get, server.BaseUrl + "/v1.0/model-runners", token, null, ct)).Content.ReadAsStringAsync(ct);
+                            if (listed.Contains("fixture-secret")) throw new Exception("Endpoint lists must not expose API keys.");
+                        }),
+
                     new TestCaseDescriptor("Api", "Health_Anonymous", "Health is reachable without auth",
                         executeAsync: async ct =>
                         {

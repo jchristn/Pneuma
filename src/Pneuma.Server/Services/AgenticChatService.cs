@@ -289,6 +289,7 @@ namespace Pneuma.Server.Services
                         // Drain the stream fully; only then are the aggregate fields (ToolCalls, Usage, timing) populated.
                         await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token).ConfigureAwait(false))
                         {
+                            if (!String.IsNullOrEmpty(chunk.ReasoningText)) thinkParser.FeedReasoning(chunk.ReasoningText);
                             if (!String.IsNullOrEmpty(chunk.Text))
                             {
                                 string visible = thinkParser.Feed(chunk.Text);
@@ -786,6 +787,13 @@ namespace Pneuma.Server.Services
 
             /// <summary>Total milliseconds spent inside think blocks.</summary>
             public long ThinkingMs { get { return _ThinkingMs; } }
+
+            /// <summary>Capture a provider's separate reasoning delta without emitting it as answer text.</summary>
+            /// <param name="text">Reasoning delta.</param>
+            public void FeedReasoning(string text)
+            {
+                _Thinking.Append(text);
+            }
 
             /// <summary>Feed a streamed text fragment; returns the visible (non-thinking) portion to emit.</summary>
             /// <param name="text">The incoming fragment.</param>

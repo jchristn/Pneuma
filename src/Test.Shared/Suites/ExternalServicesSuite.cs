@@ -551,6 +551,34 @@ namespace Test.Shared.Suites
                             return Task.CompletedTask;
                         }),
 
+                    new TestCaseDescriptor("ExternalServices", "ModelClient_CloudProviders", "Native cloud clients preserve runner models, require credentials, and retain existing enum values",
+                        executeAsync: ct =>
+                        {
+                            using (LoggingModule logging = new LoggingModule())
+                            {
+                                logging.Settings.EnableConsole = false;
+                                if ((int)ModelRunnerProviderEnum.VertexAI != 8) throw new Exception("Existing provider values must remain stable.");
+                                foreach (ModelRunnerProviderEnum provider in new[] { ModelRunnerProviderEnum.OllamaCloud, ModelRunnerProviderEnum.XAI })
+                                {
+                                    Pneuma.Core.Models.ModelRunner runner = new Pneuma.Core.Models.ModelRunner { Name = "cloud", Provider = provider, BaseUrl = "https://api.x.ai", DefaultModel = "chat-model", DefaultEmbeddingModel = "embed-model" };
+                                    PolyPrompt.Clients.CompletionClientBase completion = Pneuma.Core.Integrations.ModelClientFactory.Create(runner, "fixture-key", logging);
+                                    PolyPrompt.Clients.EmbeddingClientBase embedding = Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(runner, "fixture-key", logging);
+                                    if (completion.Model != "chat-model" || embedding.Model != "embed-model") throw new Exception("Runner models must override provider defaults.");
+                                    if (provider == ModelRunnerProviderEnum.XAI && !(completion is PolyPrompt.Clients.XAiCompletionClient)) throw new Exception("xAI must use native Responses, not OpenAI compatibility.");
+                                    if (provider == ModelRunnerProviderEnum.OllamaCloud && !(completion is PolyPrompt.Clients.OllamaCloudCompletionClient)) throw new Exception("Ollama Cloud must use its authenticated fixed-endpoint client.");
+                                    bool rejected = false;
+                                    try { Pneuma.Core.Integrations.ModelClientFactory.Create(runner, null, logging); }
+                                    catch (ArgumentException) { rejected = true; }
+                                    if (!rejected) throw new Exception("Cloud API keys are required.");
+                                    rejected = false;
+                                    try { Pneuma.Core.Integrations.ModelClientFactory.CreateEmbedding(runner, null, logging); }
+                                    catch (ArgumentException) { rejected = true; }
+                                    if (!rejected) throw new Exception("Cloud embedding API keys are required.");
+                                }
+                            }
+                            return Task.CompletedTask;
+                        }),
+
                     new TestCaseDescriptor("ExternalServices", "ModelClient_UnsupportedCapabilityRejected", "A provider without a capability fails when its client is built: Anthropic has no embeddings, Voyage AI has no completions",
                         executeAsync: ct =>
                         {

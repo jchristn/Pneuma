@@ -272,6 +272,7 @@ namespace Pneuma.Server.Routes
             runner.Name = String.IsNullOrWhiteSpace(request.Name) ? (String.IsNullOrWhiteSpace(request.Model) ? runner.Name : request.Model!) : request.Name!;
             runner.Provider = request.Provider ?? MapApiFormat(request.ApiFormat);
             if (!String.IsNullOrWhiteSpace(request.Endpoint)) runner.BaseUrl = request.Endpoint!;
+            if (runner.Provider == ModelRunnerProviderEnum.OllamaCloud) runner.BaseUrl = "https://ollama.com:443";
             runner.ApiType = request.ApiFormat;
             runner.Capabilities = new List<ModelCapabilityEnum> { embedding ? ModelCapabilityEnum.Embedding : ModelCapabilityEnum.Completion };
             runner.Usage = embedding ? ModelRunnerUsageEnum.Ingestion : ModelRunnerUsageEnum.Both;
@@ -340,6 +341,8 @@ namespace Pneuma.Server.Routes
                 case "lmstudio": return ModelRunnerProviderEnum.OpenAICompatible;
                 case "gemini": return ModelRunnerProviderEnum.Gemini;
                 case "ollama": return ModelRunnerProviderEnum.Ollama;
+                case "ollamacloud": return ModelRunnerProviderEnum.OllamaCloud;
+                case "xai": return ModelRunnerProviderEnum.XAI;
                 case "azure":
                 case "azureopenai": return ModelRunnerProviderEnum.AzureOpenAI;
                 case "anthropic": return ModelRunnerProviderEnum.Anthropic;

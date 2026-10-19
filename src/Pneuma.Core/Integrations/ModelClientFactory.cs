@@ -64,6 +64,12 @@ namespace Pneuma.Core.Integrations
                     case ModelRunnerProviderEnum.OpenAICompatible:
                         client = new OpenAiCompletionClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
                         break;
+                    case ModelRunnerProviderEnum.OllamaCloud:
+                        client = new OllamaCloudCompletionClient(apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.XAI:
+                        client = new XAiCompletionClient(apiKey ?? String.Empty, endpointOrNull ?? "https://api.x.ai", logging, http);
+                        break;
                     case ModelRunnerProviderEnum.Gemini:
                         client = new GeminiCompletionClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
                         break;
@@ -135,6 +141,12 @@ namespace Pneuma.Core.Integrations
                     case ModelRunnerProviderEnum.OpenAI:
                     case ModelRunnerProviderEnum.OpenAICompatible:
                         client = new OpenAiEmbeddingClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.OllamaCloud:
+                        client = new OllamaCloudEmbeddingClient(apiKey ?? String.Empty, logging, http);
+                        break;
+                    case ModelRunnerProviderEnum.XAI:
+                        client = new XAiEmbeddingClient(apiKey ?? String.Empty, endpointOrNull ?? "https://api.x.ai", logging, http);
                         break;
                     case ModelRunnerProviderEnum.Gemini:
                         client = new GeminiEmbeddingClient(runner.BaseUrl, apiKey ?? String.Empty, logging, http);
