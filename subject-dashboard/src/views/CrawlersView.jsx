@@ -132,7 +132,7 @@ function CrawlersView() {
     ) },
     { key: 'schedule', label: t('crawl.schedule'), sortable: false, render: (v) => scheduleSummary(v, t) },
     { key: 'lastRunUtc', label: t('crawl.lastRun'), render: (v) => (v ? formatDateTime(v) : '-') },
-    { key: 'nextRunUtc', label: t('crawl.nextRun'), render: (v) => (v ? formatDateTime(v) : '-') },
+    { key: 'nextRunUtc', defaultHidden: true, label: t('crawl.nextRun'), render: (v) => (v ? formatDateTime(v) : '-') },
     { key: 'actions', label: '', sortable: false, render: (_, plan) => {
       const running = plan.status !== 'Idle';
       const items = [
@@ -155,7 +155,7 @@ function CrawlersView() {
     { key: 'added', label: t('crawl.count.added') },
     { key: 'updated', label: t('crawl.count.updated') },
     { key: 'deleted', label: t('crawl.count.deleted') },
-    { key: 'failed', label: t('crawl.count.failed') },
+    { key: 'failed', label: t('crawl.count.failed'), defaultHidden: false },
     { key: 'actions', label: '', sortable: false, render: (_, op) => {
       const running = op.status === 'Running' || op.status === 'Ingesting';
       const items = [

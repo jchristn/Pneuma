@@ -76,18 +76,18 @@ function LinksView() {
     { key: 'subjectId', label: 'Subject', render: (r) => (
       <span title={r.subjectId}>{subjectName(r.subjectId) || <CopyableId value={r.subjectId} truncateLen={12} />}</span>
     ) },
-    { key: 'crawlPlanId', label: t('crawl.crawlPlan'), render: (r) => {
+    { key: 'crawlPlanId', defaultHidden: true, label: t('crawl.crawlPlan'), render: (r) => {
       if (!r.crawlPlanId) return '-';
       const plan = crawlPlans.find((p) => p.id === r.crawlPlanId);
       return <span title={r.crawlPlanId}>{plan ? plan.name : <CopyableId value={r.crawlPlanId} truncateLen={12} />}</span>;
     } },
     { key: 'lastIngestedUtc', label: 'Last Ingested', render: (r) => formatDateTime(r.lastIngestedUtc) },
-    { key: 'nextRefreshUtc', label: t('links.nextRefresh'), render: (r) => {
+    { key: 'nextRefreshUtc', defaultHidden: true, label: t('links.nextRefresh'), render: (r) => {
       if (!isRefreshable(r)) return '-';
       if (!r.nextRefreshUtc) return t('links.refreshOff');
       return <span title={r.refreshFailures > 0 ? t('links.refreshFailures', { count: r.refreshFailures }) : undefined}>{formatDateTime(r.nextRefreshUtc)}</span>;
     } },
-    { key: 'lastError', label: 'Last Error', cellClass: 'wrap', sortable: false, render: (r) => r.lastError || '—' }
+    { key: 'lastError', defaultHidden: true, label: 'Last Error', cellClass: 'wrap', sortable: false, render: (r) => r.lastError || '—' }
   ];
 
   const subjectOptions = subjects.map((c) => ({ value: c.id, label: c.displayName || c.name || c.id }));

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { RULE_TYPES, RULE_ACTIONS, NODE_FIELDS, RULE_FIELDS, newRule } from './ontologyUtils';
+import PickableTable from '../columns/PickableTable';
 
 // A type-name input backed by a datalist of the version's declared types, so any name can still be typed.
 function TypeInput({ value, onChange, listId, disabled, label }) {
@@ -57,7 +58,7 @@ function RuleListEditor({ rules, onChange, readOnly, nodeTypes, edgeTypes }) {
       <datalist id="onto-edge-types">{edgeTypes.map((n) => <option key={n.name} value={n.name} />)}</datalist>
       <p className="field-hint">{t('ontology.rulesHint')}</p>
       <div className="onto-scroll">
-        <table className="onto-edit-table">
+        <PickableTable className="onto-edit-table">
           <thead>
             <tr>
               <th>{t('ontology.rule.type')}</th>
@@ -100,7 +101,7 @@ function RuleListEditor({ rules, onChange, readOnly, nodeTypes, edgeTypes }) {
               );
             })}
           </tbody>
-        </table>
+        </PickableTable>
       </div>
       {!readOnly && (
         <div className="onto-toolbar">

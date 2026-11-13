@@ -128,7 +128,7 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
         <>
           <p className="sw-muted">{t('wizard.sources.summary', { total: links.length, done: count('Ingested'), running: count('Submitted') + count('Processing'), failed: count('Failed') })}</p>
           <div className="sw-grid-wrap">
-            <DataGrid rows={links} rowKey={(l) => l.id} exportName="subject-links" initialSort={{ key: 'status', dir: 'asc' }}
+            <DataGrid rows={links} rowKey={(l) => l.id} exportName="subject-links" tableId="wizard-links" initialSort={{ key: 'status', dir: 'asc' }}
               columns={[
                 { key: 'source', label: t('wizard.sources.source', 'Source'), value: (l) => l.title || l.url, fuzzy: true, width: '72%' },
                 { key: 'status', label: t('wizard.sources.statusLabel', 'Status'), facet: true, width: '28%',

@@ -77,13 +77,13 @@ function CrawlOperationsView() {
     { key: 'startedUtc', label: t('crawl.started'), render: (r) => formatDateTime(r.startedUtc) },
     { key: 'planId', label: t('crawl.plan'), render: (r) => planName[r.planId] || r.planId },
     { key: 'status', label: t('crawl.status'), render: (r) => <StatusPill label={r.status} tone={operationTone(r.status)} /> },
-    { key: 'trigger', label: t('crawl.trigger') },
-    { key: 'enumerated', label: t('crawl.count.enumerated') },
+    { key: 'trigger', defaultHidden: true, label: t('crawl.trigger') },
+    { key: 'enumerated', defaultHidden: true, label: t('crawl.count.enumerated') },
     { key: 'added', label: t('crawl.count.added') },
     { key: 'updated', label: t('crawl.count.updated') },
     { key: 'deleted', label: t('crawl.count.deleted') },
     { key: 'failed', label: t('crawl.count.failed') },
-    { key: 'finishedUtc', label: t('crawl.finished'), render: (r) => (r.finishedUtc ? formatDateTime(r.finishedUtc) : '-') },
+    { key: 'finishedUtc', defaultHidden: true, label: t('crawl.finished'), render: (r) => (r.finishedUtc ? formatDateTime(r.finishedUtc) : '-') },
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (op) => (
       <ActionMenu items={[
         { key: 'view', label: t('crawl.view'), tip: t('crawl.viewOperationTip'), onClick: () => setOpenId(op.id) },

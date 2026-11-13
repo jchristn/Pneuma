@@ -12,6 +12,7 @@ import ChartRangeControls from '../components/ChartRangeControls';
 import StatusPill from '../components/StatusPill';
 import { copyChartPng } from '../utils/chartExport';
 import { normalizeIngestionBuckets, stagesPresent, stageColor, stageLabel } from '../utils/ingestionActivity';
+import PickableTable from '../components/columns/PickableTable';
 
 // Refresh + copy-PNG controls shared by both activity chart cards.
 function ChartActions({ onRefresh, onCopy, loading, copyState }) {
@@ -275,7 +276,7 @@ function HomeView() {
             </p>
           ) : (
             <div className="table-scroll">
-              <table className="data-table">
+              <PickableTable className="data-table">
                 <thead>
                   <tr>
                     <th>{t('links.linkTitle')}</th>
@@ -296,7 +297,7 @@ function HomeView() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PickableTable>
             </div>
           )}
         </div>

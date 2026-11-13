@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import Pagination from './Pagination';
+import ColumnPicker from './columns/ColumnPicker';
+import { useColumnVisibility } from './columns/useColumnVisibility';
 
 /**
  * Reusable client-side data table with sortable headers and an above-table
@@ -25,8 +27,12 @@ function DataTable({
   onPageChange: controlledPageChange,
   onPageSizeChange: controlledPageSizeChange,
   selection = null,
-  bulkBar = null
+  bulkBar = null,
+  tableId = null,
+  maxDefaultColumns
 }) {
+  // Which columns show: required ones always, the rest per the viewer's choice (defaults fit without scrolling).
+  const { visibleColumns, picker } = useColumnVisibility(columns, { tableId, maxDefault: maxDefaultColumns });
   const [internalPage, setInternalPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [sortKey, setSortKey] = useState(null);
@@ -96,7 +102,7 @@ function DataTable({
   const pageIds = selEnabled ? pageRows.map(rowId) : [];
   const allOnPageSelected = selEnabled && pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
   const someOnPageSelected = selEnabled && pageIds.some((id) => selectedIds.has(id));
-  const totalColumns = columns.length + (selEnabled ? 1 : 0);
+  const totalColumns = visibleColumns.length + (selEnabled ? 1 : 0);
 
   const toggleAllOnPage = () => {
     const next = new Set(selectedIds);
@@ -122,7 +128,7 @@ function DataTable({
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         onRefresh={onRefresh}
-        extraControls={toolbar}
+        extraControls={<>{toolbar}<ColumnPicker picker={picker} /></>}
       />
       {selEnabled && selectedIds.size > 0 && bulkBar && (
         <div className="table-bulkbar">{bulkBar}</div>
@@ -143,7 +149,7 @@ function DataTable({
                   />
                 </th>
               )}
-              {columns.map((col) => (
+              {visibleColumns.map((col) => (
                 <th
                   key={col.key}
                   scope="col"
@@ -195,7 +201,7 @@ function DataTable({
                       />
                     </td>
                   )}
-                  {columns.map((col) => (
+                  {visibleColumns.map((col) => (
                     <td key={col.key} className={col.className || ''}>
                       {col.render ? col.render(row[col.key], row) : row[col.key]}
                     </td>

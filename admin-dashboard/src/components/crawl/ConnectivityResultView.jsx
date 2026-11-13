@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import StatusPill from '../StatusPill';
+import PickableTable from '../columns/PickableTable';
 
 // The steps of a crawl plan connectivity test, in order, with what was checked and what to fix.
 function ConnectivityResultView({ result }) {
@@ -11,7 +12,7 @@ function ConnectivityResultView({ result }) {
       <div style={{ marginBottom: '0.5rem' }}>
         <StatusPill label={result.success ? t('crawl.testPassed') : t('crawl.testFailed')} tone={result.success ? 'success' : 'danger'} />
       </div>
-      <table className="data-table">
+      <PickableTable className="data-table">
         <thead>
           <tr><th>{t('crawl.testStep')}</th><th>{t('crawl.testResult')}</th><th>{t('crawl.testDetail')}</th></tr>
         </thead>
@@ -24,7 +25,7 @@ function ConnectivityResultView({ result }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </PickableTable>
     </div>
   );
 }

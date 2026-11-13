@@ -11,6 +11,7 @@ import Modal from '../components/Modal';
 import FollowLogsModal from '../components/FollowLogsModal';
 import JobPerformanceModal from '../components/JobPerformanceModal';
 import { stageColor, stageLabel } from '../utils/ingestionActivity';
+import PickableTable from '../components/columns/PickableTable';
 
 const POLL_MS = 2000;
 const TICK_MS = 1000;
@@ -48,21 +49,8 @@ function StageBadge({ stage }) {
   );
 }
 
-// Shared column widths (percentages that sum to 100%) so, with table-layout:fixed + width:100%, every table is
-// exactly as wide as its container — it never overflows horizontally — and the columns line up across all three
-// tables. The Document column gets the largest share and truncates its (often long) link with an ellipsis.
-function LiveColgroup() {
-  return (
-    <colgroup>
-      <col style={{ width: '42%' }} />
-      <col style={{ width: '22%' }} />
-      <col style={{ width: '13%' }} />
-      <col style={{ width: '15%' }} />
-      <col style={{ width: '8%' }} />
-    </colgroup>
-  );
-}
-
+// Column widths are set on the header cells (percentages summing to 100% with table-layout:fixed), so the tables
+// never overflow and a column hidden with the column picker takes its width with it.
 function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor, onRowClick }) {
   return (
     <section style={{ marginBottom: '1.5rem' }}>
@@ -73,15 +61,14 @@ function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor, onRowClick }
       {items.length === 0 ? (
         <p style={{ color: 'var(--color-text-secondary)' }}>{t('live.none')}</p>
       ) : (
-        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-          <LiveColgroup />
+        <PickableTable tableId="ingestion-live" className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
-              <th>{t('live.document')}</th>
-              <th>{t('live.step')}</th>
-              <th>{t('live.inState')}</th>
-              <th>{t('live.job')}</th>
-              <th aria-label={t('common.actions')} />
+              <th style={{ width: '42%' }}>{t('live.document')}</th>
+              <th style={{ width: '22%' }}>{t('live.step')}</th>
+              <th style={{ width: '13%' }}>{t('live.inState')}</th>
+              <th style={{ width: '15%' }}>{t('live.job')}</th>
+              <th style={{ width: '8%' }} aria-label={t('common.actions')} />
             </tr>
           </thead>
           <tbody>
@@ -95,7 +82,7 @@ function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor, onRowClick }
               </tr>
             ))}
           </tbody>
-        </table>
+        </PickableTable>
       )}
     </section>
   );

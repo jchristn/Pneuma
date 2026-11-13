@@ -76,7 +76,7 @@ function CrawlPreviewModal({ plan, mode, onClose }) {
           <p className="field-hint">{t('crawl.bytes')}: {formatBytes(result.bytesEnumerated || 0)}</p>
           {result.deletionsHeld && <div className="form-error">{t('crawl.previewDeletionsHeld')}</div>}
           <DataGrid rows={Array.isArray(result.items) ? result.items : []} columns={columns} rowKey={(i) => `${i.action}-${i.key}`}
-            facets={facets} onFacetsChange={setFacets} exportName={`crawl-preview-${plan.id}`} emptyText={t('crawl.noObjects')}
+            facets={facets} onFacetsChange={setFacets} exportName={`crawl-preview-${plan.id}`} tableId="crawl-preview-items" emptyText={t('crawl.noObjects')}
             note={result.truncated ? t('crawl.truncated', { count: result.maxItems }) : null} />
         </>
       )}

@@ -5,6 +5,7 @@ import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
 import ErrorBanner from '../components/ErrorBanner';
 import CopyableId from '../components/CopyableId';
+import PickableTable from '../components/columns/PickableTable';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
@@ -156,7 +157,7 @@ function SearchView() {
         <>
           <div className="table-frame">
             <div className="table-scroll">
-              <table className="data-table">
+              <PickableTable className="data-table">
                 <thead>
                   <tr>
                     <th style={{ width: '80px' }}>{t('search.score')}</th>
@@ -191,7 +192,7 @@ function SearchView() {
                     );
                   })}
                 </tbody>
-              </table>
+              </PickableTable>
             </div>
           </div>
           <div className="table-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>

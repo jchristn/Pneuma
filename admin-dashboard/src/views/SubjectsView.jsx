@@ -97,8 +97,8 @@ function SubjectsView() {
     ) },
     { key: 'type', label: 'Type', render: (r) => <StatusPill label={r.type} tone="info" /> },
     { key: 'description', label: 'Description', cellClass: 'wrap', sortable: false, render: (r) => r.description || '—' },
-    { key: 'urlSlug', label: 'Slug', render: (r) => r.urlSlug ? <code className="cell-id">{r.urlSlug}</code> : '—' },
-    { key: 'thinkingEnabled', label: 'Thinking', sortable: false, render: (r) => <StatusPill label={r.thinkingEnabled ? 'On' : 'Off'} tone={r.thinkingEnabled ? 'success' : 'neutral'} /> },
+    { key: 'urlSlug', defaultHidden: true, label: 'Slug', render: (r) => r.urlSlug ? <code className="cell-id">{r.urlSlug}</code> : '—' },
+    { key: 'thinkingEnabled', defaultHidden: true, label: 'Thinking', sortable: false, render: (r) => <StatusPill label={r.thinkingEnabled ? 'On' : 'Off'} tone={r.thinkingEnabled ? 'success' : 'neutral'} /> },
     { key: 'publishedForChat', label: 'Consumer Chat', sortable: false, render: (r) => <StatusPill label={r.publishedForChat === false ? 'Hidden' : 'Published'} tone={r.publishedForChat === false ? 'neutral' : 'success'} /> },
     { key: 'createdUtc', label: 'Created', render: (r) => formatDateTime(r.createdUtc || r.CreatedUtc) }
   ];

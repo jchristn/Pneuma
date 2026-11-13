@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { formatDateTime, formatNumber } from '../utils/format';
 import { stageLabel } from '../utils/ingestionActivity';
 import './JobDiagnostics.css';
+import PickableTable from './columns/PickableTable';
 
 // Completeness counters shown for a job, in pipeline order. Each renders "produced / expected" where it has an
 // expected value, so a gap (a failed batch, a missing vector) stands out.
@@ -74,7 +75,7 @@ function JobDiagnostics({ job, attempts }) {
       {attemptList.length > 0 && (
         <div className="jdiag-section">
           <div className="jdiag-heading">{t('jobDiagnostics.attempts', { count: attemptList.length })}</div>
-          <table className="jdiag-attempts">
+          <PickableTable className="jdiag-attempts">
             <thead>
               <tr>
                 <th scope="col">{t('jobDiagnostics.attemptNumber')}</th>
@@ -99,7 +100,7 @@ function JobDiagnostics({ job, attempts }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PickableTable>
         </div>
       )}
     </div>

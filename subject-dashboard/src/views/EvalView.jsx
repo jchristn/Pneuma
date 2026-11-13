@@ -10,6 +10,7 @@ import DataTable from '../components/DataTable';
 import ActionMenu from '../components/ActionMenu';
 import StatusPill from '../components/StatusPill';
 import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
+import PickableTable from '../components/columns/PickableTable';
 
 function truncate(s, n) { const v = String(s || ''); return v.length > n ? v.slice(0, n) + '…' : v; }
 function verdictClass(v) { return `ev-verdict ev-${String(v || 'unknown').toLowerCase()}`; }
@@ -364,7 +365,7 @@ export default function EvalView() {
             <button className="btn btn-secondary" type="submit">{t('eval.addFact', 'Add')}</button>
           </form>
           <div className="hd-table-wrap">
-            <table className="hd-table">
+            <PickableTable className="hd-table">
               <thead><tr><th>{t('eval.question', 'Question')}</th><th>{t('eval.expected', 'Expected')}</th><th>{t('eval.category', 'Category')}</th><th /></tr></thead>
               <tbody>
                 {facts.map((f) => (
@@ -377,7 +378,7 @@ export default function EvalView() {
                 ))}
                 {facts.length === 0 && <tr><td colSpan={4} className="hd-muted">{t('eval.noFactsYet', 'No facts yet — add one above.')}</td></tr>}
               </tbody>
-            </table>
+            </PickableTable>
           </div>
 
           <div className="ev-section-title" style={{ marginTop: 20 }}>{t('eval.runs', 'Runs')} <span className="hd-count">{runs.length}</span></div>

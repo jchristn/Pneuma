@@ -1,5 +1,6 @@
 import { ontologyCoverage, parseNumbers, questionsKey } from './wizardDraft';
 import { GuidanceBar, LockButton } from './WizardParts';
+import PickableTable from '../columns/PickableTable';
 
 // Step 4: node and relationship types drafted to answer the questions. Editing a type locks it (kept on
 // regeneration). The warnings tie the graph back to the questions: what nobody can answer, and what nothing needs.
@@ -39,7 +40,7 @@ function WizardOntologyStep({ state, update, updateDraft, generate, busy, t, com
 
       <h4>{t('wizard.ontology.nodes')}</h4>
       <div className="sw-table-wrap">
-        <table className="sw-table">
+        <PickableTable className="sw-table">
           <thead><tr><th className="sw-col-name">{t('wizard.ontology.name')}</th><th>{t('wizard.ontology.description')}</th><th className="sw-col-serves" title={t('wizard.ontology.servesTip')}>{t('wizard.ontology.serves')}</th><th /></tr></thead>
           <tbody>
             {ontology.nodeTypes.map((n, i) => (
@@ -54,14 +55,14 @@ function WizardOntologyStep({ state, update, updateDraft, generate, busy, t, com
               </tr>
             ))}
           </tbody>
-        </table>
+        </PickableTable>
       </div>
       <button type="button" className="sw-btn sw-btn-secondary sw-btn-sm" disabled={!!busy}
         onClick={() => setOntology({ nodeTypes: [...ontology.nodeTypes, { name: '', description: '', questions: [], locked: true }] })}>{t('wizard.ontology.addNode')}</button>
 
       <h4>{t('wizard.ontology.edges')}</h4>
       <div className="sw-table-wrap">
-        <table className="sw-table">
+        <PickableTable className="sw-table">
           <thead><tr><th className="sw-col-name">{t('wizard.ontology.name')}</th><th className="sw-col-end">{t('wizard.ontology.from')}</th><th className="sw-col-end">{t('wizard.ontology.to')}</th><th>{t('wizard.ontology.description')}</th><th className="sw-col-serves" title={t('wizard.ontology.servesTip')}>{t('wizard.ontology.serves')}</th><th /></tr></thead>
           <tbody>
             {ontology.edgeTypes.map((e, i) => (
@@ -88,7 +89,7 @@ function WizardOntologyStep({ state, update, updateDraft, generate, busy, t, com
               </tr>
             ))}
           </tbody>
-        </table>
+        </PickableTable>
       </div>
       <button type="button" className="sw-btn sw-btn-secondary sw-btn-sm" disabled={!!busy}
         onClick={() => setOntology({ edgeTypes: [...ontology.edgeTypes, { name: '', description: '', from: null, to: null, questions: [], locked: true }] })}>{t('wizard.ontology.addEdge')}</button>

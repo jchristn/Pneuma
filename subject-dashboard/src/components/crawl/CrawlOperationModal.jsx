@@ -144,7 +144,7 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
       )}
       {op && <SummaryCards rows={cardRows} />}
       <DataGrid rows={objects} columns={columns} rowKey={(o) => o.id} loading={loading}
-        facets={facets} onFacetsChange={setFacets} exportName={`crawl-operation-${operationId}`}
+        facets={facets} onFacetsChange={setFacets} exportName={`crawl-operation-${operationId}`} tableId="crawl-operation-objects"
         emptyText={t('crawl.noObjects')}
         note={capped ? t('crawl.objectsCapped', { shown: objects.length.toLocaleString(), total: total.toLocaleString(), defaultValue: 'Loaded the first {{shown}} of {{total}} objects.' }) : null} />
       <div className="form-actions op-actions">{footer}</div>

@@ -342,7 +342,7 @@ function LinksView() {
         )
     },
     {
-      key: 'nextRefreshUtc',
+      key: 'nextRefreshUtc', defaultHidden: true,
       label: t('links.nextRefresh'),
       sortAccessor: (row) => row.nextRefreshUtc || '',
       render: (v, row) => {
@@ -352,7 +352,7 @@ function LinksView() {
       }
     },
     {
-      key: 'lastError',
+      key: 'lastError', defaultHidden: true,
       label: t('links.lastError'),
       sortable: false,
       className: 'cell-error',

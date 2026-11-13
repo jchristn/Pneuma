@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import PickableTable from '../columns/PickableTable';
 
 // Editable list of declared node or edge types ({ name, description }).
 function TypeListEditor({ items, onChange, readOnly, placeholder }) {
@@ -8,7 +9,7 @@ function TypeListEditor({ items, onChange, readOnly, placeholder }) {
   return (
     <div>
       <div className="onto-scroll">
-        <table className="onto-edit-table">
+        <PickableTable className="onto-edit-table">
           <thead>
             <tr>
               <th>{t('ontology.typeName')}</th>
@@ -38,7 +39,7 @@ function TypeListEditor({ items, onChange, readOnly, placeholder }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </PickableTable>
       </div>
       {!readOnly && (
         <div className="onto-toolbar">

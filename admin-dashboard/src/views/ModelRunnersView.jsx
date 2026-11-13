@@ -5,6 +5,7 @@ import ResourceView from '../components/ResourceView';
 import StatusPill from '../components/StatusPill';
 import Modal from '../components/Modal';
 import { HealthHistogram, HealthDetailModal } from '../components/HealthHistogram';
+import PickableTable from '../components/columns/PickableTable';
 
 const TYPES = ['Embedding', 'Completion'];
 
@@ -103,7 +104,7 @@ function ValidationModal({ state, onClose, onRetry }) {
             <div style={{ display: 'contents' }}><dt>{t('modelRunners.endpoint')}</dt><dd className="wrap">{data.endpoint || '—'}</dd></div>
             <div style={{ display: 'contents' }}><dt>{t('modelRunners.provider')}</dt><dd>{(data.provider && (PROVIDER_LABELS[data.provider] || data.provider)) || '—'}</dd></div>
           </dl>
-          <table className="data-table">
+          <PickableTable className="data-table">
             <thead>
               <tr>
                 <th>{t('modelRunners.validateCheck')}</th>
@@ -127,7 +128,7 @@ function ValidationModal({ state, onClose, onRetry }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PickableTable>
         </>
       )}
     </Modal>
@@ -242,7 +243,7 @@ function ModelRunnersView() {
     { key: 'type', label: t('modelRunners.type'), render: (r) => <StatusPill label={r.type} tone={typeTone(r.type)} /> },
     { key: 'name', label: t('modelRunners.name'), render: (r) => r.name || '—' },
     { key: 'model', label: t('modelRunners.model'), render: (r) => r.model || '—' },
-    { key: 'endpoint', label: t('modelRunners.endpoint'), cellClass: 'wrap', sortable: false, render: (r) => r.endpoint || '—' },
+    { key: 'endpoint', defaultHidden: true, label: t('modelRunners.endpoint'), cellClass: 'wrap', sortable: false, render: (r) => r.endpoint || '—' },
     { key: 'provider', label: t('modelRunners.provider'), render: (r) => (r.provider && (PROVIDER_LABELS[r.provider] || r.provider)) || '—' },
     { key: 'health', label: t('modelRunners.health'), sortable: false, render: renderHealth, tip: t('modelRunners.healthTip') },
     { key: 'active', label: t('modelRunners.active'), tip: t('modelRunners.activeColTip'), render: (r) => <StatusPill label={r.active === false ? 'Disabled' : 'Active'} tone={r.active === false ? 'neutral' : 'success'} /> }

@@ -7,6 +7,7 @@ import Modal from './Modal';
 import CopyableId from './CopyableId';
 import CopyButton from './CopyButton';
 import { formatDateTime } from '../utils/format';
+import PickableTable from './columns/PickableTable';
 
 function fmtMs(v) {
   if (v == null) return '—';
@@ -168,7 +169,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
           <div className="hd-section">
             <div className="hd-section-title">{t('history.stages', 'Stage details')}</div>
             <div className="hd-table-wrap">
-              <table className="hd-table">
+              <PickableTable className="hd-table">
                 <thead>
                   <tr>
                     <th>{t('history.stage', 'Stage')}</th>
@@ -191,7 +192,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PickableTable>
             </div>
           </div>
         )}
@@ -267,7 +268,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
           <div className="hd-section">
             <div className="hd-section-title">{t('history.citations', 'Citations')} <span className="hd-count">{citations.length}</span></div>
             <div className="hd-table-wrap">
-              <table className="hd-table">
+              <PickableTable className="hd-table">
                 <thead>
                   <tr>
                     <th style={{ width: '2.5rem' }}>#</th>
@@ -286,7 +287,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PickableTable>
             </div>
           </div>
         )}
@@ -296,7 +297,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
           <div className="hd-section">
             <div className="hd-section-title">{t('history.toolActivity', 'Tool activity')} <span className="hd-count">{toolCalls.length}</span></div>
             <div className="hd-table-wrap">
-              <table className="hd-table">
+              <PickableTable className="hd-table">
                 <thead>
                   <tr>
                     <th style={{ width: '2.5rem' }}>#</th>
@@ -321,7 +322,7 @@ export default function HistoryDetailModal({ detail, subjectName, onClose }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PickableTable>
             </div>
           </div>
         )}

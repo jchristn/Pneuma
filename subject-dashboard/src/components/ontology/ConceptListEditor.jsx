@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { newConcept } from './ontologyUtils';
+import PickableTable from '../columns/PickableTable';
 
 const PAGE = 100;
 
@@ -39,7 +40,7 @@ function ConceptListEditor({ concepts, onChange, readOnly }) {
       </div>
       <datalist id="onto-concept-keys">{concepts.slice(0, 2000).map((c, i) => <option key={i} value={c.key || c.prefLabel} />)}</datalist>
       <div className="onto-scroll">
-        <table className="onto-edit-table">
+        <PickableTable className="onto-edit-table">
           <thead>
             <tr>
               <th>{t('ontology.concept.prefLabel')}</th>
@@ -76,7 +77,7 @@ function ConceptListEditor({ concepts, onChange, readOnly }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </PickableTable>
       </div>
       {visible.length > limit && (
         <div className="onto-toolbar">

@@ -174,7 +174,7 @@ function CrawlPlansView({ subjectId: fixedSubjectId = null }) {
     ) },
     { key: 'schedule', label: t('crawl.schedule'), sortable: false, render: (r) => scheduleSummary(r.schedule, t) },
     { key: 'lastRunUtc', label: t('crawl.lastRun'), render: (r) => (r.lastRunUtc ? formatDateTime(r.lastRunUtc) : '-') },
-    { key: 'nextRunUtc', label: t('crawl.nextRun'), render: (r) => (r.nextRunUtc ? formatDateTime(r.nextRunUtc) : '-') },
+    { key: 'nextRunUtc', defaultHidden: true, label: t('crawl.nextRun'), render: (r) => (r.nextRunUtc ? formatDateTime(r.nextRunUtc) : '-') },
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (plan) => {
       const running = plan.status !== 'Idle';
       return (

@@ -14,6 +14,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ActionMenu from '../components/ActionMenu';
 import CopyableId from '../components/CopyableId';
 import JsonViewer from '../components/JsonViewer';
+import PickableTable from '../components/columns/PickableTable';
 
 function toLocalInput(date) {
   const offset = date.getTimezoneOffset() * 60000;
@@ -272,7 +273,7 @@ function RequestHistoryView() {
           onRefresh={refresh}
         />
         <div className="table-scroll">
-          <table className="data-table">
+          <PickableTable className="data-table">
             <thead>
               <tr>
                 <th>{t('requests.when')}</th>
@@ -315,7 +316,7 @@ function RequestHistoryView() {
                 })
               )}
             </tbody>
-          </table>
+          </PickableTable>
         </div>
       </div>
 

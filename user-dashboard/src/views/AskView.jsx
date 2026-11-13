@@ -13,6 +13,7 @@ import Modal from '../components/Modal.jsx';
 import ScopeFilter, { buildScopeFilter } from '../components/ScopeFilter.jsx';
 import ThreadSwitcher from '../components/ThreadSwitcher.jsx';
 import { WAIT_MESSAGES } from '../components/chatWaitMessages.js';
+import PickableTable from '../components/columns/PickableTable.jsx';
 
 /** Track the dashboard's light/dark mode from the documentElement data-theme attribute. */
 function useThemeMode() {
@@ -70,7 +71,7 @@ const MARKDOWN_COMPONENTS = {
     <a href={href} target="_blank" rel="noopener noreferrer" className="chat-md-link">{children}</a>
   ),
   table: ({ children }) => (
-    <div className="chat-table-wrapper"><table className="chat-md-table">{children}</table></div>
+    <div className="chat-table-wrapper"><PickableTable className="chat-md-table" maxDefault={Infinity}>{children}</PickableTable></div>
   ),
 };
 

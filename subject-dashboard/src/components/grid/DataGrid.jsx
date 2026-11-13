@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import ColumnPicker from '../columns/ColumnPicker';
+import { useColumnVisibility } from '../columns/useColumnVisibility';
 import './DataGrid.css';
 
 // A client-side results grid for modals that show many rows (crawl operation objects, previews, ingestion
@@ -83,9 +85,12 @@ function DataGrid({
   exportName = 'results',
   toolbarExtra = null,
   loading = false,
-  note = null
+  note = null,
+  tableId = null
 }) {
   const { t } = useTranslation();
+  // Search, facets, sorting, and CSV export use every column; only the table body follows the column picker.
+  const { visibleColumns, picker } = useColumnVisibility(columns, { tableId: tableId || `grid:${exportName}` });
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState(initialSort);
   const [ownFacets, setOwnFacets] = useState({});
@@ -191,6 +196,7 @@ function DataGrid({
             ])}
           </select>
           {toolbarExtra}
+          <ColumnPicker picker={picker} />
           <button type="button" className="dg-btn" onClick={exportCsv} disabled={sorted.length === 0} title={t('grid.exportTip', 'Download the filtered rows as CSV')}>
             {t('grid.export', 'Export CSV')}
           </button>
@@ -229,11 +235,11 @@ function DataGrid({
       <div className="dg-scroll">
         <table className="dg-table">
           <colgroup>
-            {columns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
+            {visibleColumns.map((c) => <col key={c.key} style={c.width ? { width: c.width } : undefined} />)}
           </colgroup>
           <thead>
             <tr>
-              {columns.map((c) => {
+              {visibleColumns.map((c) => {
                 const active = sort && sort.key === c.key;
                 const ariaSort = active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
                 return (
@@ -252,7 +258,7 @@ function DataGrid({
           <tbody>
             {visible.map((r, i) => (
               <tr key={rowKey ? rowKey(r) : i}>
-                {columns.map((c) => (
+                {visibleColumns.map((c) => (
                   <td key={c.key} data-label={c.label} className={c.mono ? 'dg-mono' : undefined} style={c.align ? { textAlign: c.align } : undefined}>
                     {c.render ? c.render(r) : (text(c.value(r)) || '-')}
                   </td>
