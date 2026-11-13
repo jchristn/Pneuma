@@ -558,11 +558,14 @@ namespace Pneuma.Server.Services
         /// <summary>
         /// Resolve the content links the assistant drew from into citation objects (id, url, title, score) by
         /// reading each link. Most relevant first. The score is normalized to [0, 1] so every surface can render
-        /// it identically as a percentage. Best-effort and bounded so a broken link read never fails the response.
+        /// it identically as a percentage. Deduplicated by normalized URL (distinct links that point at the same
+        /// address collapse into one citation, keeping the most relevant). Best-effort and bounded so a broken link
+        /// read never fails the response.
         /// </summary>
         private async Task<List<object>> ResolveCitationsAsync(string tenantId, IDictionary<string, double> linkScores, CancellationToken token)
         {
             List<object> citations = new List<object>();
+            HashSet<string> seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (linkScores == null || linkScores.Count == 0 || String.IsNullOrEmpty(tenantId)) return citations;
 
             List<KeyValuePair<string, double>> ordered = new List<KeyValuePair<string, double>>(linkScores);
@@ -576,6 +579,7 @@ namespace Pneuma.Server.Services
                 {
                     SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, entry.Key, token).ConfigureAwait(false);
                     if (link == null || String.IsNullOrWhiteSpace(link.Url)) continue;
+                    if (!seenUrls.Add(NormalizeCitationUrl(link.Url))) continue;
                     double score = Math.Clamp(entry.Value, 0.0, 1.0);
                     citations.Add(new { linkId = link.Id, url = link.Url, title = String.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title, score });
                 }
@@ -586,6 +590,18 @@ namespace Pneuma.Server.Services
             }
 
             return citations;
+        }
+
+        private static string NormalizeCitationUrl(string url)
+        {
+            string normalized = url.Trim();
+            int hash = normalized.IndexOf('#');
+            if (hash >= 0) normalized = normalized.Substring(0, hash);
+            normalized = normalized.TrimEnd('/');
+            if (normalized.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(8);
+            else if (normalized.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(7);
+            if (normalized.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(4);
+            return normalized;
         }
 
         /// <summary>Elapsed milliseconds since a <see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> reading.</summary>

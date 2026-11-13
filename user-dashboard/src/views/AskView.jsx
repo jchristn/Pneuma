@@ -162,7 +162,6 @@ function collapseHistory(prev, summary) {
   ];
 }
 
-/** Clickable citations to the ingested source links the answer drew from, with a relevance percentage. */
 /** Thumbs up/down for one answer. Either rating opens a modal to collect the "why", then submits once. */
 function FeedbackBar({ turnId }) {
   const { t } = useTranslation();
@@ -246,9 +245,29 @@ function Thinking({ thinking, enabled }) {
   );
 }
 
-function Citations({ citations }) {
+/** Normalize a citation URL for deduplication: ignore scheme, leading www., fragment, and trailing slash. */
+function citationKey(c) {
+  const raw = String(c?.url || c?.title || c?.linkId || '').trim().toLowerCase();
+  return raw.replace(/#.*$/, '').replace(/\/+$/, '').replace(/^https?:\/\//, '').replace(/^www\./, '');
+}
+
+/** Collapse citations that point at the same address, keeping the most relevant entry for each. */
+function dedupeCitations(citations) {
+  const byKey = new Map();
+  for (const c of citations || []) {
+    const key = citationKey(c);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing || (Number(c.score) || 0) > (Number(existing.score) || 0)) byKey.set(key, c);
+  }
+  return Array.from(byKey.values()).sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
+}
+
+/** Clickable citations to the ingested source links the answer drew from, with a relevance percentage. */
+function Citations({ citations: rawCitations }) {
   const { t } = useTranslation();
-  if (!citations || citations.length === 0) return null;
+  const citations = dedupeCitations(rawCitations);
+  if (citations.length === 0) return null;
   return (
     <details className="chat-citations">
       <summary className="chat-citations-label">{t('ask.sources', 'Sources')} ({citations.length})</summary>
