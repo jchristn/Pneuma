@@ -177,6 +177,7 @@ between releases, and the project will adopt semantic versioning at its stable 1
   `FetchBlocked` audit record. Deployments that ingest intranet sites must add those hosts to the allow-list.
 
 ### Fixed
+- **Jobs interrupted by a restart resume.** A job still `Processing` when the server stopped (for example on an image update) stayed stuck forever and its link never left `Submitted`/`Processing`. At startup such jobs are now queued again (open log entries closed as `Cancelled`, an "Interrupted ... queued again" entry added, link back to `Submitted`); a job interrupted more than `Ingestion.MaxInterruptedRequeues` (default 3) times is failed instead. `Ingestion.RequeueInterruptedJobs` (default true) controls it.
 - **Links show Processing while their job runs.** A link stayed `Submitted` until its ingestion job finished, even while a worker was processing it; it now moves to `Processing` when a worker picks the job up (its last error, hash, and live version are kept until the job ends).
 - **Unchanged content is skipped again on refresh and crawl re-runs.** The unchanged-content check required the link to be `Ingested`, but refreshes and crawls set it to `Submitted` before the job ran, so identical content was fully re-processed (including every model step). It now keys on the link having been ingested before and the content hash matching; a manual re-ingest still forces a full run.
 - The CIFS crawler tests failed on macOS (`Algorithm 'AesCcm' is not supported on this platform`): SMB 3.0 sessions
