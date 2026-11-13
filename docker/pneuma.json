@@ -57,6 +57,8 @@
     "maxConcurrentTasks": 8,
     "pollIntervalMs": 2000,
     "maxAttempts": 3,
+    "requeueInterruptedJobs": true,
+    "maxInterruptedRequeues": 3,
     "stageTimeoutSeconds": 1800,
     "useHeadlessBrowser": true,
     "browserNavigationTimeoutMs": 60000,

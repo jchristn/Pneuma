@@ -203,6 +203,8 @@ Ingestion stages, each written to the log with a descriptive message and duratio
 
 **Failure categories and retries.** A failed job carries `failureCategory`, and so does its link. The category decides whether the job is retried (up to `Ingestion.MaxAttempts`, with exponential backoff; `ModelUnavailable` backs off four times longer). Every attempt is recorded in the job's `attempts`.
 
+**Interrupted jobs.** A job still `Processing` when the server stops (a restart or an image update) is queued again when the server starts: its open log entries are closed as `Cancelled`, a log entry "Interrupted by a server stop or restart; queued again." is added at the stage it reached, its link shows `Submitted` again, and it runs from the start (unchanged content still completes early). After `Ingestion.MaxInterruptedRequeues` (default 3) such interruptions the job is failed instead, so a job that keeps taking the server down cannot loop. `Ingestion.RequeueInterruptedJobs` (default true) turns this off; turn it off only when several servers share one database and run ingestion.
+
 | Category | Meaning | Retried |
 |---|---|---|
 | `Fetch` | The source returned an HTTP error, or the connection failed. A 4xx other than 408 and 429 is permanent. | Yes, except permanent 4xx |

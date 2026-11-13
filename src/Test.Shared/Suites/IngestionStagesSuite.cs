@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Caching;
@@ -90,6 +91,49 @@ namespace Test.Shared.Suites
                             StageContext forced = new StageContext(ctx.Job);
                             await new ContentRetrievalStage(deps).ExecuteAsync(forced, ct);
                             if (forced.CompleteEarly) throw new Exception("a cleared hash forces a full run");
+                        }),
+
+                    new TestCaseDescriptor("IngestionStages", "Journal_RequeuesInterruptedJobs", "A job a previous run left Processing is queued again (open log entries cancelled, link Submitted), and failed once it has been interrupted too often",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            StageContext ctx = await SeedContextAsync(db, recall, false, ct);
+                            StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient());
+                            IngestionJob job = ctx.Job;
+
+                            // Interrupted mid-Summarization: job Processing, an open log entry, link Processing.
+                            job.Status = IngestionStatusEnum.Processing;
+                            job.Stage = IngestionStageEnum.Summarization;
+                            await db.IngestionJobs.UpdateAsync(job, ct);
+                            await deps.Journal.RecordEventAsync(job, IngestionStageEnum.Summarization, IngestionStatusEnum.Processing, "Running this step.", 0, ct);
+                            await deps.Journal.MarkLinkProcessingAsync(job, ct);
+
+                            List<IngestionJob> stuck = await db.IngestionJobs.EnumerateByStatusAsync(IngestionStatusEnum.Processing, ct);
+                            if (stuck.Count != 1 || stuck[0].Id != job.Id) throw new Exception("the interrupted job is not listed: " + stuck.Count);
+
+                            if (!await deps.Journal.RequeueInterruptedAsync(stuck[0], 2, ct)) throw new Exception("first interruption should requeue");
+                            IngestionJob? after = await db.IngestionJobs.ReadAsync(job.TenantId, job.Id, ct);
+                            if (after == null || after.Status != IngestionStatusEnum.Queued || after.Stage != IngestionStageEnum.Pending) throw new Exception("job not Queued/Pending: " + after?.Status + "/" + after?.Stage);
+                            SubjectLink? link = await db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, ct);
+                            if (link == null || link.Status != SubjectLinkStatusEnum.Submitted) throw new Exception("link not Submitted: " + link?.Status);
+                            List<IngestionJobEvent> events = await db.IngestionJobEvents.EnumerateByJobAsync(job.TenantId, job.Id, ct);
+                            if (events.Any(e => e.Status == IngestionStatusEnum.Processing)) throw new Exception("an open log entry was left Processing");
+                            if (!events.Any(e => e.Message == IngestionJournal.InterruptedMessage)) throw new Exception("no interruption entry recorded");
+                            if ((await db.IngestionJobs.ClaimNextQueuedAsync(ct))?.Id != job.Id) throw new Exception("the requeued job is not claimable");
+
+                            // Second interruption: still within the limit of 2.
+                            IngestionJob? again = await db.IngestionJobs.ReadAsync(job.TenantId, job.Id, ct);
+                            if (!await deps.Journal.RequeueInterruptedAsync(again!, 2, ct)) throw new Exception("second interruption should requeue");
+                            // Third: over the limit, so it fails instead of looping.
+                            IngestionJob? third = await db.IngestionJobs.ReadAsync(job.TenantId, job.Id, ct);
+                            third!.Status = IngestionStatusEnum.Processing;
+                            await db.IngestionJobs.UpdateAsync(third, ct);
+                            if (await deps.Journal.RequeueInterruptedAsync(third, 2, ct)) throw new Exception("third interruption should fail the job");
+                            IngestionJob? failed = await db.IngestionJobs.ReadAsync(job.TenantId, job.Id, ct);
+                            if (failed == null || failed.Status != IngestionStatusEnum.Failed) throw new Exception("job not Failed: " + failed?.Status);
+                            SubjectLink? failedLink = await db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, ct);
+                            if (failedLink == null || failedLink.Status != SubjectLinkStatusEnum.Failed) throw new Exception("link not Failed: " + failedLink?.Status);
                         }),
 
                     new TestCaseDescriptor("IngestionStages", "Journal_MarksLinkProcessing", "When a worker picks up a job its link moves from Submitted to Processing, keeping its hash and last error",

@@ -1,12 +1,15 @@
 namespace Pneuma.Core.Ingestion.Pipeline
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Core.Database;
-    using Pneuma.Core.Models;
-    using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Enums;
     using Pneuma.Core.Ingestion.Configuration;
+    using Pneuma.Core.Ingestion.Enums;
+    using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Models;
     using SyslogLogging;
 
     /// <summary>
@@ -60,6 +63,24 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
         private async Task RunAsync(CancellationToken token)
         {
+            // Jobs a previous run left Processing (the server stopped or restarted mid-job) would otherwise never be
+            // claimed again; queue them again before taking new work.
+            if (_Settings.RequeueInterruptedJobs)
+            {
+                try
+                {
+                    await RecoverInterruptedAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception e)
+                {
+                    _Logging.Warn("[IngestionWorker] interrupted-job recovery failed: " + e.Message);
+                }
+            }
+
             while (!token.IsCancellationRequested)
             {
                 IDisposable slot;
@@ -120,6 +141,22 @@ namespace Pneuma.Core.Ingestion.Pipeline
             }
 
             _Logging.Info("[IngestionWorker] stopped");
+        }
+
+        private async Task RecoverInterruptedAsync(CancellationToken token)
+        {
+            List<IngestionJob> stuck = await _Db.IngestionJobs.EnumerateByStatusAsync(IngestionStatusEnum.Processing, token).ConfigureAwait(false);
+            if (stuck.Count == 0) return;
+            IngestionJournal journal = new IngestionJournal(_Db, _Logging);
+            int requeued = 0;
+            int failed = 0;
+            foreach (IngestionJob job in stuck)
+            {
+                if (job.DeletionStatus != JobDeletionStatusEnum.None) continue;
+                if (await journal.RequeueInterruptedAsync(job, _Settings.MaxInterruptedRequeues, token).ConfigureAwait(false)) requeued++;
+                else failed++;
+            }
+            _Logging.Info("[IngestionWorker] recovered " + stuck.Count + " interrupted job(s): " + requeued + " queued again, " + failed + " failed after repeated interruptions");
         }
 
         #endregion

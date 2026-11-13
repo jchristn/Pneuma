@@ -33,6 +33,12 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>Jobs.</returns>
         Task<List<IngestionJob>> EnumerateAsync(string tenantId, IngestionStatusEnum? status, CancellationToken token = default);
 
+        /// <summary>Enumerate jobs with a status across all tenants, oldest first (used to recover interrupted jobs at startup).</summary>
+        /// <param name="status">The status.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Jobs.</returns>
+        Task<List<IngestionJob>> EnumerateByStatusAsync(IngestionStatusEnum status, CancellationToken token = default);
+
         /// <summary>Enumerate jobs for a specific content link within a tenant, oldest first.</summary>
         /// <param name="tenantId">Tenant identifier.</param>
         /// <param name="linkId">Link identifier.</param>

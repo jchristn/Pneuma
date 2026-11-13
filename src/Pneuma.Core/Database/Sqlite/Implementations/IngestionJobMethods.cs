@@ -107,6 +107,15 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<IngestionJob>> EnumerateByStatusAsync(IngestionStatusEnum status, CancellationToken token = default)
+        {
+            DataTable table = await Query("SELECT * FROM ingestionjobs WHERE status = " + Sanitizer.Str(status.ToString()) + " ORDER BY createdutc ASC;", token).ConfigureAwait(false);
+            List<IngestionJob> result = new List<IngestionJob>();
+            foreach (DataRow row in table.Rows) result.Add(Map(row));
+            return result;
+        }
+
+        /// <inheritdoc />
         public async Task<IngestionJob?> ClaimNextQueuedAsync(CancellationToken token = default)
         {
             DataTable table = await Query(

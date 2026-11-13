@@ -44,6 +44,23 @@ namespace Pneuma.Core.Ingestion.Configuration
         }
 
         /// <summary>
+        /// Queue again, when the server starts, the jobs a previous run left Processing (it stopped or restarted while
+        /// they ran), so they do not stay stuck. Default true. Turn off only when several servers share one database
+        /// and run ingestion, since a job still running on another server would also be queued again.
+        /// </summary>
+        public bool RequeueInterruptedJobs { get; set; } = true;
+
+        /// <summary>
+        /// How many times one job may be queued again after a restart before it is failed instead (a job that keeps
+        /// being interrupted, for example one that crashes the server, does not loop forever). Default 3; clamped to [1, 20].
+        /// </summary>
+        public int MaxInterruptedRequeues
+        {
+            get { return _MaxInterruptedRequeues; }
+            set { _MaxInterruptedRequeues = Math.Clamp(value, 1, 20); }
+        }
+
+        /// <summary>
         /// What happens when a job finishes but dropped some of its work (a failed classification batch, a failed
         /// summary, or a cell node that could not be created). <c>Warn</c> (the default) completes the job and records
         /// a warning per loss; <c>Fail</c> fails the job with category PartialLoss so it is retried.
@@ -193,6 +210,7 @@ namespace Pneuma.Core.Ingestion.Configuration
         private int _MaxConcurrentTasks = 8;
         private int _PollIntervalMs = 2000;
         private int _MaxAttempts = 3;
+        private int _MaxInterruptedRequeues = 3;
         private int _RetryBackoffBaseMs = 2000;
         private int _RetryBackoffMaxMs = 60000;
         private int _EmbeddingCacheSize = 50000;

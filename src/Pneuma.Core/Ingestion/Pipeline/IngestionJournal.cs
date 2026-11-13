@@ -135,24 +135,55 @@ namespace Pneuma.Core.Ingestion.Pipeline
         /// </summary>
         /// <param name="job">The job that started.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task MarkLinkProcessingAsync(IngestionJob job, CancellationToken token)
+        public Task MarkLinkProcessingAsync(IngestionJob job, CancellationToken token)
         {
-            if (job == null || String.IsNullOrEmpty(job.LinkId)) return;
-            try
+            return SetLinkStatusAsync(job, SubjectLinkStatusEnum.Processing, token);
+        }
+
+        /// <summary>The message recorded when a job interrupted by a server stop is queued again.</summary>
+        public const string InterruptedMessage = "Interrupted by a server stop or restart; queued again.";
+
+        /// <summary>
+        /// Recover a job a previous server run left Processing. Its in-progress log entries are closed as Cancelled and
+        /// it is queued again from the start (its link shows Submitted), unless it has already been queued again
+        /// <paramref name="maxRequeues"/> times, in which case it is failed so it cannot loop forever.
+        /// </summary>
+        /// <param name="job">The interrupted job.</param>
+        /// <param name="maxRequeues">How many times a job may be queued again after an interruption.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the job was queued again; false when it was failed.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="job"/> is null.</exception>
+        public async Task<bool> RequeueInterruptedAsync(IngestionJob job, int maxRequeues, CancellationToken token)
+        {
+            if (job == null) throw new ArgumentNullException(nameof(job));
+            IngestionStageEnum interruptedAt = job.Stage;
+            List<IngestionJobEvent> events = await _Db.IngestionJobEvents.EnumerateByJobAsync(job.TenantId, job.Id, token).ConfigureAwait(false);
+            int previous = 0;
+            foreach (IngestionJobEvent jobEvent in events)
             {
-                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
-                if (link == null || link.Status == SubjectLinkStatusEnum.Processing) return;
-                link.Status = SubjectLinkStatusEnum.Processing;
-                await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
+                if (String.Equals(jobEvent.Message, InterruptedMessage, StringComparison.Ordinal)) previous++;
+                if (jobEvent.Status != IngestionStatusEnum.Processing && jobEvent.Status != IngestionStatusEnum.Queued) continue;
+                jobEvent.Status = IngestionStatusEnum.Cancelled;
+                await _Db.IngestionJobEvents.UpdateAsync(jobEvent, token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
+
+            if (previous >= maxRequeues)
             {
-                throw;
+                await FailAsync(job, interruptedAt,
+                    "Interrupted by a server stop or restart " + (previous + 1).ToString(CultureInfo.InvariantCulture) + " times; not queued again. Re-ingest the link to try again.",
+                    token, IngestionFailureCategoryEnum.Internal).ConfigureAwait(false);
+                return false;
             }
-            catch (Exception e)
-            {
-                _Logging.Warn("[IngestionJournal] could not mark link " + job.LinkId + " processing: " + e.Message);
-            }
+
+            job.Status = IngestionStatusEnum.Queued;
+            job.Stage = IngestionStageEnum.Pending;
+            job.Error = null;
+            job.FailureCategory = null;
+            job.CompletedUtc = null;
+            await UpdateJobAsync(job, token).ConfigureAwait(false);
+            await RecordEventAsync(job, interruptedAt, IngestionStatusEnum.Queued, InterruptedMessage, 0, token).ConfigureAwait(false);
+            await SetLinkStatusAsync(job, SubjectLinkStatusEnum.Submitted, token).ConfigureAwait(false);
+            return true;
         }
 
         /// <summary>Mark a job completed: update status, record the terminal event, mark the link ingested, and count metrics.</summary>
@@ -180,6 +211,28 @@ namespace Pneuma.Core.Ingestion.Pipeline
             await UpdateLinkAsync(job, SubjectLinkStatusEnum.Ingested, null, token, contentHash, null, job.Warnings.Count, wroteVersion ? job.Id : null).ConfigureAwait(false);
             PneumaMetrics.RecordIngestionCompleted();
             PneumaMetrics.RecordIngestionJob("completed");
+        }
+
+        // Change only the link's status (its last error, warnings, hash, and live version are kept). Best-effort: a
+        // failure is logged and never stops the job.
+        private async Task SetLinkStatusAsync(IngestionJob job, SubjectLinkStatusEnum status, CancellationToken token)
+        {
+            if (job == null || String.IsNullOrEmpty(job.LinkId)) return;
+            try
+            {
+                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
+                if (link == null || link.Status == status) return;
+                link.Status = status;
+                await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn("[IngestionJournal] could not set link " + job.LinkId + " to " + status + ": " + e.Message);
+            }
         }
 
         // Resolve any of a job's still-non-terminal events (phase-start "Processing" markers such as "Ingestion
