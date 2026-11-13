@@ -60,11 +60,12 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 999px;
-  max-width: 320px;
+  flex-shrink: 0;
   font-size: 0.78rem;
 }
 .topbar-endpoint .copyable-id-value {
-  max-width: 220px;
+  overflow: visible;
+  text-overflow: clip;
 }
 .topbar-right {
   display: flex;

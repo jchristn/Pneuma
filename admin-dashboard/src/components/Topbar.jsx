@@ -27,7 +27,7 @@ function Topbar({ onToggleSidebar }) {
           title="Go to the home dashboard." aria-label={t('nav.home', 'Home')}>
           <img className="topbar-logo" src={logo} alt="Pneuma" />
         </button>
-        <span className="chip" title={`API server this dashboard is talking to: ${serverUrl}`}>
+        <span className="chip chip-endpoint" title={`API server this dashboard is talking to: ${serverUrl}`}>
           <span>{t('topbar.endpoint')}</span>
           <span className="chip-value">{serverUrl}</span>
         </span>

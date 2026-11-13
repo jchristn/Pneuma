@@ -239,6 +239,8 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   border: 1px solid var(--color-border); font-size: var(--font-size-xs); color: var(--color-text-secondary);
 }
 .chip .chip-value { color: var(--color-text); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.chip-endpoint { max-width: none; flex-shrink: 0; }
+.chip.chip-endpoint .chip-value { overflow: visible; text-overflow: clip; }
 .role-badge {
   padding: 0.2rem 0.5rem; border-radius: 999px; font-size: var(--font-size-xs); font-weight: 600;
   background: var(--brand-gradient); color: #fff;
@@ -547,6 +549,7 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
   .workspace { padding: var(--spacing-md); }
   .form-row { grid-template-columns: 1fr; }
   .chip { max-width: 150px; }
+  .chip.chip-endpoint { display: none; }
   .kpi-value { font-size: 1.5rem; }
   .explorer-param-row { grid-template-columns: 1fr; }
 }
