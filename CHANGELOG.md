@@ -177,6 +177,8 @@ between releases, and the project will adopt semantic versioning at its stable 1
   `FetchBlocked` audit record. Deployments that ingest intranet sites must add those hosts to the allow-list.
 
 ### Fixed
+- **Links show Processing while their job runs.** A link stayed `Submitted` until its ingestion job finished, even while a worker was processing it; it now moves to `Processing` when a worker picks the job up (its last error, hash, and live version are kept until the job ends).
+- **Unchanged content is skipped again on refresh and crawl re-runs.** The unchanged-content check required the link to be `Ingested`, but refreshes and crawls set it to `Submitted` before the job ran, so identical content was fully re-processed (including every model step). It now keys on the link having been ingested before and the content hash matching; a manual re-ingest still forces a full run.
 - The CIFS crawler tests failed on macOS (`Algorithm 'AesCcm' is not supported on this platform`): SMB 3.0 sessions
   encrypt with AES-CCM, which .NET does not provide on macOS. Where AES-CCM is unavailable, the in-process test share
   now stops at SMB 2.1; elsewhere it still negotiates SMB 3 with encryption.

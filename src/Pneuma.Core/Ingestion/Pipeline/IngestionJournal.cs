@@ -128,6 +128,33 @@ namespace Pneuma.Core.Ingestion.Pipeline
             await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Show the job's link as Processing once a worker has picked the job up (it was Submitted while queued). Only the
+        /// status changes; the link's last error, warnings, hash, and live version are kept until the job finishes.
+        /// Best-effort: a failure here never stops the job.
+        /// </summary>
+        /// <param name="job">The job that started.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task MarkLinkProcessingAsync(IngestionJob job, CancellationToken token)
+        {
+            if (job == null || String.IsNullOrEmpty(job.LinkId)) return;
+            try
+            {
+                SubjectLink? link = await _Db.SubjectLinks.ReadAsync(job.TenantId, job.LinkId, token).ConfigureAwait(false);
+                if (link == null || link.Status == SubjectLinkStatusEnum.Processing) return;
+                link.Status = SubjectLinkStatusEnum.Processing;
+                await _Db.SubjectLinks.UpdateAsync(link, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn("[IngestionJournal] could not mark link " + job.LinkId + " processing: " + e.Message);
+            }
+        }
+
         /// <summary>Mark a job completed: update status, record the terminal event, mark the link ingested, and count metrics.</summary>
         /// <param name="job">The job.</param>
         /// <param name="token">Cancellation token.</param>

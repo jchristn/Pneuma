@@ -162,6 +162,7 @@ namespace Pneuma.Core.Ingestion.Pipeline
 
                 await _Journal.RecordEventAsync(job, IngestionStageEnum.Pending, IngestionStatusEnum.Processing,
                     "Ingestion started for " + job.SourceUrl + ".", 0, token).ConfigureAwait(false);
+                await _Journal.MarkLinkProcessingAsync(job, token).ConfigureAwait(false);
 
                 // Each claim gets up to MaxAttempts inline attempts. Every failure is classified (see
                 // IngestionFailureClassifier): retryable categories back off and try again, deterministic ones (an

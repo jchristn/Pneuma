@@ -64,17 +64,52 @@ namespace Test.Shared.Suites
                             StageContext ctx = await SeedContextAsync(db, recall, false, ct);
                             StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient());
 
-                            // First run computes the hash; mark the link Ingested with that hash so the second run matches.
+                            // First run computes the hash. A hash without a successful ingestion must not short-circuit.
                             await new ContentRetrievalStage(deps).ExecuteAsync(ctx, ct);
                             SubjectLink? link = await db.SubjectLinks.ReadAsync(ctx.Job.TenantId, ctx.Job.LinkId, ct);
                             if (link == null) throw new Exception("link gone");
-                            link.Status = SubjectLinkStatusEnum.Ingested;
                             link.ContentHash = ctx.ContentHash;
                             await db.SubjectLinks.UpdateAsync(link, ct);
+                            StageContext never = new StageContext(ctx.Job);
+                            await new ContentRetrievalStage(deps).ExecuteAsync(never, ct);
+                            if (never.CompleteEarly) throw new Exception("a link never ingested must not short-circuit");
 
+                            // Ingested before, and Processing now (as it is while its job runs): unchanged content short-circuits.
+                            link = await db.SubjectLinks.ReadAsync(ctx.Job.TenantId, ctx.Job.LinkId, ct);
+                            link!.LastIngestedUtc = DateTime.UtcNow.AddHours(-1);
+                            link.Status = SubjectLinkStatusEnum.Processing;
+                            await db.SubjectLinks.UpdateAsync(link, ct);
                             StageContext ctx2 = new StageContext(ctx.Job);
                             await new ContentRetrievalStage(deps).ExecuteAsync(ctx2, ct);
-                            if (!ctx2.CompleteEarly) throw new Exception("unchanged content should short-circuit");
+                            if (!ctx2.CompleteEarly) throw new Exception("unchanged content should short-circuit while the link is Processing");
+
+                            // A manual re-ingest clears the hash: no short-circuit.
+                            link = await db.SubjectLinks.ReadAsync(ctx.Job.TenantId, ctx.Job.LinkId, ct);
+                            link!.ContentHash = null;
+                            await db.SubjectLinks.UpdateAsync(link, ct);
+                            StageContext forced = new StageContext(ctx.Job);
+                            await new ContentRetrievalStage(deps).ExecuteAsync(forced, ct);
+                            if (forced.CompleteEarly) throw new Exception("a cleared hash forces a full run");
+                        }),
+
+                    new TestCaseDescriptor("IngestionStages", "Journal_MarksLinkProcessing", "When a worker picks up a job its link moves from Submitted to Processing, keeping its hash and last error",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            FakeRecallDbClient recall = new FakeRecallDbClient();
+                            StageContext ctx = await SeedContextAsync(db, recall, false, ct);
+                            StageDependencies deps = BuildDeps(db, recall, new FakeLiteGraphClient());
+                            SubjectLink? link = await db.SubjectLinks.ReadAsync(ctx.Job.TenantId, ctx.Job.LinkId, ct);
+                            if (link == null) throw new Exception("link gone");
+                            link.Status = SubjectLinkStatusEnum.Submitted;
+                            link.ContentHash = "h1";
+                            link.LastError = "earlier failure";
+                            await db.SubjectLinks.UpdateAsync(link, ct);
+
+                            await deps.Journal.MarkLinkProcessingAsync(ctx.Job, ct);
+                            SubjectLink? after = await db.SubjectLinks.ReadAsync(ctx.Job.TenantId, ctx.Job.LinkId, ct);
+                            if (after == null || after.Status != SubjectLinkStatusEnum.Processing) throw new Exception("link not Processing: " + after?.Status);
+                            if (after.ContentHash != "h1" || after.LastError != "earlier failure") throw new Exception("hash or last error lost");
                         }),
 
                     new TestCaseDescriptor("IngestionStages", "ContentRetrieval_FetchFailure_IsTransient", "A fetch error propagates as an ordinary (retryable) exception, not a hard fail",

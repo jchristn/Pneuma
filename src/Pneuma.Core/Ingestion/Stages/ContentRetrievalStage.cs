@@ -62,10 +62,12 @@ namespace Pneuma.Core.Ingestion.Stages
 
             // Delta detection: hash the fetched bytes and, if identical to what the link last ingested successfully,
             // signal the orchestrator to complete immediately and skip the expensive downstream work. Re-processing
-            // identical content is deterministic, so skipping is safe. A previously-failed link has no stored hash.
+            // identical content is deterministic, so skipping is safe. This keys on the link having been ingested
+            // before (it has a live version and a hash), not on its status: the link is Processing while its job runs,
+            // and refreshes and crawls set it to Submitted first. A manual re-ingest clears the hash to force a full run.
             context.ContentHash = ComputeContentHash(data);
             if (existingLink != null
-                && existingLink.Status == SubjectLinkStatusEnum.Ingested
+                && existingLink.LastIngestedUtc.HasValue
                 && !String.IsNullOrEmpty(existingLink.ContentHash)
                 && String.Equals(existingLink.ContentHash, context.ContentHash, StringComparison.Ordinal))
             {
