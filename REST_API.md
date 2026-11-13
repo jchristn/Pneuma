@@ -287,7 +287,7 @@ output format per step), overridable per tenant like any other prompt. All wizar
 
 Generation failures: **400** for a bad draft or no usable completion endpoint, **502** when the model's reply is not the
 expected JSON after one retry, **504** when the model does not answer within `Wizard.TimeoutSeconds`. The `Wizard` settings
-section sets `DefaultQuestionCount` (12), `MaxQuestions` (40), `MaxOntologyTypes` (60), `MaxGroundingUrls` (5), `MaxGroundingCharacters` (6000, shared between the pages),
+section sets `DefaultQuestionCount` (12), `MaxQuestions` (40), `MaxOntologyTypes` (60), `MaxGroundingUrls` (10), `MaxGroundingCharacters` (6000, shared between the pages),
 `MaxPromptCharacters` (4000), `TimeoutSeconds` (300), and `CoverageMaxQuestions` (12, the most questions the dashboards'
 coverage check asks).
 

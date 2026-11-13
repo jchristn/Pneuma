@@ -58,10 +58,13 @@ export const wizardEs = {
   },
   describe: {
     sameAsDrafting: 'El mismo que el modelo de redacción',
-    addUrl: '+ Añadir otro enlace',
-    referenceUrlN: 'Página de referencia {{n}}',
-    referenceUrls: 'Páginas web de referencia (hasta {{count}})',
-    draftModelHint: 'Cada paso posterior tiene su propia elección de modelo junto al botón Regenerar, si quiere otro modelo para él.',
+    referenceUrls: 'Páginas web de referencia: pegue uno o más enlaces, uno por línea (se leen hasta {{count}})',
+    linksFound: '{{count}} enlace(s) encontrado(s)',
+    linksOverMax: 'Solo se leerán los primeros {{max}}.',
+    linksInvalid: 'No son enlaces, se ignoran: {{list}}',
+    linksClear: 'Borrar enlaces',
+    noModelList: 'No se pudo cargar la lista de modelos, así que se usará el primer modelo de completado disponible.',
+    draftModelHint: 'Cada paso posterior tiene su propia elección de modelo junto al botón Regenerar. Si un paso falla o se atasca, puede reintentarlo o cambiar de modelo sin empezar de nuevo.',
     draftModelTip: 'El modelo de completado que redacta el resumen, las preguntas, la ontología y los prompts. Cada paso puede usar otro.',
     draftModel: 'Modelo que redacta',
     title: '¿De qué trata este tema?',
@@ -237,7 +240,20 @@ export const wizardEs = {
     empty: 'Todavía no hay preguntas iniciales.',
     saved: 'Preguntas iniciales guardadas.'
   },
+  failure: {
+    title: '{{step}} no terminó',
+    usedModel: 'Modelo usado: {{model}}',
+    modelLabel: 'Modelo para reintentar',
+    retry: 'Reintentar',
+    retryWith: 'Reintentar con este modelo',
+    editInput: 'Editar descripción y enlaces',
+    dismiss: 'Descartar',
+    hint: 'No se pierde nada más del borrador. Otro modelo se aplica a este paso y a los siguientes.',
+    renderTitle: 'Este paso no se pudo mostrar.'
+  },
   progress: {
+    switch: 'Cambiar de modelo',
+    switchTip: 'Detiene este intento y vuelve a redactar el paso con otro modelo, que pasa a ser el modelo de redacción de los pasos siguientes.',
     elapsedTip: 'Tiempo desde que empezó este paso',
     phases: 'Progreso',
     phase: {

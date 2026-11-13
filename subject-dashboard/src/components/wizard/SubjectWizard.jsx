@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { STEPS, MIN_QUESTIONS, loadState, saveState, clearState, emptyState, listOf, questionsKey, stepModel, formatDuration, hasCapability } from './wizardDraft';
 import WizardProgressPanel from './WizardProgressPanel';
+import WizardFailurePanel from './WizardFailurePanel';
+import WizardStepBoundary from './WizardStepBoundary';
 import WizardDescribeStep from './WizardDescribeStep';
 import WizardBriefStep from './WizardBriefStep';
 import WizardQuestionsStep from './WizardQuestionsStep';
@@ -25,6 +27,7 @@ function SubjectWizard({ onClose, onCreated }) {
   const [state, setState] = useState(loadState);
   const [options, setOptions] = useState(null);
   const [runners, setRunners] = useState([]);
+  const [runnersLoaded, setRunnersLoaded] = useState(false);
   const [collections, setCollections] = useState([]);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
@@ -47,6 +50,7 @@ function SubjectWizard({ onClose, onCreated }) {
       if (o.status === 'fulfilled') setOptions(o.value);
       else setError(o.reason?.message || t('wizard.optionsFailed'));
       if (r.status === 'fulfilled') setRunners(listOf(r.value));
+      setRunnersLoaded(true);
       if (c.status === 'fulfilled') setCollections(listOf(c.value));
     });
     return () => { cancelled = true; };
@@ -64,7 +68,8 @@ function SubjectWizard({ onClose, onCreated }) {
         draft.brief = value;
         if (result.groundingExcerpt) {
           draft.groundingText = [draft.groundingText, result.groundingExcerpt].filter((x) => x && x.trim()).join('\n\n');
-          draft.groundingUrls = [''];
+          draft.groundingUrls = [];
+          next.linksText = '';
         }
       } else if (step === 'questions') draft.questions = value || [];
       else if (step === 'ontology') {
@@ -76,21 +81,31 @@ function SubjectWizard({ onClose, onCreated }) {
     });
   }, []);
 
-  const generate = useCallback(async (step, { guidance, mode, count } = {}) => {
+  // Draft one step. opts.modelRunnerId, when present, overrides the step's model for this call ('' = the drafting
+  // model); a failure is kept on the state so the step can be retried, or rerun on another model, without losing
+  // anything else.
+  const generate = useCallback(async (step, opts = {}) => {
+    const { guidance, mode, count } = opts;
     const seq = requestSeq.current + 1;
     requestSeq.current = seq;
     setBusy(step);
     setError('');
     setWarnings([]);
+    setState((s) => (s.failure ? { ...s, failure: null } : s));
+    let modelId = null;
     const startedAt = Date.now();
     setProgress({ phase: step === 'brief' ? 'reading' : 'waiting', attempt: 1, characters: 0, startedAt });
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       const current = stateRef.current;
+      modelId = Object.prototype.hasOwnProperty.call(opts, 'modelRunnerId')
+        ? (opts.modelRunnerId || current.settings.draftModel || null)
+        : (stepModel(current.settings, step) || null);
+      const maxUrls = options?.maxGroundingUrls || 10;
       const body = {
-        draft: { ...current.draft, groundingUrls: (current.draft.groundingUrls || []).filter((u) => u && u.trim()) },
-        modelRunnerId: stepModel(current.settings, step) || null,
+        draft: { ...current.draft, groundingUrls: (current.draft.groundingUrls || []).filter((u) => u && u.trim()).slice(0, maxUrls) },
+        modelRunnerId: modelId,
         guidance: guidance || null,
         mode: mode || null,
         count: count || 0
@@ -115,7 +130,11 @@ function SubjectWizard({ onClose, onCreated }) {
       setWarnings(result.warnings || []);
       setLastModel({ model: result.model, elapsedMs: took });
     } catch (err) {
-      if (seq === requestSeq.current && err?.name !== 'AbortError') setError(err?.message || t('wizard.generateFailed'));
+      if (seq === requestSeq.current && err?.name !== 'AbortError') {
+        const { modelRunnerId: _ignored, ...retryOpts } = opts;
+        const failure = { step, message: err?.message || t('wizard.generateFailed'), opts: retryOpts, model: modelId };
+        setState((s) => ({ ...s, failure }));
+      }
     } finally {
       if (seq === requestSeq.current) {
         setBusy(null);
@@ -123,7 +142,7 @@ function SubjectWizard({ onClose, onCreated }) {
         abortRef.current = null;
       }
     }
-  }, [apiClient, apply, t, update]);
+  }, [apiClient, apply, t, update, options]);
 
   const cancel = () => {
     requestSeq.current += 1;
@@ -136,6 +155,36 @@ function SubjectWizard({ onClose, onCreated }) {
   const completionRunners = runners.filter((r) => hasCapability(r, 'Completion'));
   const runnerName = (id) => (completionRunners.find((r) => r.id === id)?.name) || null;
   const setStepModel = (step, id) => update((s) => ({ ...s, settings: { ...s.settings, stepModels: { ...(s.settings.stepModels || {}), [step]: id } } }));
+  // Use another model from here on: it drafts this step and, as the drafting model, the steps after it (steps with
+  // their own model keep it).
+  const adoptModel = (step, id) => update((s) => {
+    const stepModels = { ...(s.settings.stepModels || {}) };
+    delete stepModels[step];
+    return { ...s, settings: { ...s.settings, draftModel: id || '', stepModels } };
+  });
+  const lastOpts = useRef({});
+  const run = useCallback((step, opts = {}) => {
+    lastOpts.current = { step, opts };
+    return generate(step, opts);
+  }, [generate]);
+  // Mid-draft: stop this attempt and start the step again on the chosen model.
+  const switchModel = (id) => {
+    const step = busy;
+    if (!step || step === 'commit') return;
+    const opts = lastOpts.current.step === step ? lastOpts.current.opts : {};
+    adoptModel(step, id);
+    cancel();
+    run(step, { ...opts, modelRunnerId: id || '' });
+  };
+  const retry = (id) => {
+    const failure = state.failure;
+    if (!failure) return;
+    if (id !== undefined) {
+      adoptModel(failure.step, id);
+      run(failure.step, { ...(failure.opts || {}), modelRunnerId: id || '' });
+    } else run(failure.step, failure.opts || {});
+  };
+  const dismissFailure = () => update((s) => ({ ...s, failure: null }));
   const totalMs = Object.values(state.stepTimes || {}).reduce((sum, ms) => sum + (ms || 0), 0);
 
   // Draft a step automatically the first time it is opened with nothing in it.
@@ -148,9 +197,10 @@ function SubjectWizard({ onClose, onCreated }) {
       || (step === 'prompts' && !draft.prompts)
       || (step === 'sources' && created && sources === null);
     if (!empty) return;
+    if (state.failure && state.failure.step === step) return;
     autoTried.current.add(step);
-    generate(step);
-  }, [state, busy, generate]);
+    run(step);
+  }, [state, busy, run]);
 
   const index = STEPS.indexOf(state.step);
   const created = state.created;
@@ -208,13 +258,14 @@ function SubjectWizard({ onClose, onCreated }) {
     clearState();
     autoTried.current = new Set();
     setState(emptyState());
+    lastOpts.current = {};
     setConfirmReset(false);
     setError('');
     setWarnings([]);
   };
 
   const stepProps = {
-    state, update, updateDraft, generate, busy, options, runners, collections, apiClient, t, goTo,
+    state, update, updateDraft, generate: run, busy, options, runners, runnersLoaded, collections, apiClient, t, goTo,
     completionRunners,
     stepModelFor: (step) => (state.settings.stepModels || {})[step] || '',
     setStepModel,
@@ -234,7 +285,11 @@ function SubjectWizard({ onClose, onCreated }) {
   };
 
   const next = () => {
-    if (state.step === 'describe' && !state.draft.brief) autoTried.current.delete('brief');
+    if (state.step === 'describe' && !state.draft.brief) {
+      // The description or links may have changed since the brief failed: draft it afresh.
+      autoTried.current.delete('brief');
+      update((s) => (s.failure?.step === 'brief' ? { ...s, failure: null } : s));
+    }
     goTo(STEPS[index + 1]);
   };
 
@@ -278,9 +333,17 @@ function SubjectWizard({ onClose, onCreated }) {
             )}
             {busy && busy !== 'commit' && (
               <WizardProgressPanel t={t} step={busy} progress={progress} lastMs={state.stepTimes?.[busy]} onCancel={cancel}
-                modelName={runnerName(stepModel(state.settings, busy)) || (completionRunners[0]?.name ?? null)} />
+                modelName={runnerName(stepModel(state.settings, busy)) || (completionRunners[0]?.name ?? null)}
+                models={completionRunners} currentModel={stepModel(state.settings, busy)} onSwitchModel={switchModel} />
             )}
-            {renderStep()}
+            {!busy && state.failure && state.failure.step === state.step && (
+              <WizardFailurePanel key={`${state.failure.step}:${state.failure.message}`} t={t} failure={state.failure} models={completionRunners}
+                currentModel={stepModel(state.settings, state.failure.step)}
+                modelName={runnerName(state.failure.model) || state.failure.model || null}
+                onRetry={retry} onDismiss={dismissFailure}
+                onEditInput={state.failure.step === 'brief' ? () => goTo('describe') : null} />
+            )}
+            <WizardStepBoundary key={state.step} t={t}>{renderStep()}</WizardStepBoundary>
           </main>
         </div>
         <div className="sw-footer">

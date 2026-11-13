@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { readFileSync } from 'fs';
 
 const dirname = import.meta.dirname;
+const pkg = JSON.parse(readFileSync(path.resolve(dirname, 'package.json'), 'utf8'));
 
 export default defineConfig({
   plugins: [react()],
+  // The release shown in the dashboard (sidebar footer, sign-in page); bump package.json "version" per release.
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version)
+  },
   resolve: {
     alias: {
       '@': path.resolve(dirname, './src'),

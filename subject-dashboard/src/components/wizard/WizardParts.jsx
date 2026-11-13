@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { runnerLabel } from './wizardDraft';
 
 // Pick a completion model. An empty value means the wizard's default (the drafting model, else the first available).
-export function ModelPicker({ t, models, value, onChange, disabled, id, defaultLabel }) {
+export function ModelPicker({ t, models, value, onChange, disabled, id, defaultLabel, wide = false, label = null }) {
   return (
-    <select id={id} className="sw-model" value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}
-      aria-label={t('wizard.modelLabel')} title={t('wizard.modelTip')}>
+    <select id={id} className={`sw-model${wide ? ' sw-model-wide' : ''}`} value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}
+      aria-label={label || t('wizard.modelLabel')} title={t('wizard.modelTip')}>
       <option value="">{defaultLabel || t('wizard.describe.firstAvailable')}</option>
       {(models || []).map((r) => <option key={r.id} value={r.id}>{runnerLabel(r)}</option>)}
     </select>

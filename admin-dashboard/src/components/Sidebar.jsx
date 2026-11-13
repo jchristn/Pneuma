@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { NAV_GROUPS } from '../config/nav';
 import { useAuth } from '../context/AuthContext';
 import Icon from './Icon';
+import { APP_VERSION } from '../version';
 
 const COLLAPSED_KEY = 'pneuma.nav.collapsedGroups';
 
@@ -75,7 +76,7 @@ function Sidebar({ activeSection, onNavigate, open }) {
         })}
       </nav>
       <div className="sidebar-footer">
-        Pneuma Admin · v1.0.0
+        Pneuma Admin · {APP_VERSION}
       </div>
     </aside>
   );

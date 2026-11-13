@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import LanguageSelector from './LanguageSelector.jsx';
 import Icon from './Icon.jsx';
+import { APP_VERSION } from '../version.js';
 
 export default function Shell() {
   const { t } = useTranslation();
@@ -26,6 +27,7 @@ export default function Shell() {
             aria-label={`${t('app.name')} — ${t('app.explore')}`}
           >
             <img src="/logo.png" alt="Pneuma" className="brand-logo" />
+            <span className="brand-version" title={`Pneuma ${APP_VERSION}`}>{APP_VERSION}</span>
           </button>
 
           <div className="app-header-actions">

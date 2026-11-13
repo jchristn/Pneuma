@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import LanguageSelector from './LanguageSelector.jsx';
 import Icon from './Icon.jsx';
+import { APP_VERSION } from '../version.js';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -113,6 +114,7 @@ export default function Login() {
         </form>
 
         <p className="login-hint">{t('login.hint')}</p>
+        <p className="login-version">Pneuma {APP_VERSION}</p>
       </div>
     </div>
   );

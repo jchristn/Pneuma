@@ -82,3 +82,10 @@
   margin-top: 6px;
   padding: 10px;
 }
+
+.login-version {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}

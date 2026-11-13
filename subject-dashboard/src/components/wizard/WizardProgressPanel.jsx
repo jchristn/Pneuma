@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { formatDuration } from './wizardDraft';
+import { ModelPicker } from './WizardParts';
 
 const PHASES = ['reading', 'waiting', 'writing', 'checking'];
 
 // What a drafting step is doing while the model works: a live elapsed timer, the phase (with the phases so far),
 // how much the model has written, the attempt, and how long this step took last time.
-function WizardProgressPanel({ t, step, progress, lastMs, modelName, onCancel }) {
+function WizardProgressPanel({ t, step, progress, lastMs, modelName, onCancel, models = null, currentModel = '', onSwitchModel = null }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -49,9 +50,18 @@ function WizardProgressPanel({ t, step, progress, lastMs, modelName, onCancel })
           <span className="sw-progress-warn">{t('wizard.progress.retry', { n: attempt })}{progress?.message ? ` ${progress.message}` : ''}</span>
         )}
       </div>
-      <div className="sw-muted">
-        {modelName ? t('wizard.progress.model', { model: modelName }) : null}
-        {lastMs ? ` · ${t('wizard.progress.lastTime', { time: formatDuration(lastMs) })}` : ''}
+      <div className="sw-row sw-between sw-progress-foot">
+        <div className="sw-muted">
+          {modelName ? t('wizard.progress.model', { model: modelName }) : null}
+          {lastMs ? ` · ${t('wizard.progress.lastTime', { time: formatDuration(lastMs) })}` : ''}
+        </div>
+        {onSwitchModel && models && models.length > 1 && (
+          <div className="sw-row" title={t('wizard.progress.switchTip')}>
+            <label className="sw-muted" htmlFor="sw-switch-model">{t('wizard.progress.switch')}</label>
+            {/* Choosing a model stops this attempt and drafts the step again with that model. */}
+            <ModelPicker t={t} id="sw-switch-model" models={models} value={currentModel} onChange={onSwitchModel} label={t('wizard.progress.switch')} />
+          </div>
+        )}
       </div>
     </div>
   );

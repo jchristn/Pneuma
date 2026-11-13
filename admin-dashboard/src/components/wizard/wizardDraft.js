@@ -26,7 +26,7 @@ export function emptyState() {
     draft: {
       description: '',
       groundingText: '',
-      groundingUrls: [''],
+      groundingUrls: [],
       brief: null,
       questions: [],
       ontology: null,
@@ -35,6 +35,11 @@ export function emptyState() {
     // draftModel drafts every step unless stepModels names another for that step; modelRunnerId is the model that
     // answers for the subject once it exists.
     settings: { draftModel: '', stepModels: {}, modelRunnerId: '', embeddingModel: '', collection: '', ontologyMode: '' },
+    // Reference links as the user typed or pasted them (one per line, or separated by spaces or commas);
+    // draft.groundingUrls is parsed from it.
+    linksText: '',
+    // The drafting step that last failed ({ step, message, opts, model }) so it can be retried or rerun on another model.
+    failure: null,
     // Milliseconds the model took for each drafting step, for the rail and the total in the header.
     stepTimes: {},
     // Question texts the ontology was drafted from, to flag an ontology that no longer matches the questions.
@@ -52,9 +57,11 @@ export function loadState() {
       const parsed = JSON.parse(raw);
       const base = emptyState();
       const draft = { ...base.draft, ...(parsed.draft || {}) };
-      if (!Array.isArray(draft.groundingUrls) || draft.groundingUrls.length === 0) draft.groundingUrls = [draft.groundingUrl || ''];
+      if (!Array.isArray(draft.groundingUrls)) draft.groundingUrls = draft.groundingUrl ? [draft.groundingUrl] : [];
+      draft.groundingUrls = draft.groundingUrls.filter((u) => u && u.trim());
       delete draft.groundingUrl;
-      return { ...base, ...parsed, draft, settings: { ...base.settings, ...(parsed.settings || {}) } };
+      const linksText = typeof parsed.linksText === 'string' ? parsed.linksText : draft.groundingUrls.join('\n');
+      return { ...base, ...parsed, linksText, draft, settings: { ...base.settings, ...(parsed.settings || {}) } };
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
   return emptyState();
@@ -129,6 +136,25 @@ export function formatDuration(ms) {
   const s = total % 60;
   const pad = (n) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+// Links pasted as a batch: one per line, or separated by spaces, commas, or semicolons. Bare hosts ("example.com/x")
+// get https://. Returns the distinct links in order and the pieces that are not links.
+export function parseLinks(text) {
+  const urls = [];
+  const invalid = [];
+  String(text || '').split(/[\s,;]+/).map((p) => p.trim().replace(/^[<("']+|[>)"'.]+$/g, '')).filter(Boolean).forEach((piece) => {
+    let candidate = piece;
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate) && /^[^\s/]+\.[a-z]{2,}(\/|$|\?|#|:)/i.test(candidate)) candidate = `https://${candidate}`;
+    let ok = false;
+    try {
+      const u = new URL(candidate);
+      ok = (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname;
+    } catch { ok = false; }
+    if (!ok) invalid.push(piece);
+    else if (!urls.includes(candidate)) urls.push(candidate);
+  });
+  return { urls, invalid };
 }
 
 export function promptValue(prompts, key) {

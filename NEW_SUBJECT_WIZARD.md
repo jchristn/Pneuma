@@ -340,3 +340,12 @@ the proposal plus the model and elapsed time so the dashboard can show what prod
   the header. Found while checking: the model pickers never listed endpoints (the model-runner list returns `type`, not
   `capabilities`); fixed. A 12,000-character Wikipedia excerpt stalled gemma3:4b, so `MaxGroundingCharacters` now
   defaults to 6000. Suite SubjectWizard: 12 cases.
+- **2026-11-12. Batch links, retry, and switching models mid-draft** (the user's requests for v0.1.0). Reference links
+  are one text box: paste any number, one per line or separated by spaces, commas, or semicolons; bare hosts get
+  `https://`, duplicates are dropped, pieces that are not links are listed and ignored, and only the first
+  `Wizard.MaxGroundingUrls` (now 10, was 5) are sent. A drafting step that fails no longer leaves only an error line: a
+  failure panel (kept in the session draft) offers Retry, Retry with another model, Edit description and links (brief),
+  and Dismiss; a failed step is not auto-drafted again until the user acts. While a step runs, the progress panel's
+  Switch model stops the attempt and drafts the step again on the chosen model. A model chosen from either panel
+  becomes the drafting model for that step and the ones after it (steps with their own model keep it). A step that
+  throws while rendering is caught by an error boundary instead of blanking the wizard.

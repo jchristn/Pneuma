@@ -141,6 +141,18 @@
 .sw-url-row { margin: 4px 0; flex-wrap: nowrap; }
 .sw-url-row input { flex: 1; }
 
+/* Batch reference links, the failed-step panel, and the mid-draft model switch. */
+.sw-links { font-family: var(--sw-mono); font-size: 0.85rem; }
+.sw-links-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.8rem; color: var(--sw-muted); margin: 4px 0 8px; }
+.sw-warn-text { color: var(--sw-warning); }
+.sw-step select.sw-model.sw-model-wide, select.sw-model.sw-model-wide { max-width: 420px; min-width: 220px; }
+.sw-failure { border: 1px solid var(--sw-danger); border-left: 3px solid var(--sw-danger); border-radius: var(--sw-radius); background: var(--sw-danger-bg); padding: 10px 12px; margin-bottom: 14px; }
+.sw-failure-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--sw-danger); }
+.sw-failure-message { margin: 6px 0; white-space: pre-wrap; word-break: break-word; color: var(--sw-text); }
+.sw-failure-actions { margin: 8px 0 4px; flex-wrap: wrap; }
+.sw-progress-foot { flex-wrap: wrap; gap: 8px; }
+.sw-progress-foot label { font-size: 0.8rem; }
+
 @media (max-width: 900px) {
   .sw-body { flex-direction: column; }
   .sw-rail { width: auto; border-right: 0; border-bottom: 1px solid var(--sw-border); flex-direction: row; align-items: center; padding: 6px; overflow-x: auto; overflow-y: hidden; }

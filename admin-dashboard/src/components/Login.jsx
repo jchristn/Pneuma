@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth, DEFAULT_SERVER_URL } from '../context/AuthContext';
 import LanguageSelector from '../i18n/LanguageSelector';
 import logo from '../assets/logo.png';
+import { APP_VERSION } from '../version';
 
 function Login() {
   const { t } = useTranslation();
@@ -67,6 +68,7 @@ function Login() {
           </button>
         </form>
         <div className="login-hint">{t('login.hint')}</div>
+        <div className="login-version">Pneuma {APP_VERSION}</div>
       </div>
     </div>
   );

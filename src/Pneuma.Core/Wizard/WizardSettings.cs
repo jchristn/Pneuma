@@ -35,7 +35,7 @@ namespace Pneuma.Core.Wizard
             set { _MaxGroundingCharacters = Math.Clamp(value, 1000, 100000); }
         }
 
-        /// <summary>Most reference URLs the brief step reads. Default 5; clamped to [1, 20].</summary>
+        /// <summary>Most reference URLs the brief step reads. Default 10; clamped to [1, 20].</summary>
         public int MaxGroundingUrls
         {
             get { return _MaxGroundingUrls; }
@@ -72,7 +72,7 @@ namespace Pneuma.Core.Wizard
         private int _MaxOntologyTypes = 60;
         private int _MaxGroundingCharacters = 6000;
         private int _MaxPromptCharacters = 4000;
-        private int _MaxGroundingUrls = 5;
+        private int _MaxGroundingUrls = 10;
         private int _TimeoutSeconds = 300;
         private int _CoverageMaxQuestions = 12;
 

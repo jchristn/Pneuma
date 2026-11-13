@@ -59,10 +59,13 @@ export const wizardEn = {
   },
   describe: {
     sameAsDrafting: 'Same as the drafting model',
-    addUrl: '+ Add another link',
-    referenceUrlN: 'Reference page {{n}}',
-    referenceUrls: 'Reference web pages (up to {{count}})',
-    draftModelHint: 'Each later step has its own model choice next to its Regenerate button, if you want a different model for it.',
+    referenceUrls: 'Reference web pages: paste one or more links, one per line (up to {{count}} are read)',
+    linksFound: '{{count}} link(s) found',
+    linksOverMax: 'Only the first {{max}} will be read.',
+    linksInvalid: 'Not links, ignored: {{list}}',
+    linksClear: 'Clear links',
+    noModelList: 'The model endpoint list could not be loaded, so the first available completion model will be used.',
+    draftModelHint: 'Each later step has its own model choice next to its Regenerate button. If a step fails or stalls, you can retry it or switch models without starting over.',
     draftModelTip: 'The completion model that drafts the brief, questions, ontology, and prompts. Each step can use a different one.',
     draftModel: 'Model that drafts',
     title: 'What is this subject?',
@@ -238,7 +241,20 @@ export const wizardEn = {
     empty: 'No starter questions yet.',
     saved: 'Starter questions saved.'
   },
+  failure: {
+    title: '{{step}} did not finish',
+    usedModel: 'Model used: {{model}}',
+    modelLabel: 'Model to retry with',
+    retry: 'Retry',
+    retryWith: 'Retry with this model',
+    editInput: 'Edit description and links',
+    dismiss: 'Dismiss',
+    hint: 'Nothing else in your draft is lost. A different model applies to this step and the steps after it.',
+    renderTitle: 'This step could not be shown.'
+  },
   progress: {
+    switch: 'Switch model',
+    switchTip: 'Stop this attempt and draft the step again with another model. It becomes the drafting model for the steps after it.',
     elapsedTip: 'Time since this step started',
     phases: 'Progress',
     phase: {

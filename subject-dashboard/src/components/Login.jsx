@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import LanguageSelector from './LanguageSelector';
+import { APP_VERSION } from '../version';
 import './Login.css';
 
 const DEFAULT_SERVER = 'http://localhost:8080';
@@ -133,6 +134,7 @@ function Login() {
             {loading ? t('login.connecting') : t('login.connect')}
           </button>
         </form>
+        <div className="login-version">Pneuma {APP_VERSION}</div>
       </div>
     </div>
   );

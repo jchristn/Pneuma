@@ -1,6 +1,6 @@
 {
   "name": "pneuma-user-dashboard",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Pneuma user dashboard — fan-facing exploration experience for the Pneuma knowledge graph.",
