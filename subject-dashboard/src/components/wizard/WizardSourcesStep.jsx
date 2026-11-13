@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import DataGrid from '../grid/DataGrid';
 import CrawlPlanFormModal from '../crawl/CrawlPlanFormModal';
 import { listOf } from './wizardDraft';
 import { GuidanceBar } from './WizardParts';
@@ -126,17 +127,14 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
       ) : (
         <>
           <p className="sw-muted">{t('wizard.sources.summary', { total: links.length, done: count('Ingested'), running: count('Submitted') + count('Processing'), failed: count('Failed') })}</p>
-          <div className="sw-table-wrap">
-            <table className="sw-table">
-              <tbody>
-                {links.slice(0, 50).map((l) => (
-                  <tr key={l.id}>
-                    <td className="sw-wrap">{l.title || l.url}</td>
-                    <td><span className={`sw-status sw-status-${String(l.status).toLowerCase()}`}>{t(`wizard.sources.status.${l.status}`, { defaultValue: String(l.status) })}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="sw-grid-wrap">
+            <DataGrid rows={links} rowKey={(l) => l.id} exportName="subject-links" initialSort={{ key: 'status', dir: 'asc' }}
+              columns={[
+                { key: 'source', label: t('wizard.sources.source', 'Source'), value: (l) => l.title || l.url, fuzzy: true, width: '72%' },
+                { key: 'status', label: t('wizard.sources.statusLabel', 'Status'), facet: true, width: '28%',
+                  value: (l) => t(`wizard.sources.status.${l.status}`, { defaultValue: String(l.status) }),
+                  render: (l) => <span className={`sw-status sw-status-${String(l.status).toLowerCase()}`}>{t(`wizard.sources.status.${l.status}`, { defaultValue: String(l.status) })}</span> }
+              ]} />
           </div>
         </>
       )}

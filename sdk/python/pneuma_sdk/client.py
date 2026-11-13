@@ -776,6 +776,10 @@ class PneumaClient:
         """GET /v1.0/crawl-operations/{id}/objects, optionally by action."""
         return self._request("GET", f"/v1.0/crawl-operations/{operation_id}/objects", params=self._clean({"action": action, "maxResults": max_results, "skip": skip}))
 
+    def delete_crawl_operation(self, operation_id: str) -> Any:
+        """DELETE /v1.0/crawl-operations/{id}: remove a finished operation and its object records (409 while running)."""
+        return self._request("DELETE", f"/v1.0/crawl-operations/{operation_id}")
+
     def confirm_crawl_deletions(self, operation_id: str) -> Any:
         """POST /v1.0/crawl-operations/{id}/confirm-deletions: run a held operation's deletions."""
         return self._request("POST", f"/v1.0/crawl-operations/{operation_id}/confirm-deletions")

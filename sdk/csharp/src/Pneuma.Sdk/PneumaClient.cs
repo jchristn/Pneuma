@@ -1149,6 +1149,15 @@ namespace Pneuma.Sdk
             return SendAsync<EnumerationResult<CrawlOperationObject>>(HttpMethod.Get, path, null, token);
         }
 
+        /// <summary>Delete a finished crawl operation and its per-object records (409 while it is Running or Ingesting).</summary>
+        /// <param name="id">Crawl operation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task that completes when the operation is deleted.</returns>
+        public Task DeleteCrawlOperationAsync(string id, CancellationToken token = default)
+        {
+            return SendCoreAsync(HttpMethod.Delete, "/v1.0/crawl-operations/" + Escape(id), null, token);
+        }
+
         /// <summary>Confirm the deletions a held crawl operation is waiting on.</summary>
         /// <param name="id">Crawl operation identifier.</param>
         /// <param name="token">Cancellation token.</param>

@@ -48,7 +48,7 @@ namespace Pneuma.Core.Crawling.Crawlers
         #region Public-Methods
 
         /// <inheritdoc />
-        public List<string> CheckSettings(CrawlPlan plan)
+        public override List<string> CheckSettings(CrawlPlan plan)
         {
             string? problem = SettingsProblem(plan);
             return problem == null ? new List<string>() : new List<string> { "localFolder." + problem };

@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../Modal';
 import CrawlPill from './CrawlPill';
 import ConnectivityResultView from './ConnectivityResultView';
+import DataGrid from '../grid/DataGrid';
+import SummaryCards from '../grid/SummaryCards';
 import { formatBytes } from '../../utils/format';
-
-const PREVIEW_COUNTS = ['enumerated', 'add', 'update', 'retry', 'unchanged', 'delete', 'missing', 'skip'];
+import { PREVIEW_CARD_ROWS, sameFilter, actionTone } from './crawlGrid';
 
 // Runs a connectivity test (mode "test") or a preview (mode "preview") for a stored plan and shows the result.
 // Neither changes anything.
@@ -16,6 +17,7 @@ function CrawlPreviewModal({ plan, mode, onClose }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [facets, setFacets] = useState({});
 
   const run = useCallback(async () => {
     setLoading(true);
@@ -32,6 +34,29 @@ function CrawlPreviewModal({ plan, mode, onClose }) {
 
   useEffect(() => { run(); }, [run]);
 
+  const columns = useMemo(() => [
+    { key: 'key', label: t('crawl.key'), value: (i) => i.key, mono: true, fuzzy: true, width: '44%' },
+    { key: 'action', label: t('crawl.action'), value: (i) => i.action, facet: true, width: '11%',
+      render: (i) => <CrawlPill label={i.action} tone={actionTone(i.action)} /> },
+    { key: 'contentType', label: t('crawl.contentType'), value: (i) => i.contentType || '', facet: true, width: '14%' },
+    { key: 'size', label: t('crawl.size'), value: (i) => Number(i.sizeBytes) || 0, width: '9%', align: 'right',
+      render: (i) => (i.sizeBytes ? formatBytes(i.sizeBytes) : '-') },
+    { key: 'detail', label: t('crawl.detail'), value: (i) => i.detail || '', width: '22%' }
+  ], [t]);
+
+  const cardRows = result && mode === 'preview' ? PREVIEW_CARD_ROWS.map((row) => ({
+    key: row.key,
+    label: t(`crawl.cardRow.${row.key}`, row.key === 'scan' ? 'Found' : 'Would change'),
+    cards: row.cards.map((c) => ({
+      key: c.count,
+      value: result[c.count] ?? 0,
+      label: t(`crawl.preview.${c.count}`),
+      danger: c.danger,
+      active: c.filter ? sameFilter(facets, c.filter) : false,
+      onClick: () => setFacets(c.filter && !sameFilter(facets, c.filter) ? c.filter : {})
+    }))
+  })) : [];
+
   const footer = (
     <>
       <button type="button" className="btn btn-secondary" onClick={run} disabled={loading}>{t('common.retry', 'Retry')}</button>
@@ -40,40 +65,19 @@ function CrawlPreviewModal({ plan, mode, onClose }) {
   );
 
   return (
-    <Modal isOpen title={mode === 'test' ? t('crawl.testTitle', { name: plan.name }) : t('crawl.previewTitle', { name: plan.name })} size="large" onClose={onClose}>
+    <Modal isOpen title={mode === 'test' ? t('crawl.testTitle', { name: plan.name }) : t('crawl.previewTitle', { name: plan.name })} size={mode === 'preview' ? 'data' : 'large'} onClose={onClose}>
       {loading && <p className="confirm-text">{mode === 'test' ? t('crawl.testing') : t('crawl.previewing')}</p>}
       {error && <div className="form-error">{error}</div>}
       {mode === 'test' && result && <ConnectivityResultView result={result} />}
       {mode === 'preview' && result && (
         <>
           <p className="field-hint">{t('crawl.previewHint')}</p>
-          <div className="crawl-counts">
-            {PREVIEW_COUNTS.map((c) => (
-              <div key={c} className="crawl-count">
-                <div className="crawl-count-value">{result[c] ?? 0}</div>
-                <div className="crawl-count-label">{t(`crawl.preview.${c}`)}</div>
-              </div>
-            ))}
-          </div>
+          <SummaryCards rows={cardRows} />
           <p className="field-hint">{t('crawl.bytes')}: {formatBytes(result.bytesEnumerated || 0)}</p>
           {result.deletionsHeld && <div className="form-error">{t('crawl.previewDeletionsHeld')}</div>}
-          {Array.isArray(result.items) && result.items.length > 0 && (
-            <table className="data-table">
-              <thead><tr><th>{t('crawl.key')}</th><th>{t('crawl.action')}</th><th>{t('crawl.contentType')}</th><th>{t('crawl.size')}</th><th>{t('crawl.detail')}</th></tr></thead>
-              <tbody>
-                {result.items.map((i) => (
-                  <tr key={`${i.action}-${i.key}`}>
-                    <td className="wrap"><code>{i.key}</code></td>
-                    <td><CrawlPill label={i.action} tone={i.action === 'Delete' ? 'danger' : i.action === 'Skip' ? 'neutral' : 'info'} /></td>
-                    <td>{i.contentType || '-'}</td>
-                    <td>{i.sizeBytes ? formatBytes(i.sizeBytes) : '-'}</td>
-                    <td className="wrap">{i.detail || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {result.truncated && <small className="field-hint">{t('crawl.truncated', { count: result.maxItems })}</small>}
+          <DataGrid rows={Array.isArray(result.items) ? result.items : []} columns={columns} rowKey={(i) => `${i.action}-${i.key}`}
+            facets={facets} onFacetsChange={setFacets} exportName={`crawl-preview-${plan.id}`} emptyText={t('crawl.noObjects')}
+            note={result.truncated ? t('crawl.truncated', { count: result.maxItems }) : null} />
         </>
       )}
       <div className="form-actions">{footer}</div>

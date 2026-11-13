@@ -57,6 +57,13 @@ namespace Pneuma.Core.Database.Interfaces
         /// <returns>The number of operations deleted.</returns>
         Task<int> DeleteFinishedBeforeAsync(string tenantId, string planId, DateTime cutoffUtc, CancellationToken token = default);
 
+        /// <summary>Delete one operation and its objects.</summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="id">Operation identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the operation existed and was deleted.</returns>
+        Task<bool> DeleteAsync(string tenantId, string id, CancellationToken token = default);
+
         /// <summary>Create operation objects in batches.</summary>
         /// <param name="objects">The objects.</param>
         /// <param name="token">Cancellation token.</param>

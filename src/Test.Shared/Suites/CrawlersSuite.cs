@@ -274,6 +274,13 @@ namespace Test.Shared.Suites
                                     File.Delete(Path.Combine(root, "kb", "three.txt"));
                                     CrawlOperation second = await rig.RunToEndAsync(plan.Id, ct);
                                     Expect(second.Updated == 1 && second.Deleted == 1 && second.Unchanged == 1, "1 updated, 1 deleted, 1 unchanged; got " + second.Updated + "/" + second.Deleted + "/" + second.Unchanged);
+
+                                    Expect(await rig.H.Db.CrawlOperations.DeleteAsync(rig.H.TenantId, first.Id, ct), "an operation can be deleted");
+                                    Expect(await rig.H.Db.CrawlOperations.ReadAsync(rig.H.TenantId, first.Id, ct) == null, "the deleted operation is gone");
+                                    Expect((await rig.H.Db.CrawlOperations.EnumerateObjectsAsync(rig.H.TenantId, first.Id, ct)).Count == 0, "its object records are gone");
+                                    Expect(!await rig.H.Db.CrawlOperations.DeleteAsync(rig.H.TenantId, first.Id, ct), "deleting it again reports nothing deleted");
+                                    Expect(await rig.H.Db.CrawlOperations.ReadAsync(rig.H.TenantId, second.Id, ct) != null, "other operations are kept");
+                                    Expect(!await rig.H.Db.CrawlOperations.DeleteAsync("ten_other", second.Id, ct), "another tenant cannot delete it");
                                 }
                             }
                             finally
@@ -292,12 +299,17 @@ namespace Test.Shared.Suites
                             ConnectivityResult s3Keys = await s3.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", AccessKey = "only-one" } }, ct);
                             ConnectivityResult cifsMissing = await cifs.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.Cifs, Cifs = new CifsCrawlSettings { Host = "files" } }, ct);
                             ConnectivityResult nfsMissing = await nfs.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.Nfs, Nfs = new NfsCrawlSettings { Host = "files", Export = "/e", Version = "V4" } }, ct);
+                            Expect(s3.CheckSettings(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b" } }, null).Count == 2, "saving without keys is refused");
+                            Expect(s3.CheckSettings(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", AccessKey = "a" } }, null).Count == 1, "saving without the secret key is refused");
+                            Expect(s3.CheckSettings(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", AccessKey = "a" } }, new List<string> { "secretKey" }).Count == 0, "a stored secret key counts on an edit");
+                            Expect(s3.CheckSettings(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", AccessKey = "a", SecretKey = "s" } }, null).Count == 0, "both keys pass");
+                            Expect(s3.CheckSettings(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", PublicBucket = true } }, null).Count == 0, "a public bucket needs no keys");
                             foreach (ConnectivityResult r in new[] { s3Missing, s3Keys, cifsMissing, nfsMissing })
                                 Expect(!r.Success && r.Layers.Count == 1 && r.Layers[0].Name == "settings", "settings step fails: " + Describe(r));
 
                             ConnectivityResult cifsDns = await cifs.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.Cifs, Cifs = new CifsCrawlSettings { Host = "no-such-host.invalid", Share = "docs", Username = "u", Password = "p" } }, ct);
                             ConnectivityResult nfsDns = await nfs.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.Nfs, Nfs = new NfsCrawlSettings { Host = "no-such-host.invalid", Export = "/exports" } }, ct);
-                            ConnectivityResult s3Dns = await s3.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", Endpoint = "http://no-such-host.invalid:9000/" } }, ct);
+                            ConnectivityResult s3Dns = await s3.TestAsync(new CrawlPlan { Type = CrawlPlanTypeEnum.S3, S3 = new S3CrawlSettings { Bucket = "b", Endpoint = "http://no-such-host.invalid:9000/", PublicBucket = true } }, ct);
                             foreach (ConnectivityResult r in new[] { cifsDns, nfsDns, s3Dns })
                                 Expect(!r.Success && r.Layers.Last().Name == "dns", "dns step fails: " + Describe(r));
 

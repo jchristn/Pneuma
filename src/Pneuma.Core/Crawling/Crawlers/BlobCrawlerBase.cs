@@ -59,6 +59,23 @@ namespace Pneuma.Core.Crawling.Crawlers
 
         #region Public-Methods
 
+        /// <summary>Check the plan's settings when it is saved. The base accepts anything the settings codec accepts.</summary>
+        /// <param name="plan">The plan.</param>
+        /// <returns>The problems; empty when the settings are acceptable.</returns>
+        public virtual List<string> CheckSettings(CrawlPlan plan)
+        {
+            return new List<string>();
+        }
+
+        /// <summary>Check the plan's settings when it is saved, knowing which secrets are already stored. Defaults to <see cref="CheckSettings(CrawlPlan)"/>.</summary>
+        /// <param name="plan">The plan.</param>
+        /// <param name="storedSecrets">Names (camelCase) of the secrets already stored for the plan; null for a new plan.</param>
+        /// <returns>The problems; empty when the settings are acceptable.</returns>
+        public virtual List<string> CheckSettings(CrawlPlan plan, ICollection<string>? storedSecrets)
+        {
+            return CheckSettings(plan);
+        }
+
         /// <inheritdoc />
         public async Task<ConnectivityResult> TestAsync(CrawlPlan plan, CancellationToken token)
         {

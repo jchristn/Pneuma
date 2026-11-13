@@ -575,6 +575,11 @@ export class PneumaClient {
         return this.request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}/objects`, { query: options });
     }
 
+    /** Delete a finished crawl operation and its per-object records (409 while Running or Ingesting). @param {string} id @returns {Promise<null>} */
+    deleteCrawlOperation(id) {
+        return this.request('DELETE', `/v1.0/crawl-operations/${encodeURIComponent(id)}`);
+    }
+
     /** Confirm the deletions a held operation is waiting on. @param {string} id @returns {Promise<object>} */
     confirmCrawlDeletions(id) {
         return this.request('POST', `/v1.0/crawl-operations/${encodeURIComponent(id)}/confirm-deletions`);

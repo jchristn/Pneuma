@@ -261,7 +261,8 @@ Execute for test, preview, start, stop, and confirming deletions).
 |--------|------|-------------|
 | GET | `/v1.0/crawl-operations` | Operations, newest first (paginated; `planId=` and `status=` filter; **400** for an unknown status). |
 | GET | `/v1.0/crawl-operations/{id}` | One operation: `trigger` (`Schedule`, `Manual`), `status` (`Running`, `Ingesting`, `Succeeded`, `PartiallySucceeded`, `Failed`, `Cancelled`, `Held`), counts `enumerated`, `added`, `updated`, `retried`, `unchanged`, `deleted`, `missing`, `skipped`, `failed`, `bytesEnumerated`, `heldDeletions`, `error`, and timestamps. |
-| GET | `/v1.0/crawl-operations/{id}/objects` | What the operation did with each object `{ externalKey, action, succeeded, linkId, jobId, detail }` (paginated; `action=` `Add`, `Update`, `Retry`, `Delete`, `Skip`, `Fail`). Unchanged objects are counted only. |
+| GET | `/v1.0/crawl-operations/{id}/objects` | What the operation did with each object `{ externalKey, action, succeeded, linkId, jobId, detail }` (paginated, at most 1000 per page with `skip=`; `action=` `Add`, `Update`, `Retry`, `Delete`, `Skip`, `Fail`, `Unchanged`, `Missing`). Unchanged objects are counted only. |
+| DELETE | `/v1.0/crawl-operations/{id}` | Remove a finished operation (`Succeeded`, `PartiallySucceeded`, `Failed`, `Cancelled`, `Held`) and its per-object records from the history → **204**. Links, ingested content, and the plan are untouched; deleting a `Held` operation discards its pending deletions. **409** while it is `Running` or `Ingesting`; **404** if it is not in the caller's tenant. Needs `CrawlOperation` Delete. |
 | POST | `/v1.0/crawl-operations/{id}/confirm-deletions` | Run the deletions a `Held` operation is waiting on → the operation. **409** when it is not `Held`. |
 
 ## Subject Wizard

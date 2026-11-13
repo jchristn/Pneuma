@@ -1,0 +1,88 @@
+/* Results grid used inside modals. Kept identical to the subject dashboard's copy except for this variable map. */
+.dg, .dg-cards {
+  --dg-bg: var(--color-background);
+  --dg-surface: var(--color-surface);
+  --dg-alt: var(--color-surface-alt);
+  --dg-border: var(--color-border);
+  --dg-text: var(--color-text);
+  --dg-muted: var(--color-text-secondary);
+  --dg-primary: var(--color-primary);
+  --dg-primary-soft: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  --dg-mono: var(--font-mono, ui-monospace, monospace);
+  --dg-radius: var(--radius-md, 6px);
+}
+.dg { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.dg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dg-search { flex: 1 1 280px; min-width: 0; }
+.dg-search input { width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--dg-border); border-radius: var(--dg-radius); background: var(--dg-bg); color: var(--dg-text); font: inherit; font-size: 0.875rem; }
+.dg-search input:focus { outline: 2px solid var(--dg-primary-soft); border-color: var(--dg-primary); }
+.dg-toolbar-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dg-btn { padding: 5px 10px; border: 1px solid var(--dg-border); border-radius: var(--dg-radius); background: var(--dg-surface); color: var(--dg-text); font: inherit; font-size: 0.8rem; cursor: pointer; white-space: nowrap; }
+.dg-btn:hover:not(:disabled) { border-color: var(--dg-primary); }
+.dg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dg-link { border: 0; background: none; padding: 0; color: var(--dg-primary); font: inherit; font-size: 0.8rem; cursor: pointer; text-decoration: underline; }
+.dg-facets { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.dg-facet { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.dg-facet-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dg-muted); margin-right: 2px; }
+.dg-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid var(--dg-border); border-radius: 999px; background: var(--dg-bg); color: var(--dg-text); font: inherit; font-size: 0.78rem; cursor: pointer; }
+.dg-chip:hover:not(:disabled) { border-color: var(--dg-primary); }
+.dg-chip.on { background: var(--dg-primary-soft); border-color: var(--dg-primary); color: var(--dg-primary); font-weight: 600; }
+.dg-chip:disabled { opacity: 0.45; cursor: default; }
+.dg-chip-count { font-variant-numeric: tabular-nums; color: var(--dg-muted); font-weight: 400; }
+.dg-chip.on .dg-chip-count { color: inherit; }
+.dg-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.8rem; color: var(--dg-muted); }
+.dg-note { color: var(--dg-muted); }
+/* The only scrolling element: vertical, with a sticky header. Columns are fixed-width and values wrap, so there is
+   no horizontal scroll. */
+.dg-scroll { flex: 1 1 auto; min-height: 160px; max-height: var(--dg-max-height, 60vh); overflow-y: auto; overflow-x: hidden; border: 1px solid var(--dg-border); border-radius: var(--dg-radius); background: var(--dg-bg); }
+.dg-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 0.84rem; }
+.dg-table th { position: sticky; top: 0; z-index: 1; background: var(--dg-alt); text-align: left; font-weight: 600; font-size: 0.78rem; color: var(--dg-muted); border-bottom: 1px solid var(--dg-border); padding: 0; }
+.dg-table td { padding: 6px 10px; border-bottom: 1px solid var(--dg-border); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; color: var(--dg-text); }
+.dg-table tbody tr:hover td { background: var(--dg-surface); }
+.dg-table tbody tr:last-child td { border-bottom: 0; }
+.dg-mono { font-family: var(--dg-mono); font-size: 0.78rem; }
+.dg-sort { display: flex; align-items: center; gap: 4px; width: 100%; padding: 7px 10px; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
+.dg-sort:hover, .dg-sort.active { color: var(--dg-text); }
+.dg-sort-mark { font-size: 0.7rem; opacity: 0.45; }
+.dg-sort.active .dg-sort-mark { opacity: 1; color: var(--dg-primary); }
+.dg-empty { padding: 24px; text-align: center; color: var(--dg-muted); font-size: 0.875rem; }
+.dg-more { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.8rem; color: var(--dg-muted); }
+
+/* Summary cards above a grid: fixed rows (no wrapping into a ragged strip); a card can act as a filter. */
+.dg-cards { display: flex; flex-direction: column; gap: 8px; }
+.dg-card-row { display: grid; grid-template-columns: 88px repeat(var(--dg-cols, 5), minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.dg-card-row-label { align-self: center; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dg-muted); }
+.dg-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid var(--dg-border); border-radius: var(--dg-radius); background: var(--dg-alt); color: var(--dg-text); font: inherit; text-align: left; min-width: 0; }
+button.dg-card { cursor: pointer; }
+button.dg-card:hover:not(:disabled) { border-color: var(--dg-primary); }
+button.dg-card:disabled { cursor: default; }
+.dg-card.on { border-color: var(--dg-primary); background: var(--dg-primary-soft); }
+.dg-card.danger .dg-card-value { color: var(--color-danger); }
+.dg-card-value { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.dg-card-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@media (max-width: 720px) {
+  .dg-card-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dg-card-row-label { grid-column: 1 / -1; }
+}
+
+.dg-sort { justify-content: flex-start; }
+.dg-table td { overflow: hidden; }
+.dg-table td > * { max-width: 100%; }
+.dg-sort-select { display: none; padding: 5px 8px; border: 1px solid var(--dg-border); border-radius: var(--dg-radius); background: var(--dg-bg); color: var(--dg-text); font: inherit; font-size: 0.8rem; }
+/* A narrow grid (phone, or a small modal): each row becomes a small card with labelled fields; sorting moves to the
+   select. Keyed on the grid's own width, not the window's. */
+.dg { container: dg / inline-size; }
+@container dg (max-width: 760px) {
+  .dg-sort-select { display: inline-block; }
+  .dg-table, .dg-table tbody, .dg-table tr, .dg-table td { display: block; width: 100%; box-sizing: border-box; }
+  .dg-table colgroup, .dg-table thead { display: none; }
+  .dg-table tr { padding: 8px 10px; border-bottom: 1px solid var(--dg-border); }
+  .dg-table td { border: 0; padding: 2px 0; text-align: left !important; }
+  .dg-table td:not(:first-child) { display: flex; gap: 8px; align-items: baseline; }
+  .dg-table td:not(:first-child)::before { content: attr(data-label); flex: 0 0 72px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dg-muted); font-family: var(--font-sans, inherit); }
+  .dg-table tbody tr:hover td { background: none; }
+}
+/* Ids are shown in full (never truncated), so let them wrap inside a cell. */
+.dg-table td code, .dg-table td .cell-id { white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
+.dg-table td .copyable-id, .dg-table td .copyable { display: inline-flex; flex-wrap: wrap; align-items: center; max-width: 100%; }
+.dg-table td [class*="pill"] { white-space: normal; max-width: 100%; overflow-wrap: anywhere; }

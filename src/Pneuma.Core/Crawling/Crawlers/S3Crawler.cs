@@ -1,6 +1,7 @@
 namespace Pneuma.Core.Crawling.Crawlers
 {
     using System;
+    using System.Collections.Generic;
     using Blobject.AmazonS3;
     using Blobject.Core;
     using Pneuma.Core.Enums;
@@ -37,12 +38,30 @@ namespace Pneuma.Core.Crawling.Crawlers
         protected override BlobClientBase CreateClient(CrawlPlan plan)
         {
             S3CrawlSettings s3 = Settings(plan);
-            string? accessKey = String.IsNullOrWhiteSpace(s3.AccessKey) ? null : s3.AccessKey;
-            string? secretKey = String.IsNullOrWhiteSpace(s3.SecretKey) ? null : s3.SecretKey;
+            string? accessKey = (s3.PublicBucket || String.IsNullOrWhiteSpace(s3.AccessKey)) ? null : s3.AccessKey;
+            string? secretKey = (s3.PublicBucket || String.IsNullOrWhiteSpace(s3.SecretKey)) ? null : s3.SecretKey;
             AwsSettings settings = String.IsNullOrWhiteSpace(s3.Endpoint)
                 ? new AwsSettings(accessKey, secretKey, s3.Region, s3.Bucket, s3.UseSsl)
                 : new AwsSettings(EndpointUrl(s3), s3.UseSsl, accessKey, secretKey, s3.Region, s3.Bucket, EndpointUrl(s3) + "{bucket}/{key}");
             return new AmazonS3BlobClient(settings);
+        }
+
+        /// <summary>
+        /// Refuse to save a plan without credentials unless it is marked as a public bucket, so a missing key is caught
+        /// when the plan is saved, not when it first runs.
+        /// </summary>
+        /// <param name="plan">The plan.</param>
+        /// <param name="storedSecrets">Names (camelCase) of the secrets already stored for the plan; null for a new plan.</param>
+        /// <returns>The problems; empty when the settings are acceptable.</returns>
+        public override List<string> CheckSettings(CrawlPlan plan, ICollection<string>? storedSecrets)
+        {
+            List<string> errors = new List<string>();
+            S3CrawlSettings? s3 = plan?.S3;
+            if (s3 == null || s3.PublicBucket) return errors;
+            bool hasSecret = !String.IsNullOrWhiteSpace(s3.SecretKey) || (storedSecrets != null && storedSecrets.Contains("secretKey"));
+            if (String.IsNullOrWhiteSpace(s3.AccessKey)) errors.Add("s3.accessKey is required unless s3.publicBucket is on.");
+            if (!hasSecret) errors.Add("s3.secretKey is required unless s3.publicBucket is on.");
+            return errors;
         }
 
         /// <inheritdoc />
@@ -52,7 +71,7 @@ namespace Pneuma.Core.Crawling.Crawlers
             if (s3 == null) return "S3 settings are required.";
             if (String.IsNullOrWhiteSpace(s3.Bucket)) return "Set the bucket.";
             if (String.IsNullOrWhiteSpace(s3.Region)) return "Set the region.";
-            if (String.IsNullOrWhiteSpace(s3.AccessKey) != String.IsNullOrWhiteSpace(s3.SecretKey)) return "Set both the access key and the secret key, or neither for a public bucket.";
+            if (!s3.PublicBucket && (String.IsNullOrWhiteSpace(s3.AccessKey) || String.IsNullOrWhiteSpace(s3.SecretKey))) return "Set the access key and the secret key, or turn on Public bucket for a bucket that allows anonymous reads.";
             if (!String.IsNullOrWhiteSpace(s3.Endpoint) && !Uri.TryCreate(EndpointUrl(s3), UriKind.Absolute, out Uri? _)) return "The endpoint is not a valid URL (for example http://minio:9000/).";
             return null;
         }

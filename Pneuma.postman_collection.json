@@ -1416,7 +1416,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Policy bucket\",\n  \"type\": \"S3\",\n  \"s3\": {\n    \"bucket\": \"policies\",\n    \"region\": \"us-west-2\",\n    \"prefix\": \"published/\",\n    \"accessKey\": \"AKIA...\",\n    \"secretKey\": \"set-once-never-returned\"\n  },\n  \"schedule\": {\n    \"type\": \"Interval\",\n    \"intervalMinutes\": 1440\n  },\n  \"processDeletions\": true,\n  \"maxDeletionFraction\": 0.2\n}"
+              "raw": "{\n  \"name\": \"Policy bucket\",\n  \"type\": \"S3\",\n  \"s3\": {\n    \"bucket\": \"policies\",\n    \"region\": \"us-west-2\",\n    \"prefix\": \"published/\",\n    \"publicBucket\": false,\n    \"accessKey\": \"AKIA...\",\n    \"secretKey\": \"set-once-never-returned\"\n  },\n  \"schedule\": {\n    \"type\": \"Interval\",\n    \"intervalMinutes\": 1440\n  },\n  \"processDeletions\": true,\n  \"maxDeletionFraction\": 0.2\n}"
             }
           }
         },
@@ -1747,6 +1747,14 @@
           }
         },
         {
+          "name": "Delete operation",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/v1.0/crawl-operations/{{crawlOperationId}}",
+            "description": "Remove a finished operation and its per-object records from the history (204). Links and ingested content are untouched; deleting a Held operation discards its pending deletions. 409 while the operation is Running or Ingesting."
+          }
+        },
+        {
           "name": "Confirm held deletions",
           "request": {
             "method": "POST",
@@ -1755,7 +1763,7 @@
           }
         }
       ],
-      "description": "Runs of crawl plans: counts, per-object results, and confirmation of held deletions."
+      "description": "Runs of crawl plans: counts, per-object results, confirmation of held deletions, and deleting finished operations."
     },
     {
       "name": "Ontologies",

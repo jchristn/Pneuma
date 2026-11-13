@@ -5,6 +5,8 @@ import { normalizeList } from '../utils/api';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import ActionMenu from '../components/ActionMenu';
+import BulkActionBar, { useTableSelection } from '../components/BulkActionBar';
+import ConfirmModal from '../components/ConfirmModal';
 import ErrorBanner from '../components/ErrorBanner';
 import StatusPill from '../components/StatusPill';
 import CrawlOperationModal from '../components/crawl/CrawlOperationModal';
@@ -22,6 +24,7 @@ function CrawlOperationsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +50,29 @@ function CrawlOperationsView() {
     return map;
   }, [plans]);
 
+  const { selectedItems, clear, selection } = useTableSelection(rows);
+  const isRunning = (op) => op.status === 'Running' || op.status === 'Ingesting';
+
+  // Delete finished operations one by one; running ones are refused by the server (409) and skipped here.
+  const removeOperations = async (ops) => {
+    const failures = [];
+    for (const op of ops) {
+      try { await apiClient.deleteCrawlOperation(op.id); } catch (err) { failures.push(err?.message || op.id); }
+    }
+    clear();
+    await load();
+    if (failures.length) throw new Error(failures.join(' '));
+  };
+
+  const bulkBar = (
+    <BulkActionBar count={selectedItems.length} onClear={clear} actions={[
+      { key: 'delete', label: t('common.delete'), danger: true,
+        tip: t('crawl.bulkDeleteOperationsTip', 'Delete the selected operations from the history (running ones cannot be deleted).'),
+        disabled: selectedItems.some(isRunning),
+        onClick: () => setToDelete(selectedItems) }
+    ]} />
+  );
+
   const columns = [
     { key: 'startedUtc', label: t('crawl.started'), render: (r) => formatDateTime(r.startedUtc) },
     { key: 'planId', label: t('crawl.plan'), render: (r) => planName[r.planId] || r.planId },
@@ -60,7 +86,10 @@ function CrawlOperationsView() {
     { key: 'finishedUtc', label: t('crawl.finished'), render: (r) => (r.finishedUtc ? formatDateTime(r.finishedUtc) : '-') },
     { key: '_actions', label: t('common.actions'), sortable: false, width: '56px', render: (op) => (
       <ActionMenu items={[
-        { key: 'view', label: t('crawl.view'), tip: t('crawl.viewOperationTip'), onClick: () => setOpenId(op.id) }
+        { key: 'view', label: t('crawl.view'), tip: t('crawl.viewOperationTip'), onClick: () => setOpenId(op.id) },
+        { key: 'delete', label: t('common.delete'), danger: true, hidden: isRunning(op),
+          tip: t('crawl.deleteOperationTip', 'Remove this operation and its object records from the history. Ingested content is kept.'),
+          onClick: () => setToDelete([op]) }
       ]} />
     ) }
   ];
@@ -86,7 +115,12 @@ function CrawlOperationsView() {
       </div>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError('')} />}
       <DataTable columns={columns} data={rows} loading={loading} onRefresh={load} onRowClick={(r) => setOpenId(r.id)}
-        emptyMessage={t('crawl.noOperations')} />
+        selection={selection} bulkBar={bulkBar} emptyMessage={t('crawl.noOperations')} />
+      {toDelete && (
+        <ConfirmModal danger title={t('crawl.deleteOperationsTitle', { count: toDelete.length, defaultValue: 'Delete {{count}} crawl operation(s)?' })}
+          message={t('crawl.deleteOperationMessage', 'This removes the operation and its per-object records from the history. Links and ingested content are not affected.')}
+          confirmLabel={t('common.delete')} onConfirm={() => removeOperations(toDelete)} onClose={() => setToDelete(null)} />
+      )}
       {openId && <CrawlOperationModal operationId={openId} onClose={() => setOpenId(null)} onChanged={load} />}
     </div>
   );

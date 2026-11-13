@@ -79,7 +79,7 @@ namespace Pneuma.Core.Crawling
             if (settings == null) errors.Add(CrawlSettingsCodec.SettingsProperty(plan.Type) + " settings are required for a " + plan.Type + " plan.");
             else errors.AddRange(CrawlSettingsCodec.Validate(settings, storedSecrets).Select(e => CrawlSettingsCodec.SettingsProperty(plan.Type) + "." + e));
 
-            if (settings != null) errors.AddRange(_Crawlers.Get(plan.Type).CheckSettings(plan));
+            if (settings != null) errors.AddRange(_Crawlers.Get(plan.Type).CheckSettings(plan, storedSecrets));
             errors.AddRange(CrawlScheduleCalculator.Validate(plan.Schedule));
             if (plan.Labels.Count > MaxLabels) errors.Add("labels holds at most " + MaxLabels + " entries.");
             if (plan.Tags.Count > MaxTags) errors.Add("tags holds at most " + MaxTags + " entries.");

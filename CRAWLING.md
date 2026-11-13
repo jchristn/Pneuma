@@ -78,7 +78,9 @@ Crawls a bucket on Amazon S3 or an S3-compatible store (for example Less3 or Min
 - **Connection.** `endpoint` is empty for AWS, or a host and port or URL for a compatible store. It uses path-style
   requests with `useSsl`. `region` and `bucket` are required.
 - **What it lists.** Objects under `prefix`; `includeSubfolders` off skips keys under deeper prefixes.
-- **Credentials.** `accessKey` and `secretKey` (secret), or neither for a public bucket.
+- **Credentials.** `accessKey` and `secretKey` (secret) are required, and a plan without them is refused when it is
+  saved (400). For a bucket that allows anonymous reads, turn on `publicBucket` (default false); then no credentials are
+  sent.
 - **Versions.** An object's version is its ETag. Objects larger than `Ingestion.FetchSafety.MaxDownloadBytes` fail with
   category `TooLarge`.
 
@@ -224,6 +226,9 @@ Stopping a plan (`POST /v1.0/crawl-plans/{id}/stop`) cancels the listing if it i
 already waiting on ingestion, the stop cancels the jobs that have not started. If a server stops mid-run, its claim
 lapses (`Crawling.ClaimMinutes`, default 30). Recovery then marks the operation Failed and releases the plan.
 Finished operations older than the plan's `operationRetentionDays` (default 30) are pruned after each run.
+`DELETE /v1.0/crawl-operations/{id}` removes one finished operation and its per-object records sooner (409 while it is
+Running or Ingesting); the dashboards offer it on the operation list and in the operation's detail view. It does not
+touch links or ingested content.
 
 Labels and tags on the plan are stamped on every link it creates, and from there on every chunk.
 
@@ -252,7 +257,7 @@ Deleting a subject or tenant deletes its crawl plans.
 Crawl plans use the `CrawlPlan` resource type and operations use `CrawlOperation`:
 
 - Reads need Read.
-- Create and replace need Write, and delete needs Delete.
+- Create and replace need Write, and delete (of a plan or an operation) needs Delete.
 - Test, preview, start, stop, and confirming deletions need Execute.
 
 The built-in Editor role has all of these. Denials and admin bypasses are audited like every other route.

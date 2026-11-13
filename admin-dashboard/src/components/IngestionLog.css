@@ -174,3 +174,6 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+
+/* Long URLs, paths, and stack traces wrap instead of widening the modal (no horizontal scroll). */
+.ilog-message, .ilog-error, .ilog-content, .ilog-run-header { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }

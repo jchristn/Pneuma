@@ -29,12 +29,16 @@ namespace Pneuma.Core.Crawling
         [CrawlSetting("Include subfolders", "Include objects under deeper prefixes. Off crawls only the prefix's top level.")]
         public bool IncludeSubfolders { get; set; } = true;
 
-        /// <summary>Access key id.</summary>
-        [CrawlSetting("Access key", "Access key id. Leave empty, with the secret key, for a public bucket.")]
+        /// <summary>The bucket allows anonymous reads: no access key or secret key is sent. Default false (both keys required).</summary>
+        [CrawlSetting("Public bucket", "On for a bucket that allows anonymous reads; no credentials are sent. Off (the default) requires the access key and the secret key.")]
+        public bool PublicBucket { get; set; } = false;
+
+        /// <summary>Access key id. Required unless <see cref="PublicBucket"/> is on.</summary>
+        [CrawlSetting("Access key", "Access key id. Required unless Public bucket is on.")]
         public string? AccessKey { get; set; } = null;
 
-        /// <summary>Secret access key. Secret.</summary>
-        [CrawlSetting("Secret key", "Secret access key. Stored encrypted and never returned.", Secret = true)]
+        /// <summary>Secret access key. Secret. Required unless <see cref="PublicBucket"/> is on.</summary>
+        [CrawlSetting("Secret key", "Secret access key. Required unless Public bucket is on. Stored encrypted and never returned.", Secret = true)]
         public string? SecretKey { get; set; } = null;
 
         #endregion

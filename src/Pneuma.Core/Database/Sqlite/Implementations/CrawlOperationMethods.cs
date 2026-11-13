@@ -111,6 +111,21 @@ namespace Pneuma.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> DeleteAsync(string tenantId, string id, CancellationToken token = default)
+        {
+            string t = Sanitizer.Str(tenantId);
+            string i = Sanitizer.Str(id);
+            DataTable table = await Query("SELECT id FROM crawloperations WHERE tenantid = " + t + " AND id = " + i + ";", token).ConfigureAwait(false);
+            if (table.Rows.Count == 0) return false;
+            await QueryTransaction(new List<string>
+            {
+                "DELETE FROM crawloperationobjects WHERE tenantid = " + t + " AND operationid = " + i + ";",
+                "DELETE FROM crawloperations WHERE tenantid = " + t + " AND id = " + i + ";"
+            }, token).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <inheritdoc />
         public async Task CreateObjectsAsync(IEnumerable<CrawlOperationObject> objects, CancellationToken token = default)
         {
             if (objects == null) throw new ArgumentNullException(nameof(objects));

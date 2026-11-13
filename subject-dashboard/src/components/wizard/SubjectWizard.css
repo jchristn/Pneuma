@@ -153,6 +153,8 @@
 .sw-progress-foot { flex-wrap: wrap; gap: 8px; }
 .sw-progress-foot label { font-size: 0.8rem; }
 
+.sw-grid-wrap { --dg-max-height: 40vh; }
+
 @media (max-width: 900px) {
   .sw-body { flex-direction: column; }
   .sw-rail { width: auto; border-right: 0; border-bottom: 1px solid var(--sw-border); flex-direction: row; align-items: center; padding: 6px; overflow-x: auto; overflow-y: hidden; }

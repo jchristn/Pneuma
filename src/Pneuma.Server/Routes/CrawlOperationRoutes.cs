@@ -65,6 +65,8 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Read a crawl operation", tag));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/crawl-operations/{id}/objects", ListOperationObjectsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List what a crawl operation did with each object (optionally ?action=)", tag));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.DELETE, "/v1.0/crawl-operations/{id}", DeleteOperationAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Delete a finished crawl operation and its object records (409 while Running or Ingesting)", tag));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/crawl-operations/{id}/confirm-deletions", ConfirmDeletionsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Confirm the deletions a held crawl operation is waiting on", tag));
         }
@@ -174,6 +176,22 @@ namespace Pneuma.Server.Routes
             await _Sync.ConfirmDeletionsAsync(operation, ctx.Token).ConfigureAwait(false);
             CrawlOperation? updated = await _Db.CrawlOperations.ReadAsync(operation.TenantId, operation.Id, ctx.Token).ConfigureAwait(false);
             await RouteHelper.SendJsonAsync(ctx, 200, updated).ConfigureAwait(false);
+        }
+
+        private async Task DeleteOperationAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, ResourceTypeEnum.CrawlOperation, OperationTypeEnum.Delete).ConfigureAwait(false)) return;
+            CrawlOperation? operation = await ReadOperationOr404Async(ctx, rc).ConfigureAwait(false);
+            if (operation == null) return;
+            if (operation.Status == CrawlOperationStatusEnum.Running || operation.Status == CrawlOperationStatusEnum.Ingesting)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 409, "Conflict", "The operation is " + operation.Status + "; cancel it before deleting it.").ConfigureAwait(false);
+                return;
+            }
+            await _Db.CrawlOperations.DeleteAsync(operation.TenantId, operation.Id, ctx.Token).ConfigureAwait(false);
+            ctx.Response.StatusCode = 204;
+            await ctx.Response.Send(ctx.Token).ConfigureAwait(false);
         }
 
         private async Task<bool> GateAsync(HttpContextBase ctx, RequestContext rc, ResourceTypeEnum resource, OperationTypeEnum op)

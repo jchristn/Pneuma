@@ -132,3 +132,6 @@
   gap: 10px;
   margin-top: 18px;
 }
+
+/* Long URLs, paths, and stack traces wrap instead of widening the modal (no horizontal scroll). */
+.ilog-message, .ilog-error, .ilog-content, .ilog-run-header { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }

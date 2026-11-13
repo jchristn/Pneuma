@@ -250,6 +250,16 @@ class ApiClient {
     return this._request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}/objects`, { query: { maxResults: 1000, ...(action ? { action } : {}) } });
   }
 
+  // One page of an operation's objects (skip/maxResults); used to load every object, not just the first 1000.
+  listCrawlOperationObjectsPage(id, skip = 0, maxResults = 1000) {
+    return this._request('GET', `/v1.0/crawl-operations/${encodeURIComponent(id)}/objects`, { query: { maxResults, skip } });
+  }
+
+  // Delete a finished operation and its object records (409 while it is Running or Ingesting).
+  deleteCrawlOperation(id) {
+    return this._request('DELETE', `/v1.0/crawl-operations/${encodeURIComponent(id)}`);
+  }
+
   confirmCrawlDeletions(id) {
     return this._request('POST', `/v1.0/crawl-operations/${encodeURIComponent(id)}/confirm-deletions`);
   }

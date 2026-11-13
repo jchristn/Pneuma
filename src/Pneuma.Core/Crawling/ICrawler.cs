@@ -30,6 +30,15 @@ namespace Pneuma.Core.Crawling
         List<string> CheckSettings(CrawlPlan plan) => new List<string>();
 
         /// <summary>
+        /// Check a plan's settings when it is saved, knowing which secrets are already stored (an edit need not resend
+        /// them). Defaults to <see cref="CheckSettings(CrawlPlan)"/>.
+        /// </summary>
+        /// <param name="plan">The plan.</param>
+        /// <param name="storedSecrets">Names (camelCase) of the secrets already stored for the plan; null for a new plan.</param>
+        /// <returns>The problems; empty when the settings are acceptable.</returns>
+        List<string> CheckSettings(CrawlPlan plan, ICollection<string>? storedSecrets) => CheckSettings(plan);
+
+        /// <summary>
         /// Test the plan's connection step by step (DNS, TCP, authentication, root access), stopping at the first
         /// failure. Never throws for a connection problem; the failure is a step in the result.
         /// </summary>

@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import ActionMenu from '../components/ActionMenu';
+import ConfirmModal from '../components/ConfirmModal';
 import JsonViewer from '../components/JsonViewer';
 import CrawlPill from '../components/crawl/CrawlPill';
 import CrawlPlanFormModal from '../components/crawl/CrawlPlanFormModal';
@@ -60,6 +61,7 @@ function CrawlersView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null);
+  const [opBusy, setOpBusy] = useState(false);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
@@ -153,8 +155,30 @@ function CrawlersView() {
     { key: 'added', label: t('crawl.count.added') },
     { key: 'updated', label: t('crawl.count.updated') },
     { key: 'deleted', label: t('crawl.count.deleted') },
-    { key: 'failed', label: t('crawl.count.failed') }
+    { key: 'failed', label: t('crawl.count.failed') },
+    { key: 'actions', label: '', sortable: false, render: (_, op) => {
+      const running = op.status === 'Running' || op.status === 'Ingesting';
+      const items = [
+        { label: t('crawl.view', 'View'), onClick: () => setModal({ type: 'operation', id: op.id }) },
+        ...(running ? [] : [{ label: t('common.delete'), variant: 'danger', onClick: () => setModal({ type: 'deleteOperation', op }) }])
+      ];
+      return <ActionMenu actions={items} />;
+    } }
   ];
+
+  const deleteOperation = async (op) => {
+    setOpBusy(true);
+    try {
+      await apiClient.deleteCrawlOperation(op.id);
+      setModal(null);
+      await load();
+    } catch (err) {
+      setModal(null);
+      setError(err?.message || t('crawl.loadError'));
+    } finally {
+      setOpBusy(false);
+    }
+  };
 
   return (
     <div>
@@ -191,6 +215,10 @@ function CrawlersView() {
           <JsonViewer value={modal.plan} label="JSON" />
         </Modal>
       )}
+      <ConfirmModal isOpen={modal?.type === 'deleteOperation'} variant="danger" isLoading={opBusy}
+        title={t('crawl.deleteOperationTitle', 'Delete crawl operation?')}
+        message={t('crawl.deleteOperationMessage', 'This removes the operation and its per-object records from the history. Links and ingested content are not affected.')}
+        confirmLabel={t('common.delete')} onConfirm={() => deleteOperation(modal.op)} onClose={() => setModal(null)} />
       {modal?.type === 'delete' && (
         <DeletePlanModal plan={modal.plan} onClose={() => setModal(null)}
           onConfirm={async (deleteLinks) => { await apiClient.deleteCrawlPlan(modal.plan.id, deleteLinks); await load(); }} />
