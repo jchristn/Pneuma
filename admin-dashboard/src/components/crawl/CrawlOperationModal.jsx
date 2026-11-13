@@ -64,7 +64,7 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
   const failedLabel = t('crawl.outcomeFailed');
 
   const columns = useMemo(() => [
-    { key: 'key', label: t('crawl.key'), value: (o) => o.externalKey, mono: true, fuzzy: true, width: '38%' },
+    { key: 'key', label: t('crawl.key'), value: (o) => o.externalKey, mono: true, fuzzy: true, width: '34%' },
     { key: 'action', label: t('crawl.action'), value: (o) => o.action, facet: true, width: '11%',
       render: (o) => <StatusPill label={o.action} tone={actionTone(o.action)} /> },
     { key: 'outcome', label: t('crawl.outcome'), value: outcomeLabel, facet: true, width: '11%',
@@ -73,7 +73,7 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
         return <StatusPill label={outcomeLabel(o)} tone={k === 'ok' ? 'success' : k === 'failed' ? 'danger' : 'info'} />;
       } },
     { key: 'detail', label: t('crawl.detail'), value: (o) => o.detail || '', width: '22%' },
-    { key: 'link', label: t('crawl.link'), value: (o) => o.linkId || '', width: '18%', sortable: false,
+    { key: 'link', label: t('crawl.link'), value: (o) => o.linkId || '', width: '22%', sortable: false,
       render: (o) => (o.linkId ? <CopyableId value={o.linkId} truncateLen={10} /> : '-') }
   ], [t, outcomeLabel]);
 
@@ -125,17 +125,17 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
     <Modal title={t('crawl.operationTitle')} subtitle={operationId} size="data" onClose={onClose} footer={footer}>
       {error && <ErrorBanner message={error} onRetry={load} onDismiss={() => setError('')} />}
       {op && (
-        <div className="op-summary">
-          <span className="op-summary-item"><StatusPill label={op.status} tone={operationTone(op.status)} /></span>
-          <span className="op-summary-item"><span className="op-summary-label">{t('crawl.plan')}</span><CopyableId value={op.planId} truncateLen={16} /></span>
-          <span className="op-summary-item"><span className="op-summary-label">{t('crawl.trigger')}</span>{op.trigger}</span>
-          <span className="op-summary-item"><span className="op-summary-label">{t('crawl.started')}</span>{formatDateTime(op.startedUtc)}</span>
-          <span className="op-summary-item"><span className="op-summary-label">{t('crawl.finished')}</span>{op.finishedUtc ? formatDateTime(op.finishedUtc) : '-'}</span>
-          {duration !== null && <span className="op-summary-item"><span className="op-summary-label">{t('crawl.duration', 'Took')}</span>{formatDuration(duration)}</span>}
-          <span className="op-summary-item"><span className="op-summary-label">{t('crawl.bytes')}</span>{formatBytes(op.bytesEnumerated || 0)}</span>
-        </div>
+        <dl className="kv-grid op-details">
+          <dt>{t('crawl.status')}</dt><dd><StatusPill label={op.status} tone={operationTone(op.status)} /></dd>
+          <dt>{t('crawl.plan')}</dt><dd><CopyableId value={op.planId} truncateLen={16} /></dd>
+          <dt>{t('crawl.trigger')}</dt><dd>{op.trigger}</dd>
+          <dt>{t('crawl.started')}</dt><dd>{formatDateTime(op.startedUtc)}</dd>
+          <dt>{t('crawl.finished')}</dt><dd>{op.finishedUtc ? formatDateTime(op.finishedUtc) : '-'}</dd>
+          {duration !== null && (<><dt>{t('crawl.duration', 'Took')}</dt><dd>{formatDuration(duration)}</dd></>)}
+          <dt>{t('crawl.bytes')}</dt><dd>{formatBytes(op.bytesEnumerated || 0)}</dd>
+          {op.error && (<><dt>{t('crawl.error')}</dt><dd className="op-error">{op.error}</dd></>)}
+        </dl>
       )}
-      {op?.error && <div className="error-message op-error">{op.error}</div>}
       {op && <SummaryCards rows={cardRows} />}
       <DataGrid rows={objects} columns={columns} rowKey={(o) => o.id} loading={loading}
         facets={facets} onFacetsChange={setFacets} exportName={`crawl-operation-${operationId}`}
