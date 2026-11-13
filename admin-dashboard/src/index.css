@@ -396,7 +396,7 @@ label.has-tip, dt.has-tip { text-decoration: underline dotted var(--color-border
 .modal-subtitle { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: 0.15rem; }
 .modal-body { padding: var(--spacing-lg); overflow-y: auto; }
 .modal-footer {
-  display: flex; justify-content: flex-end; gap: var(--spacing-sm);
+  display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg); border-top: 1px solid var(--color-border);
 }
 .form-grid { display: flex; flex-direction: column; gap: var(--spacing-md); }

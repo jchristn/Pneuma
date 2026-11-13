@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { asArray } from '../utils/api';
 import { formatDateTime, formatDurationMs } from '../utils/format';
 import Modal from './Modal';
+import AutoRefreshControl from './AutoRefreshControl';
 import StatusPill from './StatusPill';
 import CopyableId from './CopyableId';
 import JobDiagnostics from './JobDiagnostics';
@@ -123,6 +124,16 @@ function IngestionLogModal({ isOpen, link, onClose }) {
     return load();
   }, [isOpen, load]);
 
+  // Auto-refresh reloads in place: the timeline stays on screen and a failed tick keeps the last good view.
+  const silentLoad = useCallback(() => {
+    if (!apiClient || !link || !isOpen) return Promise.resolve();
+    return apiClient.getLinkIngestionLog(link.id).then((data) => {
+      const items = asArray(data, 'runs', 'logs');
+      setRuns([...items].sort((a, b) => runTimestamp(b) - runTimestamp(a)));
+      setError('');
+    });
+  }, [apiClient, link, isOpen]);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -153,6 +164,8 @@ function IngestionLogModal({ isOpen, link, onClose }) {
             ))
           )}
           <div className="ilog-actions">
+            <AutoRefreshControl storageKey="modal:ingestion-log" onRefresh={silentLoad}
+              title={t('ingestionLog.autoRefreshTip', 'Automatically reload this ingestion log on the selected interval.')} />
             <button type="button" className="btn btn-secondary" onClick={() => load()}>{t('common.refresh')}</button>
             <button type="button" className="btn btn-primary" onClick={onClose}>{t('common.close')}</button>
           </div>

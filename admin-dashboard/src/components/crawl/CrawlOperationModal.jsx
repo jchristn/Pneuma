@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../Modal';
 import ConfirmModal from '../ConfirmModal';
+import AutoRefreshControl from '../AutoRefreshControl';
 import StatusPill from '../StatusPill';
 import CopyableId from '../CopyableId';
 import ErrorBanner from '../ErrorBanner';
@@ -36,9 +37,11 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
   const [facets, setFacets] = useState({});
   const [confirm, setConfirm] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  // A silent load (auto-refresh) keeps the current rows on screen instead of showing the loading state.
+  const load = useCallback(async (opts) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
+    if (!silent) setError('');
     try {
       const [o, objs] = await Promise.all([
         apiClient.getCrawlOperation(operationId),
@@ -48,6 +51,7 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
       setObjects(objs.items);
       setTotal(objs.total);
       setCapped(objs.capped);
+      if (silent) setError('');
     } catch (err) {
       setError(err?.message || t('crawl.loadError'));
     } finally {
@@ -56,6 +60,7 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
   }, [apiClient, operationId, t]);
 
   useEffect(() => { load(); }, [load]);
+  const silentLoad = useCallback(() => load({ silent: true }), [load]);
 
   const outcomeLabel = useCallback((o) => {
     const k = outcomeKey(o);
@@ -116,7 +121,9 @@ function CrawlOperationModal({ operationId, onClose, onChanged }) {
           {t('crawl.confirmDeletions', { count: op.heldDeletions })}
         </button>
       )}
-      <button type="button" className="button-secondary" onClick={load} disabled={loading}>{loading ? t('common.loading') : t('common.refresh')}</button>
+      <AutoRefreshControl storageKey="modal:crawl-operation" onRefresh={silentLoad}
+        title={t('crawl.autoRefreshTip', 'Automatically reload this operation and its objects on the selected interval.')} />
+      <button type="button" className="button-secondary" onClick={() => load()} disabled={loading}>{loading ? t('common.loading') : t('common.refresh')}</button>
       <button type="button" className="button-primary" onClick={onClose}>{t('common.close')}</button>
     </>
   );

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
 import Modal from './Modal';
+import AutoRefreshControl from './AutoRefreshControl';
 import StatusPill, { toneForStatus } from './StatusPill';
 import CopyButton from './CopyButton';
 import JobDiagnostics from './JobDiagnostics';
@@ -116,6 +117,14 @@ function IngestionLogModal({ link, onClose }) {
 
   useEffect(() => load(), [load]);
 
+  // Auto-refresh reloads in place: the timeline stays on screen and a failed tick keeps the last good view.
+  const silentLoad = useCallback(() => apiClient.getLinkIngestionLog(link.id)
+    .then((data) => {
+      const items = normalizeList(data).items;
+      setRuns([...items].sort((a, b) => runTimestamp(b) - runTimestamp(a)));
+      setError('');
+    }), [apiClient, link.id]);
+
   return (
     <Modal
       title={t('ingestionLog.title')}
@@ -125,6 +134,8 @@ function IngestionLogModal({ link, onClose }) {
       onClose={onClose}
       footer={(
         <>
+          <AutoRefreshControl storageKey="modal:ingestion-log" onRefresh={silentLoad}
+            title={t('ingestionLog.autoRefreshTip', 'Automatically reload this ingestion log on the selected interval.')} />
           <button type="button" className="button-secondary" onClick={() => load()} disabled={loading}>
             {t('common.refresh')}
           </button>

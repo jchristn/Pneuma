@@ -1422,6 +1422,7 @@ select {
 }
 .op-error { white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal-data .form-actions { margin-top: 0; flex-shrink: 0; }
+.op-actions { align-items: center; flex-wrap: wrap; }
 .modal-data .dg-cards, .modal-data .field-hint, .modal-data .form-error, .modal-data .error-banner { flex-shrink: 0; }
 
 .modal-data .modal-body > .op-details { flex-shrink: 0; margin: 0; }
