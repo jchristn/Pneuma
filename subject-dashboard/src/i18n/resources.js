@@ -241,6 +241,60 @@ const en = {
         stageTimeoutSeconds: 'Abort a single ingestion stage if it runs longer than this many seconds.'
       }
     },
+    upload: {
+      button: 'Upload Files',
+      buttonTip: 'Upload documents (PDF, Word, Excel, PowerPoint, text, images, ...) into a subject. You can also drop files anywhere on this page.',
+      title: 'Upload Files',
+      dropTitle: 'Drop files here',
+      or: 'or',
+      browse: 'browse your computer',
+      dropOverlay: 'Drop files to upload them',
+      hint: 'Up to {{max}} per file. PDF, Word, Excel, PowerPoint, text, Markdown, HTML, JSON, CSV, and images. Folders are expanded.',
+      hintNoLimit: 'PDF, Word, Excel, PowerPoint, text, Markdown, HTML, JSON, CSV, and images. Folders are expanded.',
+      empty: 'No files selected yet.',
+      replaceSame: 'Replace files with the same name',
+      replaceSameHint: 'An uploaded file whose name matches an earlier upload in this subject replaces it instead of adding a duplicate.',
+      labelsHint: 'Applied to every file in this upload. Use them later to scope search, retrieval, and chat.',
+      start_one: 'Upload {{count}} file',
+      start_other: 'Upload {{count}} files',
+      uploading: 'Uploading…',
+      cancelAll: 'Cancel uploads',
+      clearFinished: 'Clear finished',
+      retry: 'Retry',
+      remove: 'Remove',
+      viewLog: 'View log',
+      noSubject: 'Select a subject.',
+      summary: '{{done}} uploaded, {{failed}} not uploaded, {{pending}} remaining.',
+      uploadedNotice_one: '{{count}} file uploaded and queued for ingestion.',
+      uploadedNotice_other: '{{count}} files uploaded and queued for ingestion.',
+      downloadFailed: 'The original could not be downloaded.',
+      error415: 'The server does not recognize this file type.',
+      error413: 'The file is too large for the server.',
+      confirmCloseTitle: 'Uploads in progress',
+      confirmCloseMessage_one: '{{count}} file is still uploading or waiting. Close and cancel it?',
+      confirmCloseMessage_other: '{{count}} files are still uploading or waiting. Close and cancel them?',
+      status: {
+        queued: 'Waiting',
+        uploading: 'Uploading {{percent}}%',
+        done: 'Uploaded',
+        replaced: 'Replaced',
+        rejected: 'Not sent',
+        failed: 'Failed',
+        cancelled: 'Cancelled'
+      },
+      reject: {
+        empty: 'The file is empty.',
+        tooLarge: '{{size}} is over the {{max}} limit.',
+        nameTooLong: 'The file name is longer than {{max}} characters.',
+        unsupported: 'Files of type .{{ext}} are not supported.'
+      },
+      kind: {
+        File: 'File',
+        Text: 'Text',
+        Crawl: 'Crawl',
+        Url: 'URL'
+      }
+    },
     addText: {
       button: 'Add Text',
       buttonTip: 'Paste text, Markdown, HTML, or JSON straight into a subject, without a URL.',
@@ -268,6 +322,14 @@ const en = {
       errorGeneric: 'The content could not be added.'
     },
     links: {
+      source: 'Source',
+      kind: 'Kind',
+      contentType: 'Type',
+      size: 'Size',
+      fileName: 'File name',
+      externalKey: 'External key',
+      internalUri: 'Internal URI',
+      downloadOriginal: 'Download Original',
       title: 'Content Links',
       nextRefresh: 'Next Refresh',
       refreshOff: 'Off',
@@ -456,6 +518,8 @@ const en = {
       resetFilters: 'Reset Filters'
     },
     explorer: {
+      bodyFile: 'Request body file',
+      bodyFileHint: 'Choose the file to send as the request body.',
       title: 'API Explorer',
       subtitle: 'Execute live API calls against the server using your session token.',
       operations: 'Operations',
@@ -739,6 +803,70 @@ const es = {
       withoutWarnings: 'Sin advertencias',
       warningCount_one: '{{count}} advertencia',
       warningCount_other: '{{count}} advertencias'
+    },
+    upload: {
+      button: 'Subir archivos',
+      buttonTip: 'Suba documentos (PDF, Word, Excel, PowerPoint, texto, imágenes, ...) a un tema. También puede soltar archivos en cualquier parte de esta página.',
+      title: 'Subir archivos',
+      dropTitle: 'Suelte los archivos aquí',
+      or: 'o',
+      browse: 'busque en su equipo',
+      dropOverlay: 'Suelte los archivos para subirlos',
+      hint: 'Hasta {{max}} por archivo. PDF, Word, Excel, PowerPoint, texto, Markdown, HTML, JSON, CSV e imágenes. Las carpetas se expanden.',
+      hintNoLimit: 'PDF, Word, Excel, PowerPoint, texto, Markdown, HTML, JSON, CSV e imágenes. Las carpetas se expanden.',
+      empty: 'Aún no hay archivos seleccionados.',
+      replaceSame: 'Reemplazar archivos con el mismo nombre',
+      replaceSameHint: 'Un archivo cuyo nombre coincide con otro subido antes a este tema lo reemplaza en lugar de duplicarlo.',
+      labelsHint: 'Se aplican a todos los archivos de esta subida. Úselas después para acotar la búsqueda, la recuperación y el chat.',
+      start_one: 'Subir {{count}} archivo',
+      start_other: 'Subir {{count}} archivos',
+      uploading: 'Subiendo…',
+      cancelAll: 'Cancelar subidas',
+      clearFinished: 'Quitar terminados',
+      retry: 'Reintentar',
+      remove: 'Quitar',
+      viewLog: 'Ver registro',
+      noSubject: 'Seleccione un tema.',
+      summary: '{{done}} subidos, {{failed}} sin subir, {{pending}} pendientes.',
+      uploadedNotice_one: '{{count}} archivo subido y en cola para la ingesta.',
+      uploadedNotice_other: '{{count}} archivos subidos y en cola para la ingesta.',
+      downloadFailed: 'No se pudo descargar el original.',
+      error415: 'El servidor no reconoce este tipo de archivo.',
+      error413: 'El archivo es demasiado grande para el servidor.',
+      confirmCloseTitle: 'Subidas en curso',
+      confirmCloseMessage_one: '{{count}} archivo se está subiendo o espera. ¿Cerrar y cancelarlo?',
+      confirmCloseMessage_other: '{{count}} archivos se están subiendo o esperan. ¿Cerrar y cancelarlos?',
+      status: {
+        queued: 'En espera',
+        uploading: 'Subiendo {{percent}}%',
+        done: 'Subido',
+        replaced: 'Reemplazado',
+        rejected: 'No enviado',
+        failed: 'Error',
+        cancelled: 'Cancelado'
+      },
+      reject: {
+        empty: 'El archivo está vacío.',
+        tooLarge: '{{size}} supera el límite de {{max}}.',
+        nameTooLong: 'El nombre del archivo supera los {{max}} caracteres.',
+        unsupported: 'Los archivos de tipo .{{ext}} no son compatibles.'
+      },
+      kind: {
+        File: 'Archivo',
+        Text: 'Texto',
+        Crawl: 'Rastreo',
+        Url: 'URL'
+      }
+    },
+    links: {
+      source: 'Origen',
+      kind: 'Clase',
+      contentType: 'Tipo',
+      size: 'Tamaño',
+      fileName: 'Nombre de archivo',
+      externalKey: 'Clave externa',
+      internalUri: 'URI interna',
+      downloadOriginal: 'Descargar original'
     },
     addText: {
       button: 'Agregar texto',

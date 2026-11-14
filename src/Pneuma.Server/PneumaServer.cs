@@ -168,6 +168,12 @@ namespace Pneuma.Server
 
         #region Public-Members
 
+        /// <summary>
+        /// Type detector used to refuse an uploaded file DocumentAtom does not recognize before it is stored. Set it
+        /// before <see cref="Start"/>; null (the default) leaves type detection to the ingestion job.
+        /// </summary>
+        public IAtomizer? Atomizer { get; set; } = null;
+
         /// <summary>The authorization service, exposed for route registrars.</summary>
         public AuthorizationService Authorization { get { return _Authorization; } }
 
@@ -248,7 +254,7 @@ namespace Pneuma.Server
             CascadeDeletionService cascade = new CascadeDeletionService(_Database, _Artifacts, _Vectors, _GraphFactory, _Blobs, _Collections, cascadeLiteGraphAdmin);
             new SubjectRoutes(_Database, _Authorization, cascade, _Concurrency).Register(_Server);
             new SubjectPromptRoutes(_Database, _Authorization).Register(_Server);
-            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections, new FetchSafetyPolicy(_Settings.Ingestion.FetchSafety), _Blobs, _Settings.Ingestion).Register(_Server);
+            new SubjectLinkRoutes(_Database, _Authorization, _Artifacts, _Collections, new FetchSafetyPolicy(_Settings.Ingestion.FetchSafety), _Blobs, _Settings.Ingestion, Atomizer).Register(_Server);
             new IngestionJobRoutes(_Database, _Authorization).Register(_Server);
             new LinkRefreshRoutes(_Database, _Authorization, _LinkRefresh).Register(_Server);
             new CrawlPlanRoutes(_Database, _Authorization, _Collections, _Crawlers, _CrawlPlans, _CrawlSync, _CrawlScheduler).Register(_Server);

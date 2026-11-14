@@ -189,6 +189,18 @@ brevity):
   embedding_endpoint_id=None, completion_endpoint_id=None)`,
   `list_ingestion_endpoints()`, `list_subject_links(subject_id)`,
   `list_links()`, `get_link(id)`, `delete_link(id)`
+- **File upload**: `upload_file(subject_id, file, filename=None, content_type=None,
+  title=None, external_key=None, labels=None, tags=None)` sends one file
+  (`POST /v1.0/subjects/{id}/files`); `file` is a path, bytes, or a binary file
+  object, and the content type is guessed from the name. Reusing `external_key`
+  replaces the earlier file. `get_upload_settings()` returns the size limit and
+  supported types; `download_link_source(link_id, dest=None)` returns
+  `{data, contentType, fileName, path}` and can save the original to disk.
+
+  ```python
+  result = client.upload_file(subject["id"], "reports/q3.pdf", labels=["finance"])
+  print(result["link"]["fileName"], result["jobId"])
+  ```
   - `labels` — optional list of plain strings attached to every chunk the link
     produces (for `submit_links`, applied to every URL in the batch)
   - `tags` — optional `{key: value}` dict attached to every chunk (for
@@ -261,6 +273,9 @@ Or under pytest:
 ```bash
 pytest tests/test_harness.py
 ```
+
+`tests/test_upload.py` tests the upload and download helpers offline against a loopback HTTP
+server (no Pneuma server needed): `python tests/test_upload.py` or `pytest tests/test_upload.py`.
 
 Environment overrides: `PNEUMA_BASE_URL`, `PNEUMA_ADMIN_EMAIL`, `PNEUMA_ADMIN_PASSWORD`.
 

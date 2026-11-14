@@ -92,6 +92,10 @@
     {
       "key": "tenantPromptId",
       "value": ""
+    },
+    {
+      "key": "uploadedLinkId",
+      "value": ""
     }
   ],
   "auth": {
@@ -1372,6 +1376,188 @@
         }
       ],
       "description": "Push text, Markdown, HTML, or JSON into a subject without a URL. Content is stored and ingested like a link; an externalKey makes a push an upsert."
+    },
+    {
+      "name": "File upload",
+      "description": "Upload files (PDF, Office, text, Markdown, HTML, JSON, CSV, images) to a subject. The request body is the raw file; filename, title, externalKey, labels (repeatable), and tag.{key} go in the query string. The PDF request reads postman/fixtures/sample.pdf; run the collection from the repository root (or set the file path) so the file is found.",
+      "item": [
+        {
+          "name": "Upload settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with limits and types', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.maxUploadBytes).to.be.above(0);",
+                  "  pm.expect(body.supportedTypes).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/ingestion/upload-settings",
+            "description": "The upload size limit, the file name limit, and the file types the server expects to extract (advisory; the server's type detection is authoritative)."
+          }
+        },
+        {
+          "name": "Upload Markdown file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 with the file name and a queued job', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.link.fileName).to.eql('sample.md');",
+                  "  pm.expect(body.link.sourceKind).to.eql('Inline');",
+                  "  pm.expect(body.jobId).to.be.a('string');",
+                  "  pm.collectionVariables.set('uploadedLinkId', body.link.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/files?filename=sample.md&externalKey=postman-sample-md&labels=postman&tag.source=postman",
+            "description": "Upload a Markdown file (here the body is the file's text). Uploading again with the same externalKey replaces the file (200, replaced: true).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/markdown"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "# Upload sample\n\nThis Markdown file was uploaded through the Pneuma file upload API.\n"
+            }
+          }
+        },
+        {
+          "name": "Upload PDF file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or 200 with the file name', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(pm.response.json().link.fileName).to.eql('sample.pdf');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/files?filename=sample.pdf&externalKey=postman-sample-pdf&labels=postman",
+            "description": "Upload a PDF from postman/fixtures/sample.pdf. DocumentAtom checks the type before the file is accepted (415 for a type it cannot extract).",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/pdf"
+              }
+            ],
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": "postman/fixtures/sample.pdf"
+              }
+            }
+          }
+        },
+        {
+          "name": "Download uploaded original",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with the original and its file name', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/markdown');",
+                  "  pm.expect(pm.response.headers.get('Content-Disposition')).to.include('sample.md');",
+                  "  pm.expect(pm.response.text()).to.include('Upload sample');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1.0/links/{{uploadedLinkId}}/source?download=true",
+            "description": "The exact bytes that were uploaded, with their content type and a Content-Disposition attachment named after the file."
+          }
+        },
+        {
+          "name": "Upload (missing filename, 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 without a file name', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/files",
+            "description": "Negative example: the filename query parameter is required.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "Hello."
+            }
+          }
+        },
+        {
+          "name": "Upload (empty file, 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 for an empty body', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1.0/subjects/{{subjectId}}/files?filename=empty.txt",
+            "description": "Negative example: an empty file is refused.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            }
+          }
+        }
+      ]
     },
     {
       "name": "Crawl plans",

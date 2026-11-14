@@ -14,6 +14,12 @@ function persistHistory(list) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, MAX_HISTORY))); } catch { /* ignore */ }
 }
 
+// An operation whose request body is a raw file (application/octet-stream, no JSON form) takes a file, not JSON text.
+function isBinaryRequest(op) {
+  const content = op?.requestBody?.content || {};
+  return !!content['application/octet-stream'] && !content['application/json'];
+}
+
 export function useApiExplorer(apiClient) {
   const [spec, setSpec] = useState(null);
   const [specError, setSpecError] = useState(null);
@@ -23,6 +29,8 @@ export function useApiExplorer(apiClient) {
   const [queryParams, setQueryParams] = useState({});
   const [headers, setHeaders] = useState({});
   const [body, setBody] = useState('');
+  // The file sent as the body of a binary (file upload) operation.
+  const [bodyFile, setBodyFile] = useState(null);
   const [response, setResponse] = useState(null);
   const [running, setRunning] = useState(false);
   const [history, setHistory] = useState(loadHistory);
@@ -56,7 +64,8 @@ export function useApiExplorer(apiClient) {
     setPathParams(pp);
     setQueryParams(qp);
     setHeaders({});
-    setBody(getRequestBodyTemplate(op.requestBody, spec));
+    setBody(isBinaryRequest(op) ? '' : getRequestBodyTemplate(op.requestBody, spec));
+    setBodyFile(null);
   }, [operations, spec]);
 
   const resolvedPath = useMemo(() => operation ? substitutePathParams(operation.path, pathParams) : '', [operation, pathParams]);
@@ -73,12 +82,13 @@ export function useApiExplorer(apiClient) {
     setRunning(true);
     const start = performance.now();
     try {
+      const binary = isBinaryRequest(operation);
       const raw = await apiClient.executeExplorer({
         method: operation.method,
         path: resolvedPath,
         query: queryParams,
-        headers,
-        body
+        headers: binary ? { 'Content-Type': bodyFile?.type || 'application/octet-stream', ...headers } : headers,
+        body: binary ? bodyFile : body
       });
       const text = await raw.text();
       const durationMs = performance.now() - start;
@@ -91,7 +101,7 @@ export function useApiExplorer(apiClient) {
     } finally {
       setRunning(false);
     }
-  }, [operation, resolvedPath, queryParams, headers, body, operationId, pathParams, apiClient]);
+  }, [operation, resolvedPath, queryParams, headers, body, bodyFile, operationId, pathParams, apiClient]);
 
   const loadFromHistory = useCallback((item) => {
     setOperationId(item.operationId);
@@ -109,7 +119,7 @@ export function useApiExplorer(apiClient) {
   return {
     spec, specError, specLoading, groups, operation, operationId, selectOperation,
     pathParams, setPathParams, queryParams, setQueryParams, headers, setHeaders,
-    body, setBody, resolvedUrl, resolvedPath, execute, response, running,
+    body, setBody, bodyFile, setBodyFile, isBinaryBody: isBinaryRequest(operation), resolvedUrl, resolvedPath, execute, response, running,
     history, loadFromHistory, deleteHistory
   };
 }

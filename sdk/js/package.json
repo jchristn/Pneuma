@@ -8,7 +8,8 @@
     ".": "./src/index.js"
   },
   "scripts": {
-    "test": "node test/harness.mjs"
+    "test": "node test/upload.test.mjs && node test/harness.mjs",
+    "test:upload": "node test/upload.test.mjs"
   },
   "keywords": [
     "pneuma",

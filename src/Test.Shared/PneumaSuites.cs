@@ -40,6 +40,7 @@ namespace Test.Shared
                     VersionReplacementSuite.Build(),
                     ChunkContextSuite.Build(),
                     InlineContentSuite.Build(),
+                    FileUploadSuite.Build(),
                     CrawlFrameworkSuite.Build(),
                     CrawlApiSuite.Build(),
                     CrawlersSuite.Build(),

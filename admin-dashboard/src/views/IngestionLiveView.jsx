@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { linkDisplayName } from '../utils/files';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
@@ -74,7 +75,7 @@ function LiveSection({ titleKey, hint, items, nowMs, t, actionsFor, onRowClick }
           <tbody>
             {items.map((item) => (
               <tr key={item.jobId} className="clickable" style={{ cursor: 'pointer' }} onClick={() => onRowClick(item)}>
-                <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{item.sourceUrl}</td>
+                <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.sourceUrl}>{linkDisplayName({ url: item.sourceUrl })}</td>
                 <td style={{ overflow: 'hidden' }}><StageBadge stage={item.stage} /></td>
                 <td><span className="mono">{formatElapsed(elapsedMs(item.stateSinceUtc, nowMs))}</span></td>
                 <td style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><CopyableId value={item.jobId} truncateLen={10} /></td>

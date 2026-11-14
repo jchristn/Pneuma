@@ -74,6 +74,15 @@ namespace Pneuma.Core.Integrations.Implementations
 
         #region Public-Methods
 
+        /// <summary>Whether DocumentAtom has an extraction route for a detected document type.</summary>
+        /// <param name="documentType">Document type reported by type detection, for example <c>Pdf</c>.</param>
+        /// <returns>True when the type can be extracted.</returns>
+        public static bool CanExtract(string? documentType)
+        {
+            if (String.IsNullOrWhiteSpace(documentType)) return false;
+            return _RouteMap.ContainsKey(documentType.Trim());
+        }
+
         /// <inheritdoc />
         public Task<IntegrationHealthResult> ProbeAsync(CancellationToken token = default)
         {

@@ -49,6 +49,9 @@ function ApiExplorerView() {
     setHeaders,
     body,
     setBody,
+    bodyFile,
+    setBodyFile,
+    isBinaryBody,
     resolvedUrl,
     snippets,
     isDestructive,
@@ -210,13 +213,32 @@ function ApiExplorerView() {
               {operation.method !== 'GET' && operation.method !== 'HEAD' && (
                 <div className="explorer-body">
                   <div className="kv-label">{t('explorer.body')}</div>
-                  <textarea
-                    className="explorer-body-editor"
-                    rows={8}
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    spellCheck={false}
-                  />
+                  {isBinaryBody ? (
+                    <div>
+                      <input
+                        type="file"
+                        aria-label={t('explorer.bodyFile')}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setBodyFile(file);
+                          if (file && Object.prototype.hasOwnProperty.call(queryParams, 'filename') && !queryParams.filename) {
+                            setQueryParams({ ...queryParams, filename: file.name });
+                          }
+                        }}
+                      />
+                      <p className="field-hint">
+                        {bodyFile ? `${bodyFile.name} (${bodyFile.size} bytes, ${bodyFile.type || 'application/octet-stream'})` : t('explorer.bodyFileHint')}
+                      </p>
+                    </div>
+                  ) : (
+                    <textarea
+                      className="explorer-body-editor"
+                      rows={8}
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      spellCheck={false}
+                    />
+                  )}
                 </div>
               )}
 

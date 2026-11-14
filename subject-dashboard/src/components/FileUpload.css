@@ -1,0 +1,206 @@
+/* File upload: drop zone, upload queue, and the page-level drag overlay. Tokens fall back across the dashboards'
+   variable names so the same sheet works in each. */
+.fu-root {
+  --fu-border: var(--border-color, var(--color-border, #e2e5ee));
+  --fu-surface: var(--bg-secondary, var(--color-surface, #f5f6fa));
+  --fu-surface-alt: var(--bg-tertiary, var(--color-surface-alt, #eef0f6));
+  --fu-text: var(--text-primary, var(--color-text, #1a1d2b));
+  --fu-muted: var(--text-secondary, var(--color-text-secondary, #5b6478));
+  --fu-accent: var(--color-primary, #6366f1);
+  --fu-accent-soft: var(--color-primary-alpha, rgba(99, 102, 241, 0.14));
+  --fu-danger: var(--color-danger, #dc2626);
+  --fu-success: var(--color-success, #16a34a);
+  --fu-warning: var(--color-warning, #d97706);
+}
+
+.fu-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 2px dashed var(--fu-border);
+  border-radius: 10px;
+  background: var(--fu-surface);
+  color: var(--fu-muted);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fu-dropzone:hover,
+.fu-dropzone:focus-visible {
+  border-color: var(--fu-accent);
+  outline: none;
+}
+.fu-dropzone.is-over {
+  border-color: var(--fu-accent);
+  background: var(--fu-accent-soft);
+  color: var(--fu-text);
+}
+.fu-dropzone.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.fu-dropzone-icon {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--fu-accent);
+}
+.fu-dropzone-title {
+  font-weight: 600;
+  color: var(--fu-text);
+}
+.fu-dropzone-hint {
+  font-size: 0.8rem;
+  max-width: 520px;
+}
+
+.fu-queue {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 1px solid var(--fu-border);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.fu-queue-empty {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: var(--fu-muted);
+}
+.fu-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--fu-border);
+}
+.fu-item:last-child {
+  border-bottom: none;
+}
+.fu-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--fu-text);
+}
+.fu-item-meta {
+  grid-column: 1 / 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.78rem;
+  color: var(--fu-muted);
+}
+.fu-item-actions {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.fu-item-status.is-done { color: var(--fu-success); }
+.fu-item-status.is-failed,
+.fu-item-status.is-rejected { color: var(--fu-danger); }
+.fu-item-status.is-uploading { color: var(--fu-accent); }
+.fu-item-error {
+  grid-column: 1 / 2;
+  font-size: 0.78rem;
+  color: var(--fu-danger);
+  overflow-wrap: anywhere;
+}
+.fu-progress {
+  grid-column: 1 / 2;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fu-surface-alt);
+  overflow: hidden;
+}
+.fu-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--fu-accent);
+  transition: width 0.2s ease;
+}
+.fu-link-button {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--fu-accent);
+  cursor: pointer;
+}
+.fu-link-button:hover { text-decoration: underline; }
+.fu-link-button:disabled { color: var(--fu-muted); cursor: default; text-decoration: none; }
+.fu-link-button.is-danger { color: var(--fu-danger); }
+
+.fu-summary {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--fu-muted);
+}
+.fu-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+}
+.fu-check input { margin-top: 3px; }
+
+/* Page-level overlay shown while files are dragged over the Links page. */
+.fu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 18, 35, 0.45);
+  pointer-events: none;
+}
+.fu-overlay-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 40px;
+  max-width: 100%;
+  border: 2px dashed var(--fu-accent);
+  border-radius: 14px;
+  background: var(--bg-primary, var(--color-background, #ffffff));
+  color: var(--fu-text);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 12px 32px rgba(20, 22, 40, 0.25);
+}
+
+/* Source column badge for uploaded and pushed links. */
+.fu-kind {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: 1px;
+  background: var(--fu-accent-soft);
+  color: var(--fu-accent);
+}
+.fu-source-name {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .fu-dropzone { padding: 20px 12px; }
+  .fu-item { grid-template-columns: minmax(0, 1fr); }
+  .fu-item-actions { grid-column: 1 / 2; grid-row: auto; }
+  .fu-overlay-panel { padding: 24px 20px; }
+}

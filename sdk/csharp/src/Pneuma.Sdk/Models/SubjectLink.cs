@@ -51,6 +51,9 @@ namespace Pneuma.Sdk.Models
         /// <summary>Content type the content was pushed or found with, or null.</summary>
         public string? ContentType { get; set; } = null;
 
+        /// <summary>Original file name of an uploaded file, or null for URL links, crawled links, and pushed text.</summary>
+        public string? FileName { get; set; } = null;
+
         /// <summary>Size of pushed or crawled content in bytes; 0 when unknown.</summary>
         public long SizeBytes { get; set; } = 0;
 

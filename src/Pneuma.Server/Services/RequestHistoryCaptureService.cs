@@ -104,14 +104,49 @@ namespace Pneuma.Server.Services
                 RequestHeaders = RedactHeaders(ctx.Request.Headers)
             };
 
-            // Secret-named JSON values (passwords, API keys, tokens, crawl-plan credentials) are masked before storage.
-            string? requestBody = JsonBodyRedactor.Redact(ctx.Request.DataAsString);
-            AttachRequestBody(entry, requestBody);
+            // Binary bodies (file uploads, downloaded sources) are recorded as a size placeholder rather than decoded as
+            // text. Secret-named JSON values (passwords, API keys, tokens, crawl-plan credentials) are masked before storage.
+            if (IsBinary(ctx.Request.ContentType))
+            {
+                entry.RequestBody = BinaryPlaceholder(ctx.Request.ContentLength);
+                entry.RequestBodyBytes = Math.Max(0L, ctx.Request.ContentLength);
+            }
+            else
+            {
+                string? requestBody = JsonBodyRedactor.Redact(ctx.Request.DataAsString);
+                AttachRequestBody(entry, requestBody);
+            }
 
-            string? responseBody = ctx.Response.DataAsString;
-            AttachResponseBody(entry, responseBody);
+            if (IsBinary(ctx.Response.ContentType))
+            {
+                long responseLength = ctx.Response.DataAsBytes?.LongLength ?? 0L;
+                entry.ResponseBody = BinaryPlaceholder(responseLength);
+                entry.ResponseBodyBytes = responseLength;
+            }
+            else
+            {
+                string? responseBody = ctx.Response.DataAsString;
+                AttachResponseBody(entry, responseBody);
+            }
 
             return entry;
+        }
+
+        // A body is binary unless its content type is textual (text/*, JSON, XML, form data, and similar). A missing
+        // content type is treated as text so untyped API calls keep their bodies.
+        private static bool IsBinary(string? contentType)
+        {
+            if (String.IsNullOrWhiteSpace(contentType)) return false;
+            string ct = contentType.Split(';')[0].Trim().ToLowerInvariant();
+            if (ct.StartsWith("text/", StringComparison.Ordinal)) return false;
+            if (ct.Contains("json") || ct.Contains("xml") || ct.Contains("javascript") || ct.Contains("turtle") || ct.Contains("graphql")) return false;
+            if (ct == "application/x-www-form-urlencoded" || ct == "application/x-ndjson") return false;
+            return true;
+        }
+
+        private static string BinaryPlaceholder(long length)
+        {
+            return "[binary " + Math.Max(0L, length).ToString(System.Globalization.CultureInfo.InvariantCulture) + " bytes]";
         }
 
         private void AttachRequestBody(RequestHistoryEntry entry, string? body)

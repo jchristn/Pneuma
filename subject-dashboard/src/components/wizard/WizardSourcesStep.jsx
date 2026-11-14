@@ -3,11 +3,12 @@ import DataGrid from '../grid/DataGrid';
 import CrawlPlanFormModal from '../crawl/CrawlPlanFormModal';
 import { listOf } from './wizardDraft';
 import { GuidanceBar } from './WizardParts';
+import { acceptAttribute, dragHasFiles, filesFromDrop, linkDisplayName, precheckFile } from '../../utils/files';
 
-const TABS = ['links', 'text', 'crawl'];
+const TABS = ['links', 'files', 'text', 'crawl'];
 
-// Step 7: the subject exists. The model suggests where its content usually lives; the user adds links, pastes text,
-// or sets up a crawl plan, and watches ingestion progress. Ingestion carries on if the wizard is closed.
+// Step 7: the subject exists. The model suggests where its content usually lives; the user adds links, uploads files,
+// pastes text, or sets up a crawl plan, and watches ingestion progress. Ingestion carries on if the wizard is closed.
 function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunners, stepModelFor, setStepModel, defaultModelLabel }) {
   const subject = state.created?.subject;
   const [tab, setTab] = useState('links');
@@ -20,6 +21,14 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
   const [error, setError] = useState('');
   const [types, setTypes] = useState(null);
   const [crawlOpen, setCrawlOpen] = useState(false);
+  const [uploadSettings, setUploadSettings] = useState(null);
+  const [fileOver, setFileOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+
+  useEffect(() => {
+    if (tab !== 'files' || uploadSettings) return;
+    apiClient.getUploadSettings().then(setUploadSettings).catch(() => setUploadSettings({}));
+  }, [tab, uploadSettings, apiClient]);
 
   const load = useCallback(async () => {
     if (!subject) return;
@@ -56,6 +65,51 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
     if (!text.trim()) return;
     run(() => apiClient.wizardAddText(subject.id, title.trim() || null, text), t('wizard.sources.textAdded')).then(() => { setTitle(''); setText(''); });
   };
+  // Upload files one at a time; a file the pre-check refuses, or the server rejects, is reported and skipped.
+  const uploadFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length || !subject) return;
+    setWorking(true);
+    setError('');
+    setMessage('');
+    const failures = [];
+    let uploaded = 0;
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      setUploadProgress(t('wizard.sources.uploadingFile', { index: i + 1, total: files.length, name: file.name }));
+      const refused = precheckFile(file, uploadSettings);
+      if (refused) {
+        failures.push(`${file.name}: ${t(`wizard.sources.reject.${refused.code}`, refused.params)}`);
+        continue;
+      }
+      try {
+        await apiClient.uploadFile(subject.id, file, {});
+        uploaded += 1;
+      } catch (err) {
+        failures.push(`${file.name}: ${err?.message || t('wizard.sources.failed')}`);
+      }
+    }
+    setUploadProgress('');
+    if (uploaded > 0) setMessage(t('wizard.sources.filesAdded', { count: uploaded }));
+    if (failures.length) setError(failures.join(' · '));
+    setWorking(false);
+    await load();
+  };
+  const onFileDrop = async (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setFileOver(false);
+    if (working) return;
+    await uploadFiles(await filesFromDrop(e.dataTransfer));
+  };
+  const onFileDragOver = (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setFileOver(true);
+  };
+
   const openCrawl = async () => {
     if (!types) {
       try { setTypes(listOf(await apiClient.listCrawlPlanTypes())); } catch { setTypes([]); }
@@ -101,6 +155,32 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
           </div>
         </div>
       )}
+      {tab === 'files' && (
+        <div className="sw-panel-inset">
+          <label
+            className="sw-label"
+            htmlFor="sw-files"
+            onDragEnter={onFileDragOver}
+            onDragOver={onFileDragOver}
+            onDragLeave={() => setFileOver(false)}
+            onDrop={onFileDrop}
+            style={{
+              display: 'block',
+              padding: '24px 16px',
+              border: `2px dashed ${fileOver ? 'var(--color-primary, #6366f1)' : 'var(--border-color, var(--color-border, #d0d4e0))'}`,
+              borderRadius: 10,
+              textAlign: 'center',
+              cursor: working ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <strong>{t('wizard.sources.dropFiles')}</strong>
+            <span style={{ display: 'block', marginTop: 4, fontWeight: 400 }}>{t('wizard.sources.filesHint')}</span>
+          </label>
+          <input id="sw-files" type="file" multiple hidden accept={acceptAttribute(uploadSettings) || undefined} disabled={working}
+            onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} />
+          {uploadProgress && <p className="sw-muted" role="status">{uploadProgress}</p>}
+        </div>
+      )}
       {tab === 'text' && (
         <div className="sw-panel-inset">
           <label className="sw-label" htmlFor="sw-text-title">{t('wizard.sources.textTitle')}</label>
@@ -130,7 +210,7 @@ function WizardSourcesStep({ state, generate, busy, apiClient, t, completionRunn
           <div className="sw-grid-wrap">
             <DataGrid rows={links} rowKey={(l) => l.id} exportName="subject-links" tableId="wizard-links" initialSort={{ key: 'status', dir: 'asc' }}
               columns={[
-                { key: 'source', label: t('wizard.sources.source', 'Source'), value: (l) => l.title || l.url, fuzzy: true, width: '72%' },
+                { key: 'source', label: t('wizard.sources.source', 'Source'), value: (l) => (l.fileName ? linkDisplayName(l) : (l.title || linkDisplayName(l))), fuzzy: true, width: '72%' },
                 { key: 'status', label: t('wizard.sources.statusLabel', 'Status'), facet: true, width: '28%',
                   value: (l) => t(`wizard.sources.status.${l.status}`, { defaultValue: String(l.status) }),
                   render: (l) => <span className={`sw-status sw-status-${String(l.status).toLowerCase()}`}>{t(`wizard.sources.status.${l.status}`, { defaultValue: String(l.status) })}</span> }

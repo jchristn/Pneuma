@@ -276,6 +276,10 @@ namespace Pneuma.Core.Database.Mysql.Queries
                 {
                     "CREATE TABLE IF NOT EXISTS subjectquestions (id VARCHAR(64) PRIMARY KEY, tenantid VARCHAR(64) NOT NULL, subjectid VARCHAR(64) NOT NULL, question TEXT NOT NULL, kind VARCHAR(32) NOT NULL, position INT NOT NULL DEFAULT 0, origin VARCHAR(16) NOT NULL, createdutc VARCHAR(32) NOT NULL, KEY idx_subjectquestions_tenant_subject (tenantid, subjectid, position));"
                 }));
+                list.Add(new SchemaMigration(37, "Add link file name", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN filename VARCHAR(256);"
+                }));
                 return list;
             }
         }

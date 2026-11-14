@@ -76,7 +76,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
         internal static string InsertSql(SubjectLink link)
         {
             return
-                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, contenthash, active, isprotected, deletionstatus, sourcekind, externalkey, contenttype, sizebytes, crawlplanid, refreshintervalminutes, nextrefreshutc, lastrefreshutc, refreshfailures, sourceetag, sourcelastmodifiedutc, createdutc, lastupdateutc) VALUES (" +
+                "INSERT INTO subjectlinks (id, tenantid, subjectid, url, title, labelsjson, tagsjson, submittedbyuserid, status, lastingestedutc, lasterror, contenthash, active, isprotected, deletionstatus, sourcekind, externalkey, contenttype, filename, sizebytes, crawlplanid, refreshintervalminutes, nextrefreshutc, lastrefreshutc, refreshfailures, sourceetag, sourcelastmodifiedutc, createdutc, lastupdateutc) VALUES (" +
                 Sanitizer.Str(link.Id) + ", " + Sanitizer.Str(link.TenantId) + ", " +
                 Sanitizer.Str(link.SubjectId) + ", " + Sanitizer.Str(link.Url) + ", " +
                 Sanitizer.Str(link.Title) + ", " + Sanitizer.Str(JsonColumn.FromStrings(link.Labels)) + ", " +
@@ -84,7 +84,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 Sanitizer.Str(link.Status.ToString()) + ", " + Sanitizer.Ts(link.LastIngestedUtc) + ", " +
                 Sanitizer.Str(link.LastError) + ", " + Sanitizer.Str(link.ContentHash) + ", " + Sanitizer.Bit(link.Active) + ", " +
                 Sanitizer.Bit(link.IsProtected) + ", " + Sanitizer.Str(link.DeletionStatus.ToString()) + ", " +
-                Sanitizer.Str(link.SourceKind.ToString()) + ", " + Sanitizer.Str(link.ExternalKey) + ", " + Sanitizer.Str(link.ContentType) + ", " +
+                Sanitizer.Str(link.SourceKind.ToString()) + ", " + Sanitizer.Str(link.ExternalKey) + ", " + Sanitizer.Str(link.ContentType) + ", " + Sanitizer.Str(link.FileName) + ", " +
                 link.SizeBytes.ToString(CultureInfo.InvariantCulture) + ", " + Sanitizer.Str(link.CrawlPlanId) + ", " +
                 NullableInt(link.RefreshIntervalMinutes) + ", " + Sanitizer.Ts(link.NextRefreshUtc) + ", " + Sanitizer.Ts(link.LastRefreshUtc) + ", " +
                 Sanitizer.Num(link.RefreshFailures) + ", " + Sanitizer.Str(link.SourceETag) + ", " + Sanitizer.Ts(link.SourceLastModifiedUtc) + ", " +
@@ -174,6 +174,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 ", sourcekind = " + Sanitizer.Str(link.SourceKind.ToString()) +
                 ", externalkey = " + Sanitizer.Str(link.ExternalKey) +
                 ", contenttype = " + Sanitizer.Str(link.ContentType) +
+                ", filename = " + Sanitizer.Str(link.FileName) +
                 ", sizebytes = " + link.SizeBytes.ToString(CultureInfo.InvariantCulture) +
                 ", crawlplanid = " + Sanitizer.Str(link.CrawlPlanId) +
                 ", refreshintervalminutes = " + NullableInt(link.RefreshIntervalMinutes) +
@@ -219,6 +220,7 @@ namespace Pneuma.Core.Database.SqlServer.Implementations
                 SourceKind = RowReader.GetEnum<SourceKindEnum>(row, "sourcekind", SourceKindEnum.Url),
                 ExternalKey = RowReader.GetNullableString(row, "externalkey"),
                 ContentType = RowReader.GetNullableString(row, "contenttype"),
+                FileName = RowReader.GetNullableString(row, "filename"),
                 SizeBytes = RowReader.GetLong(row, "sizebytes"),
                 CrawlPlanId = RowReader.GetNullableString(row, "crawlplanid"),
                 RefreshIntervalMinutes = NullableIntOf(row, "refreshintervalminutes"),

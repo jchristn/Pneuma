@@ -49,7 +49,7 @@ The pieces below are already in place and the wizard builds on them rather than 
 | Ontology as prompt text | `ClassificationSetupBuilder.cs` | Without a pinned version, the `ontology.definition` chain plus the subject's `OntologyDefinitionPrompt` is the ontology. |
 | Structured ontologies (in progress) | `ONTOLOGY_GOVERNANCE.md`, `Pneuma.Core/Ontologies/` | Tenant ontologies with Draft, Approved, and Retired versions; a subject pins one approved version. `OntologyProposer` drafts a version from a subject's content. No routes yet. |
 | Evaluation facts | `EvalFact`, `/v1.0/eval/facts` | Question plus expected answer per subject, added one at a time. No bulk create. |
-| Ingestion entry points | `SubjectLinkRoutes.cs`, `CrawlPlanRoutes.cs` | Single and bulk links, pushed text, crawl plans with test and preview. |
+| Ingestion entry points | `SubjectLinkRoutes.cs`, `CrawlPlanRoutes.cs` | Single and bulk links, pushed text, uploaded files, crawl plans with test and preview. |
 | First-run setup wizard | `admin-dashboard/src/components/SetupWizard.jsx` | Models, a bare subject (name, type, description), one link, and a progress view. Sets no prompts. |
 | Starter questions on the ask page | none | The user dashboard shows only the subject name and tagline. |
 
@@ -128,6 +128,8 @@ usually lives ("a discography site, liner notes, interviews; a sitemap would pic
 suggestions rather than actions. Below them are the actual choices, reusing existing surfaces:
 
 - **Links:** paste one or many URLs, with the optional refresh interval.
+- **Files:** drop or choose files (PDF, Office, text, images, ...); each is sent to the file upload API
+  (`POST /v1.0/subjects/{id}/files`) after a size and type pre-check, and refused files are listed by name.
 - **Text:** paste or type content (the content push API).
 - **A crawl plan:** opens the existing crawl plan form for this subject, with its connectivity test and preview.
 

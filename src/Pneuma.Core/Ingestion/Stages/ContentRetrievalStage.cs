@@ -58,7 +58,7 @@ namespace Pneuma.Core.Ingestion.Stages
             byte[] data = resolved.Bytes;
             context.SourceBytes = data;
             context.DeclaredDocumentType = resolved.DeclaredDocumentType;
-            await _Deps.Journal.TryStoreAsync("source", () => _Deps.Artifacts.PutSourceAsync(job.LinkId, data, null, token), token).ConfigureAwait(false);
+            await _Deps.Journal.TryStoreAsync("source", () => _Deps.Artifacts.PutSourceAsync(job.LinkId, data, existingLink?.ContentType, token), token).ConfigureAwait(false);
 
             // Delta detection: hash the fetched bytes and, if identical to what the link last ingested successfully,
             // signal the orchestrator to complete immediately and skip the expensive downstream work. Re-processing

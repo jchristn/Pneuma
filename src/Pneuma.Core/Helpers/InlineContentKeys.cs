@@ -27,6 +27,19 @@ namespace Pneuma.Core.Helpers
             return "pneuma-inline://" + linkId;
         }
 
+        /// <summary>
+        /// The URI an uploaded file's link carries in place of a URL: the inline URI followed by the escaped file name, so
+        /// logs, the live pipeline view, and citations show the file name.
+        /// </summary>
+        /// <param name="linkId">Link identifier.</param>
+        /// <param name="fileName">Original file name; null or empty gives the plain inline URI.</param>
+        /// <returns>The URI.</returns>
+        public static string UriFor(string linkId, string? fileName)
+        {
+            if (String.IsNullOrEmpty(fileName)) return UriFor(linkId);
+            return UriFor(linkId) + "/" + Uri.EscapeDataString(fileName);
+        }
+
         /// <summary>Map a declared content type to the DocumentAtom document type used to extract it, or null when unsupported.</summary>
         /// <param name="contentType">Content type, for example <c>text/markdown</c>.</param>
         /// <returns>The document type, or null.</returns>

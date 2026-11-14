@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { linkDisplayName } from '../utils/files';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
@@ -179,7 +180,7 @@ function IngestionJobsView() {
   const columns = [
     { key: 'sourceUrl', label: t('jobs.source'), render: (r) => (
       <span title={r.sourceUrl || r.linkId} style={{ display: 'inline-block', maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
-        {r.sourceUrl || <CopyableId value={r.linkId} truncateLen={12} />}
+        {r.sourceUrl ? linkDisplayName({ url: r.sourceUrl }) : <CopyableId value={r.linkId} truncateLen={12} />}
       </span>
     ) },
     { key: 'status', label: t('jobs.status'), render: (r) => {

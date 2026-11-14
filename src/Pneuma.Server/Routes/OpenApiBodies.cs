@@ -61,6 +61,25 @@ namespace Pneuma.Server.Routes
         }
 
         /// <summary>
+        /// Build request-body metadata for a raw binary body (a file upload): <c>application/octet-stream</c> with a
+        /// <c>string</c>/<c>binary</c> schema, which OpenAPI tools render as a file picker.
+        /// </summary>
+        /// <param name="description">Human-readable description of the body.</param>
+        /// <param name="required">Whether the body is required. Defaults to true.</param>
+        /// <returns>Request-body metadata.</returns>
+        public static OpenApiRequestBodyMetadata Binary(string description, bool required = true)
+        {
+            OpenApiSchemaMetadata schema = OpenApiSchemaMetadata.Create("string", "binary");
+            OpenApiRequestBodyMetadata body = new OpenApiRequestBodyMetadata
+            {
+                Description = description,
+                Required = required
+            };
+            body.Content["application/octet-stream"] = new OpenApiMediaTypeMetadata { Schema = schema };
+            return body;
+        }
+
+        /// <summary>
         /// Build request-body metadata from an explicit sample instance (for bodies without a convenient
         /// parameterless type, e.g. a pre-populated example).
         /// </summary>

@@ -220,6 +220,16 @@ order, search }` options object as its last argument.
   - `tags` — optional `{ key: value }` map attached to every chunk this link produces
   - both round-trip on the returned link and can later scope retrieval (see `query`)
 - `submitLinks(subjectId, { urls, labels?, tags? })` — `labels`/`tags` apply to every URL in the batch
+- `uploadFile(subjectId, data, { filename?, contentType?, title?, externalKey?, labels?, tags? })` — upload one file
+  (`POST /v1.0/subjects/{id}/files`). `data` is a `File`/`Blob` (browser) or a `Buffer`/`Uint8Array`/`ArrayBuffer`
+  (Node); `filename` is required unless `data` is a `File`. Reusing `externalKey` replaces the earlier file. Throws
+  `PneumaError` with 413 (too large) or 415 (a type the server cannot extract).
+  ```js
+  import { readFile } from 'node:fs/promises';
+  const { link, jobId } = await client.uploadFile(subject.id, await readFile('q3.pdf'), { filename: 'q3.pdf', labels: ['finance'] });
+  ```
+- `getUploadSettings()` — `{ maxUploadBytes, maxFileNameLength, supportedTypes }`
+- `downloadLinkSource(linkId)` — the original upload or source as `{ data: Uint8Array, contentType, fileName }`
 - `listIngestionEndpoints()`
 - `listSubjectLinks(subjectId, options?)`
 - `listLinks(options?)`, `getLink(id)`, `deleteLink(id)`
@@ -292,6 +302,9 @@ node test/harness.mjs [baseUrl] [email] [password]
 ```
 
 Defaults: `http://127.0.0.1:8080`, `admin@pneuma`, `password`.
+
+`npm test` first runs `test/upload.test.mjs`, which tests the upload and download helpers offline against a loopback
+HTTP server (`npm run test:upload` runs it alone).
 
 ## License
 

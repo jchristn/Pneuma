@@ -54,6 +54,7 @@
       "allowInvalidCertificates": false,
       "maxRequestsPerHost": 2
     },
+    "maxUploadBytes": 104857600,
     "maxConcurrentTasks": 8,
     "pollIntervalMs": 2000,
     "maxAttempts": 3,

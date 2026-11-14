@@ -121,6 +121,29 @@ QueryResponse answer = await client.QueryAsync("What themes recur across the cat
 Console.WriteLine(answer.Answer);
 ```
 
+## Uploading files
+
+`UploadFileAsync` sends a file as the body of `POST /v1.0/subjects/{id}/files`; the server stores the original and
+queues its ingestion. Reusing `ExternalKey` replaces the earlier file. `DownloadLinkSourceAsync` returns the original.
+
+```csharp
+ContentSubmitResult uploaded = await client.UploadFileFromPathAsync(subject.Id, "reports/q3.pdf", new UploadFileOptions
+{
+    ExternalKey = "q3-report",
+    Labels = new List<string> { "finance" },
+    Tags = new Dictionary<string, string> { ["quarter"] = "Q3" }
+});
+Console.WriteLine($"{uploaded.Link!.FileName} -> job {uploaded.JobId} (replaced: {uploaded.Replaced})");
+
+// From memory or any stream (ContentType defaults to application/octet-stream; the server infers it from the name).
+await client.UploadFileAsync(subject.Id, File.ReadAllBytes("notes.md"), "notes.md", new UploadFileOptions { ContentType = "text/markdown" });
+
+UploadSettings limits = await client.GetUploadSettingsAsync();          // MaxUploadBytes, SupportedTypes
+LinkSourceFile original = await client.DownloadLinkSourceAsync(uploaded.Link.Id); // Data, ContentType, FileName
+```
+
+A file over the server's limit throws `PneumaException` with status 413; a type the server cannot extract, 415.
+
 ## Labels, tags & metadata filters
 
 When submitting a link you can attach operator-supplied `Labels` (a list of plain strings) and

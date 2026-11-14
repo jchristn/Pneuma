@@ -41,6 +41,8 @@ namespace Pneuma.Server.Routes
         private readonly ICollectionStore _Collections;
         private readonly FetchSafetyPolicy _FetchPolicy;
         private readonly ContentSubmissionService? _Content;
+        private readonly IBlobStore? _Blobs;
+        private readonly IngestionSettings _Ingestion;
 
         #endregion
 
@@ -54,11 +56,14 @@ namespace Pneuma.Server.Routes
         /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
         /// <param name="fetchPolicy">Fetch-safety policy used to reject unsafe URLs at submission; null uses the default policy.</param>
         /// <param name="blobs">Blob store holding pushed content; null disables the content push routes (501).</param>
-        /// <param name="ingestion">Ingestion settings (content size limit); null uses the defaults.</param>
-        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, ICollectionStore collections, FetchSafetyPolicy? fetchPolicy = null, IBlobStore? blobs = null, IngestionSettings? ingestion = null)
+        /// <param name="ingestion">Ingestion settings (content and upload size limits); null uses the defaults.</param>
+        /// <param name="atomizer">Type detector used to refuse unrecognized uploaded files before they are stored; null leaves detection to the job.</param>
+        public SubjectLinkRoutes(DatabaseDriverBase db, AuthorizationService authz, IArtifactStore artifacts, ICollectionStore collections, FetchSafetyPolicy? fetchPolicy = null, IBlobStore? blobs = null, IngestionSettings? ingestion = null, IAtomizer? atomizer = null)
         {
             _FetchPolicy = fetchPolicy ?? new FetchSafetyPolicy();
-            _Content = blobs == null ? null : new ContentSubmissionService(db ?? throw new ArgumentNullException(nameof(db)), blobs, ingestion ?? new IngestionSettings());
+            _Ingestion = ingestion ?? new IngestionSettings();
+            _Blobs = blobs;
+            _Content = blobs == null ? null : new ContentSubmissionService(db ?? throw new ArgumentNullException(nameof(db)), blobs, _Ingestion, atomizer);
             if (db == null) throw new ArgumentNullException(nameof(db));
             if (authz == null) throw new ArgumentNullException(nameof(authz));
             if (artifacts == null) throw new ArgumentNullException(nameof(artifacts));
@@ -87,6 +92,16 @@ namespace Pneuma.Server.Routes
                 openApiMetadata: OpenApiRouteMetadata.Create("Push content (text, Markdown, HTML, or JSON) to a subject for ingestion; an externalKey upserts", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitContentRequest>("Content to ingest")));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/content/batch", SubmitContentBatchAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Push up to 100 content items to a subject for ingestion, with a result per item", "Subjects").WithRequestBody(OpenApiBodies.Json<SubmitContentBatchRequest>("Content items to ingest")));
+            server.Routes.PostAuthentication.Parameter.Add(HttpMethod.POST, "/v1.0/subjects/{subjectId}/files", SubmitFileAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Upload a file (PDF, Office, text, image, ...) to a subject for ingestion; an externalKey upserts", "Subjects")
+                    .WithDescription("The request body is the raw file. Content-Type is the file's MIME type; application/octet-stream (or none) infers it from the filename extension. Labels repeat as labels=a&labels=b and tags are passed as tag.{key}={value}.")
+                    .WithParameter(OpenApiParameterMetadata.Query("filename", "Original file name, for example report.pdf (required, at most 256 characters)", true, OpenApiSchemaMetadata.String()))
+                    .WithParameter(OpenApiParameterMetadata.Query("title", "Display title; defaults to the file name", false, OpenApiSchemaMetadata.String()))
+                    .WithParameter(OpenApiParameterMetadata.Query("externalKey", "Upsert key within the subject (at most 256 characters)", false, OpenApiSchemaMetadata.String()))
+                    .WithParameter(OpenApiParameterMetadata.Query("labels", "A label; repeat the parameter for several", false, OpenApiSchemaMetadata.String()))
+                    .WithRequestBody(OpenApiBodies.Binary("The file to ingest")));
+            server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/ingestion/upload-settings", UploadSettingsAsync, RouteHelper.ExceptionAsync,
+                openApiMetadata: OpenApiRouteMetadata.Create("Get the file upload size limit and the file types the server expects to extract", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/subjects/{subjectId}/links", ListBySubjectAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("List a subject's links", "Subjects"));
             server.Routes.PostAuthentication.Static.Add(HttpMethod.GET, "/v1.0/links", ListAsync, RouteHelper.ExceptionAsync,
@@ -96,7 +111,7 @@ namespace Pneuma.Server.Routes
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/log", LogAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("Get a content link's per-step ingestion log", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/source", SourceAsync, RouteHelper.ExceptionAsync,
-                openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored source asset", "Subjects"));
+                openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored source asset (the original file for uploads and pushed content; download=true sends it as an attachment)", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/atoms", AtomsAsync, RouteHelper.ExceptionAsync,
                 openApiMetadata: OpenApiRouteMetadata.Create("View a content link's stored atoms", "Subjects"));
             server.Routes.PostAuthentication.Parameter.Add(HttpMethod.GET, "/v1.0/links/{id}/chunks", ChunksAsync, RouteHelper.ExceptionAsync,
@@ -370,6 +385,95 @@ namespace Pneuma.Server.Routes
             await RouteHelper.SendJsonAsync(ctx, 200, response).ConfigureAwait(false);
         }
 
+        private async Task SubmitFileAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Write).ConfigureAwait(false)) return;
+            Subject? subject = await ReadContentSubjectAsync(ctx, rc).ConfigureAwait(false);
+            if (subject == null) return;
+
+            // Refuse an oversized upload from its declared length, before the body is read into memory.
+            if (ctx.Request.ContentLength > _Ingestion.MaxUploadBytes)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 413, "PayloadTooLarge", _Content!.TooLargeMessage(ctx.Request.ContentLength)).ConfigureAwait(false);
+                return;
+            }
+
+            System.Collections.Specialized.NameValueCollection? query = ctx.Request.Query.Elements;
+            SubmitFileRequest request = new SubmitFileRequest
+            {
+                FileName = RouteHelper.Query(ctx, "filename"),
+                ContentType = ctx.Request.ContentType,
+                Title = RouteHelper.Query(ctx, "title"),
+                ExternalKey = RouteHelper.Query(ctx, "externalKey"),
+                Labels = QueryLabels(query),
+                Tags = QueryTags(query)
+            };
+
+            byte[]? data = ctx.Request.ContentLength > 0 ? ctx.Request.DataAsBytes : null;
+            ContentSubmitResult result = await _Content!.SubmitFileAsync(rc.UserId, subject, request, data, ctx.Token).ConfigureAwait(false);
+            if (result.Error != null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, result.StatusCode, ErrorCodeFor(result.StatusCode), result.Error).ConfigureAwait(false);
+                return;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, result.StatusCode, result).ConfigureAwait(false);
+        }
+
+        private async Task UploadSettingsAsync(HttpContextBase ctx)
+        {
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            if (_Content == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 501, "NotImplemented", "File upload is not available: no blob store is configured.").ConfigureAwait(false);
+                return;
+            }
+
+            await RouteHelper.SendJsonAsync(ctx, 200, _Content.GetUploadSettings()).ConfigureAwait(false);
+        }
+
+        // Each occurrence of the labels query parameter is one label (a label may itself contain commas).
+        private static List<string>? QueryLabels(System.Collections.Specialized.NameValueCollection? query)
+        {
+            string[]? values = query?.GetValues("labels");
+            if (values == null || values.Length == 0) return null;
+            List<string> labels = new List<string>();
+            foreach (string value in values)
+            {
+                if (!String.IsNullOrWhiteSpace(value)) labels.Add(System.Net.WebUtility.UrlDecode(value));
+            }
+
+            return labels;
+        }
+
+        // Tags arrive as tag.{key}={value} query parameters.
+        private static Dictionary<string, string>? QueryTags(System.Collections.Specialized.NameValueCollection? query)
+        {
+            if (query == null) return null;
+            Dictionary<string, string> tags = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string? key in query.AllKeys)
+            {
+                if (key == null || !key.StartsWith("tag.", StringComparison.OrdinalIgnoreCase) || key.Length <= 4) continue;
+                tags[System.Net.WebUtility.UrlDecode(key.Substring(4))] = System.Net.WebUtility.UrlDecode(query[key] ?? String.Empty);
+            }
+
+            return tags.Count > 0 ? tags : null;
+        }
+
+        private static string ErrorCodeFor(int status)
+        {
+            switch (status)
+            {
+                case 404: return "NotFound";
+                case 409: return "Conflict";
+                case 413: return "PayloadTooLarge";
+                case 415: return "UnsupportedMediaType";
+                default: return "BadRequest";
+            }
+        }
+
         // Resolve and check the subject for a content push: the tenant, the subject, its models and collection, and a
         // configured blob store. Sends the error response and returns null when any is missing.
         private async Task<Subject?> ReadContentSubjectAsync(HttpContextBase ctx, RequestContext rc)
@@ -637,7 +741,63 @@ namespace Pneuma.Server.Routes
 
         private async Task SourceAsync(HttpContextBase ctx)
         {
-            await SendArtifactAsync(ctx, (linkId, token) => _Artifacts.GetSourceAsync(linkId, token)).ConfigureAwait(false);
+            RequestContext rc = RouteHelper.Context(ctx);
+            if (!await GateAsync(ctx, rc, OperationTypeEnum.Read).ConfigureAwait(false)) return;
+            string tenantId = rc.TenantId ?? String.Empty;
+            string linkId = RouteHelper.Param(ctx, "id");
+
+            SubjectLink? link = await _Db.SubjectLinks.ReadAsync(tenantId, linkId, ctx.Token).ConfigureAwait(false);
+            if (link == null)
+            {
+                await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Link not found.").ConfigureAwait(false);
+                return;
+            }
+
+            // Uploaded files and pushed text: the original bytes live in the blob store, so they are served from there
+            // with the type and name they were submitted with (no dependency on the S3 artifact store).
+            byte[]? data = null;
+            string? contentType = null;
+            if (link.SourceKind == SourceKindEnum.Inline && _Blobs != null)
+            {
+                data = await _Blobs.ReadAsync(InlineContentKeys.KeyFor(tenantId, link.Id), ctx.Token).ConfigureAwait(false);
+                contentType = link.ContentType;
+            }
+
+            if (data == null)
+            {
+                S3ArtifactResult? artifact = await _Artifacts.GetSourceAsync(linkId, ctx.Token).ConfigureAwait(false);
+                if (artifact == null)
+                {
+                    await RouteHelper.SendErrorAsync(ctx, 404, "NotFound", "Artifact not found.").ConfigureAwait(false);
+                    return;
+                }
+
+                data = artifact.Data;
+                contentType = artifact.ContentType;
+            }
+
+            bool download = String.Equals(RouteHelper.Query(ctx, "download"), "true", StringComparison.OrdinalIgnoreCase);
+            string? name = link.FileName;
+            if (!String.IsNullOrEmpty(name) || download)
+            {
+                ctx.Response.Headers.Add("Content-Disposition", ContentDisposition(download ? "attachment" : "inline", name ?? (link.Id + ".bin")));
+            }
+
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = String.IsNullOrEmpty(contentType) ? UploadFileTypes.OctetStream : contentType;
+            await ctx.Response.Send(data, ctx.Token).ConfigureAwait(false);
+        }
+
+        // RFC 6266: an ASCII fallback name plus the UTF-8 encoded original.
+        private static string ContentDisposition(string disposition, string fileName)
+        {
+            StringBuilder ascii = new StringBuilder();
+            foreach (char c in fileName)
+            {
+                ascii.Append(c >= 32 && c < 127 && c != '"' && c != '\\' ? c : '_');
+            }
+
+            return disposition + "; filename=\"" + ascii + "\"; filename*=UTF-8''" + Uri.EscapeDataString(fileName);
         }
 
         private async Task AtomsAsync(HttpContextBase ctx)

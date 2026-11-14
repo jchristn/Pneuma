@@ -185,14 +185,25 @@ export const wizardEn = {
   },
   sources: {
     title: '{{name}} is ready. Add its content.',
-    intro: 'Content is what the subject answers from. Add a few links, paste text, or set up a crawl plan to keep a whole site, repository, bucket, or share in sync. Ingestion continues if you close the wizard.',
+    intro: 'Content is what the subject answers from. Add a few links, upload files, paste text, or set up a crawl plan to keep a whole site, repository, bucket, or share in sync. Ingestion continues if you close the wizard.',
     suggestions: 'Where content like this usually lives',
     suggestAgain: 'Suggest again',
     guidancePlaceholder: 'For example: we keep everything on a SharePoint site',
     tab: {
       links: 'Links',
+      files: 'Files',
       text: 'Text',
       crawl: 'Crawl plan'
+    },
+    dropFiles: 'Drop files here or click to choose them',
+    filesHint: 'PDF, Word, Excel, PowerPoint, text, Markdown, HTML, JSON, CSV, and images.',
+    uploadingFile: 'Uploading {{index}} of {{total}}: {{name}}',
+    filesAdded: 'Uploaded {{count}} file(s); ingestion has started.',
+    reject: {
+      empty: 'the file is empty',
+      tooLarge: '{{size}} is over the {{max}} limit',
+      nameTooLong: 'the name is longer than {{max}} characters',
+      unsupported: '.{{ext}} files are not supported'
     },
     urls: 'URLs, one per line',
     addLinks: 'Add links',

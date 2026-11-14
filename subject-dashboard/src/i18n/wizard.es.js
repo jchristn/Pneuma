@@ -190,8 +190,19 @@ export const wizardEs = {
     guidancePlaceholder: 'Por ejemplo: lo tenemos todo en un sitio de SharePoint',
     tab: {
       links: 'Enlaces',
+      files: 'Archivos',
       text: 'Texto',
       crawl: 'Plan de rastreo'
+    },
+    dropFiles: 'Suelte los archivos aquí o haga clic para elegirlos',
+    filesHint: 'PDF, Word, Excel, PowerPoint, texto, Markdown, HTML, JSON, CSV e imágenes.',
+    uploadingFile: 'Subiendo {{index}} de {{total}}: {{name}}',
+    filesAdded: 'Se subieron {{count}} archivo(s); la ingesta ha comenzado.',
+    reject: {
+      empty: 'el archivo está vacío',
+      tooLarge: '{{size}} supera el límite de {{max}}',
+      nameTooLong: 'el nombre supera los {{max}} caracteres',
+      unsupported: 'los archivos .{{ext}} no son compatibles'
     },
     urls: 'URL, una por línea',
     addLinks: 'Añadir enlaces',

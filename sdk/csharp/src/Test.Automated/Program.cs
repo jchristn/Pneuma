@@ -3,6 +3,7 @@ namespace Test.Automated
     using System;
     using System.Collections.Generic;
     using System.Net.Http;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Pneuma.Sdk;
@@ -54,6 +55,8 @@ namespace Test.Automated
                 Skip("List history");
                 Skip("List feedback");
                 Skip("Submit link");
+                Skip("Upload settings");
+                Skip("Upload file");
                 Skip("List jobs");
                 Summarize();
                 return 0;
@@ -184,6 +187,39 @@ namespace Test.Automated
                 if (!link.Tags.TryGetValue("source", out string? sourceTag) || sourceTag != "sdk-test") throw new Exception("Submitted link tag 'source' did not round-trip.");
                 if (!link.Tags.TryGetValue("rights", out string? rightsTag) || rightsTag != "cleared") throw new Exception("Submitted link tag 'rights' did not round-trip.");
                 Console.WriteLine("       linkId=" + link.Id + " status=" + link.Status + " labels=" + string.Join(",", link.Labels));
+            }).ConfigureAwait(false);
+
+            await Step("Upload settings", async () =>
+            {
+                UploadSettings settings = await client.GetUploadSettingsAsync().ConfigureAwait(false);
+                if (settings.MaxUploadBytes <= 0) throw new Exception("No upload limit reported.");
+                if (settings.SupportedTypes.Count == 0) throw new Exception("No supported types reported.");
+                Console.WriteLine("       maxUploadBytes=" + settings.MaxUploadBytes + " types=" + settings.SupportedTypes.Count);
+            }).ConfigureAwait(false);
+
+            await Step("Upload file", async () =>
+            {
+                if (string.IsNullOrEmpty(createdSubjectId)) throw new Exception("No subject id from prior step.");
+                byte[] file = Encoding.UTF8.GetBytes("# SDK upload\n\nUploaded by the Pneuma C# SDK automated test.");
+                UploadFileOptions options = new UploadFileOptions
+                {
+                    ContentType = "text/markdown",
+                    ExternalKey = "sdk-smoke-upload",
+                    Labels = new List<string> { "sdk-smoke" },
+                    Tags = new Dictionary<string, string> { ["source"] = "sdk-test" }
+                };
+                ContentSubmitResult uploaded = await client.UploadFileAsync(createdSubjectId!, file, "sdk smoke.md", options).ConfigureAwait(false);
+                if (uploaded.Link == null || uploaded.Link.FileName != "sdk smoke.md") throw new Exception("The uploaded link should carry its file name.");
+                if (string.IsNullOrEmpty(uploaded.JobId)) throw new Exception("No ingestion job was queued.");
+                if (!uploaded.Link.Labels.Contains("sdk-smoke")) throw new Exception("Upload labels did not round-trip.");
+
+                ContentSubmitResult replaced = await client.UploadFileAsync(createdSubjectId!, file, "sdk smoke v2.md", options).ConfigureAwait(false);
+                if (!replaced.Replaced || replaced.Link?.Id != uploaded.Link.Id) throw new Exception("The same external key should replace the file.");
+
+                LinkSourceFile source = await client.DownloadLinkSourceAsync(uploaded.Link.Id).ConfigureAwait(false);
+                if (!source.Data.AsSpan().SequenceEqual(file)) throw new Exception("The downloaded source should equal the uploaded bytes.");
+                if (source.FileName != "sdk smoke v2.md") throw new Exception("The download should be named after the file, got " + source.FileName);
+                Console.WriteLine("       linkId=" + uploaded.Link.Id + " jobId=" + uploaded.JobId + " contentType=" + source.ContentType);
             }).ConfigureAwait(false);
 
             await Step("List jobs", async () =>

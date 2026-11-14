@@ -6,7 +6,11 @@ dict or list), or ``None`` for ``204 No Content`` responses. Any non-2xx
 response raises :class:`PneumaError`.
 """
 
-from typing import Any, Dict, List, Optional
+import mimetypes
+import os
+import re
+from typing import Any, BinaryIO, Dict, List, Optional, Union
+from urllib.parse import unquote
 
 import requests
 
@@ -615,6 +619,135 @@ class PneumaClient:
         if tags is not None:
             body["tags"] = tags
         return self._request("POST", f"/v1.0/subjects/{subject_id}/content", json_body=body)
+
+    def upload_file(
+        self,
+        subject_id: str,
+        file: Union[str, "os.PathLike[str]", bytes, BinaryIO],
+        filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        title: Optional[str] = None,
+        external_key: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        """POST /v1.0/subjects/{subjectId}/files. Uploads one file and queues its ingestion.
+
+        The file is sent as the raw request body; metadata travels in the query string.
+
+        Args:
+            subject_id: The subject to add the file to.
+            file: A path, the file's bytes, or a binary file object (read from its current position).
+            filename: The file name. Defaults to the path's base name or the file object's ``name``;
+                required for raw bytes.
+            content_type: The MIME type. Defaults to a guess from the file name, else
+                ``application/octet-stream`` (the server then infers it from the extension).
+            title: Optional title; the server uses the file name when omitted.
+            external_key: Optional stable key; uploading again with it replaces the file.
+            labels: Optional labels attached to every chunk.
+            tags: Optional key/value tags attached to every chunk.
+
+        Returns:
+            ``{ index, statusCode, replaced, link, jobId }``.
+
+        Raises:
+            ValueError: If no file name can be determined.
+            PneumaError: 400 invalid input, 404 unknown subject, 413 too large, 415 unrecognized file.
+        """
+        close_after = False
+        if isinstance(file, (bytes, bytearray)):
+            body: Any = bytes(file)
+        elif isinstance(file, (str, os.PathLike)):
+            path = os.fspath(file)
+            filename = filename or os.path.basename(path)
+            body = open(path, "rb")
+            close_after = True
+        else:
+            body = file
+            if filename is None:
+                name = getattr(file, "name", None)
+                if isinstance(name, str):
+                    filename = os.path.basename(name)
+
+        if not filename:
+            if close_after:
+                body.close()
+            raise ValueError("A filename is required when uploading raw bytes or an unnamed stream.")
+
+        if content_type is None:
+            guessed, _ = mimetypes.guess_type(filename)
+            content_type = guessed or "application/octet-stream"
+
+        params: List[Any] = [("filename", filename)]
+        if title is not None:
+            params.append(("title", title))
+        if external_key is not None:
+            params.append(("externalKey", external_key))
+        for label in labels or []:
+            params.append(("labels", label))
+        for key, value in (tags or {}).items():
+            params.append((f"tag.{key}", value if value is not None else ""))
+
+        try:
+            response = self._session.request(
+                "POST",
+                f"{self.base_url}/v1.0/subjects/{subject_id}/files",
+                params=params,
+                data=body,
+                headers=self._headers({"Content-Type": content_type}),
+            )
+        finally:
+            if close_after:
+                body.close()
+
+        if not (200 <= response.status_code < 300):
+            raise PneumaError(response.status_code, _safe_body(response))
+        return response.json() if response.content else None
+
+    def get_upload_settings(self) -> Any:
+        """GET /v1.0/ingestion/upload-settings.
+
+        Returns:
+            ``{ maxUploadBytes, maxFileNameLength, detectsTypeOnUpload, supportedTypes: [{ documentType, extensions, mimeTypes }] }``.
+        """
+        return self._request("GET", "/v1.0/ingestion/upload-settings")
+
+    def download_link_source(self, link_id: str, dest: Optional[str] = None) -> Dict[str, Any]:
+        """GET /v1.0/links/{id}/source?download=true. Downloads a link's original content.
+
+        For an uploaded file or pushed text this is exactly what was submitted.
+
+        Args:
+            link_id: The link.
+            dest: Optional path to write the bytes to (a directory saves under the server's file name).
+
+        Returns:
+            ``{ "data": bytes, "contentType": str, "fileName": str | None, "path": str | None }``.
+
+        Raises:
+            PneumaError: 404 when the link or its source is not found.
+        """
+        response = self._session.request(
+            "GET",
+            f"{self.base_url}/v1.0/links/{link_id}/source",
+            params={"download": "true"},
+            headers=self._headers(),
+        )
+        if not (200 <= response.status_code < 300):
+            raise PneumaError(response.status_code, _safe_body(response))
+
+        file_name = _disposition_file_name(response.headers.get("Content-Disposition"))
+        written = None
+        if dest:
+            written = os.path.join(dest, file_name or link_id) if os.path.isdir(dest) else dest
+            with open(written, "wb") as handle:
+                handle.write(response.content)
+        return {
+            "data": response.content,
+            "contentType": (response.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip(),
+            "fileName": file_name,
+            "path": written,
+        }
 
     def submit_content_batch(self, subject_id: str, items: List[Dict[str, Any]]) -> Any:
         """POST /v1.0/subjects/{subjectId}/content/batch: up to 100 items, each reported.
@@ -1413,6 +1546,19 @@ class PneumaClient:
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         self.close()
         return False
+
+
+def _disposition_file_name(header: Optional[str]) -> Optional[str]:
+    """Read the file name from a Content-Disposition header (RFC 6266 ``filename*`` preferred)."""
+    if not header:
+        return None
+    star = re.search(r"filename\*\s*=\s*UTF-8''([^;]+)", header, re.IGNORECASE)
+    if star:
+        return unquote(star.group(1).strip())
+    plain = re.search(r'filename\s*=\s*"([^"]*)"', header, re.IGNORECASE)
+    if plain:
+        return plain.group(1)
+    return None
 
 
 def _safe_body(response: "requests.Response") -> Any:

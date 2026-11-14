@@ -289,6 +289,10 @@ namespace Pneuma.Core.Database.Postgresql.Queries
                     "CREATE TABLE IF NOT EXISTS subjectquestions (id TEXT PRIMARY KEY, tenantid TEXT NOT NULL, subjectid TEXT NOT NULL, question TEXT NOT NULL, kind TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, origin TEXT NOT NULL, createdutc TEXT NOT NULL);",
                     "CREATE INDEX IF NOT EXISTS idx_subjectquestions_tenant_subject ON subjectquestions (tenantid, subjectid, position);"
                 }));
+                list.Add(new SchemaMigration(37, "Add link file name", new List<string>
+                {
+                    "ALTER TABLE subjectlinks ADD COLUMN IF NOT EXISTS filename TEXT;"
+                }));
                 return list;
             }
         }

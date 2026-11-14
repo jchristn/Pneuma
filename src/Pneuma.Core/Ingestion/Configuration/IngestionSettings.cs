@@ -77,6 +77,16 @@ namespace Pneuma.Core.Ingestion.Configuration
             set { _MaxInlineContentBytes = Math.Clamp(value, 1024, 104857600); }
         }
 
+        /// <summary>
+        /// Largest file accepted by the file upload API (<c>POST /v1.0/subjects/{id}/files</c>), in bytes. Default
+        /// 104857600 (100 MB); clamped to [1024, 1073741824].
+        /// </summary>
+        public long MaxUploadBytes
+        {
+            get { return _MaxUploadBytes; }
+            set { _MaxUploadBytes = Math.Clamp(value, 1024L, 1073741824L); }
+        }
+
         /// <summary>Maximum backoff, in milliseconds, between retry attempts. Default 60000; clamped to [0, 600000].</summary>
         public int RetryBackoffMaxMs
         {
@@ -224,6 +234,7 @@ namespace Pneuma.Core.Ingestion.Configuration
         private string _UserAgent = HttpContentFetcher.DefaultUserAgent;
         private FetchSafetySettings _FetchSafety = new FetchSafetySettings();
         private int _MaxInlineContentBytes = 10485760;
+        private long _MaxUploadBytes = 104857600L;
 
         #endregion
     }

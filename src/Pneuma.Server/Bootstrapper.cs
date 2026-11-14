@@ -128,6 +128,7 @@ namespace Pneuma.Server
             await concurrency.InitializeAsync(database, CancellationToken.None).ConfigureAwait(false);
 
             PneumaServer server = new PneumaServer(settings, database, authentication, authorization, capture, graphFactory, clients.Vectors, clients.Search, clients.Collections, provisioning, modelHealth, artifactStore, clients.Blobs, concurrency, logging, telemetry);
+            server.Atomizer = clients.DocumentAtom;
             server.Start();
 
             if (settings.S3.Enabled)

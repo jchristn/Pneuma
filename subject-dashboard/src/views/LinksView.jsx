@@ -17,6 +17,9 @@ import LinkDetailModal from '../components/LinkDetailModal';
 import AddTextModal from '../components/AddTextModal';
 import { toLabelTagPayload } from '../components/LabelTagEditor';
 import LinkRefreshModal, { isRefreshable } from '../components/LinkRefreshModal';
+import FileUploadModal from '../components/FileUploadModal';
+import { usePageFileDrop } from '../hooks/usePageFileDrop';
+import { formatFileSize, isInlineLink, linkDisplayName, linkKind } from '../utils/files';
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -34,6 +37,9 @@ function LinksView() {
   const { apiClient } = useAuth();
   const [addTextOpen, setAddTextOpen] = useState(false);
   const { t } = useTranslation();
+  // File upload: the modal, and files dropped on the page that it should queue when it opens.
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState(null);
 
   const [links, setLinks] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -70,6 +76,21 @@ function LinksView() {
     for (const c of subjects) map[c.id] = c.displayName || c.id;
     return map;
   }, [subjects]);
+
+  const fileDragging = usePageFileDrop(subjects.length > 0, (files) => {
+    setDroppedFiles(files);
+    setUploadOpen(true);
+  });
+  const consumeDropped = useCallback(() => setDroppedFiles(null), []);
+
+  const downloadOriginal = async (link) => {
+    setError('');
+    try {
+      await apiClient.downloadLinkSource(link, linkDisplayName(link));
+    } catch (err) {
+      setError(err?.message || t('upload.downloadFailed'));
+    }
+  };
 
   const load = useCallback(
     async (showSpinner = true) => {
@@ -302,13 +323,36 @@ function LinksView() {
   const columns = [
     {
       key: 'url',
-      label: t('links.url'),
+      label: t('links.source'),
       className: 'cell-url',
-      render: (v) => (
+      sortAccessor: (row) => linkDisplayName(row).toLowerCase(),
+      render: (v, row) => (isInlineLink(row) ? (
+        <span className="fu-root fu-source-name" title={row.url}>
+          <span className="fu-kind">{t(`upload.kind.${linkKind(row)}`)}</span>
+          {linkDisplayName(row)}
+        </span>
+      ) : (
         <a href={v} target="_blank" rel="noopener noreferrer" title={v} onClick={(e) => e.stopPropagation()}>
           {v}
         </a>
-      )
+      ))
+    },
+    {
+      key: 'sourceKind', defaultHidden: true,
+      label: t('links.kind'),
+      sortAccessor: (row) => linkKind(row),
+      render: (_v, row) => t(`upload.kind.${linkKind(row)}`)
+    },
+    {
+      key: 'contentType', defaultHidden: true,
+      label: t('links.contentType'),
+      render: (v) => v || '—'
+    },
+    {
+      key: 'sizeBytes', defaultHidden: true,
+      label: t('links.size'),
+      sortAccessor: (row) => Number(row.sizeBytes) || 0,
+      render: (v) => (v > 0 ? formatFileSize(v) : '—')
     },
     {
       key: 'title',
@@ -368,6 +412,7 @@ function LinksView() {
           actions={[
             { label: t('common.view'), onClick: () => setDetail(row) },
             { label: t('links.viewIngestionLog'), onClick: () => setLogTarget(row) },
+            ...(isInlineLink(row) ? [{ label: t('links.downloadOriginal'), onClick: () => downloadOriginal(row) }] : []),
             { label: t('links.reingest', 'Reingest Link'), onClick: () => setReingestTarget(row) },
             ...(isRefreshable(row) ? [
               { label: t('links.setRefresh'), onClick: () => setRefreshTargets([row]) },
@@ -405,6 +450,9 @@ function LinksView() {
             </button>
             <button className="btn btn-secondary" onClick={() => setAddTextOpen(true)} disabled={subjects.length === 0} title={t('addText.buttonTip')}>
               {t('addText.button')}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setUploadOpen(true)} disabled={subjects.length === 0} title={t('upload.buttonTip')}>
+              {t('upload.button')}
             </button>
             <button className="btn btn-primary" onClick={openSubmit} disabled={subjects.length === 0}>
               {t('links.submit')}
@@ -478,6 +526,25 @@ function LinksView() {
         onClose={() => setRefreshTargets(null)}
       />
 
+      <FileUploadModal
+        isOpen={uploadOpen}
+        onClose={() => { setUploadOpen(false); setDroppedFiles(null); }}
+        subjects={subjects}
+        incomingFiles={droppedFiles}
+        onIncomingConsumed={consumeDropped}
+        onUploaded={(count) => { setNotice(t('upload.uploadedNotice', { count })); load(false); }}
+        onViewLog={(link) => setLogTarget(link)}
+      />
+
+      {fileDragging && !uploadOpen && (
+        <div className="fu-root fu-overlay" aria-hidden="true">
+          <div className="fu-overlay-panel">
+            <span className="fu-dropzone-icon">⇪</span>
+            {t('upload.dropOverlay')}
+          </div>
+        </div>
+      )}
+
       <AddTextModal
         isOpen={addTextOpen}
         onClose={() => setAddTextOpen(false)}
@@ -497,7 +564,7 @@ function LinksView() {
         onConfirm={handleDelete}
         title={t('common.delete')}
         message="Delete this content link? This cannot be undone."
-        entityName={deleteTarget?.url}
+        entityName={linkDisplayName(deleteTarget)}
         confirmLabel={t('common.delete')}
         isLoading={deleting}
       />
@@ -518,7 +585,7 @@ function LinksView() {
         onConfirm={handleReingest}
         title={t('links.reingest', 'Reingest Link')}
         message={t('links.reingestConfirm', 'Reingest this content link? Its ingestion pipeline will run again from the beginning.')}
-        entityName={reingestTarget?.url}
+        entityName={linkDisplayName(reingestTarget)}
         confirmLabel={t('links.reingest', 'Reingest Link')}
         isLoading={reingesting}
       />

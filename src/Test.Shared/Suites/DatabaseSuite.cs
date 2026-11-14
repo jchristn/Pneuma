@@ -162,6 +162,27 @@ namespace Test.Shared.Suites
                             if (missing != null) throw new Exception("an unknown access key should not resolve to a credential");
                         }),
 
+                    new TestCaseDescriptor("Database", "SubjectLink_FileNameRoundTrips", "An uploaded link's file name, content type, and size are stored, updated, and read back",
+                        executeAsync: async ct =>
+                        {
+                            await using DatabaseDriverBase db = await TestDatabase.CreateAsync(ct);
+                            Tenant t = await db.Tenants.CreateAsync(new Tenant { Name = "FileTenant" }, ct);
+                            Subject c = await db.Subjects.CreateAsync(new Subject { TenantId = t.Id, DisplayName = "Subject" }, ct);
+                            SubjectLink link = await db.SubjectLinks.CreateAsync(new SubjectLink
+                            {
+                                TenantId = t.Id, SubjectId = c.Id, Url = "pneuma-inline://x/Q3%20report.pdf", SourceKind = SourceKindEnum.Inline,
+                                FileName = "Q3 report.pdf", ContentType = "application/pdf", SizeBytes = 2048
+                            }, ct);
+                            SubjectLink read = await db.SubjectLinks.ReadAsync(t.Id, link.Id, ct) ?? throw new Exception("link not persisted");
+                            if (read.FileName != "Q3 report.pdf" || read.ContentType != "application/pdf" || read.SizeBytes != 2048) throw new Exception("file fields did not round-trip: " + read.FileName + " " + read.ContentType + " " + read.SizeBytes);
+                            read.FileName = "Q4 report.pdf";
+                            await db.SubjectLinks.UpdateAsync(read, ct);
+                            SubjectLink updated = await db.SubjectLinks.ReadAsync(t.Id, link.Id, ct) ?? throw new Exception("link gone");
+                            if (updated.FileName != "Q4 report.pdf") throw new Exception("the file name update was not stored");
+                            SubjectLink plain = await db.SubjectLinks.CreateAsync(new SubjectLink { TenantId = t.Id, SubjectId = c.Id, Url = "https://example.com/a" }, ct);
+                            if ((await db.SubjectLinks.ReadAsync(t.Id, plain.Id, ct))?.FileName != null) throw new Exception("a URL link has no file name");
+                        }),
+
                     new TestCaseDescriptor("Database", "Tenant_ReadMissing_ReturnsNull", "Reading a non-existent tenant returns null",
                         executeAsync: async ct =>
                         {

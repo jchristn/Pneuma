@@ -152,6 +152,23 @@ To ingest intranet sources, list them under `Ingestion.FetchSafety.AllowedPrivat
 `MaxDownloadBytes`, `AllowInvalidCertificates` (for internal PKI; exposes fetches to interception), `MaxRequestsPerHost`,
 and `BlockPrivateAddresses` (turn it off only when every user is trusted with the server's network position).
 
+### Uploading files
+
+Drag files onto the **Links** page of the admin or subject dashboard (or use **Upload Files**, or the **Files** tab of
+the new-subject wizard) to ingest PDFs, Word, Excel, and PowerPoint documents, text, Markdown, HTML, JSON, CSV, and
+images into a subject. Each file is one request to `POST /v1.0/subjects/{id}/files` with the file as the body:
+
+```sh
+curl -X POST "http://localhost:8080/v1.0/subjects/$SUBJECT/files?filename=report.pdf&labels=finance" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/pdf" --data-binary @report.pdf
+```
+
+The server checks the type with DocumentAtom before accepting the file (415 for a type it cannot extract), refuses files
+over `Ingestion.MaxUploadBytes` (100 MB by default) with 413, and stores the original unchanged in the blob store
+(`Integrations.Blob.Directory`, the `./blobs` volume in Docker) under `inline/{tenantId}/{linkId}`. Back that directory
+up: unlike a URL, an uploaded file cannot be fetched again. Servers that share one database must share that directory.
+`GET /v1.0/links/{id}/source?download=true` returns the original. The C#, JS, and Python SDKs wrap both calls.
+
 ### Factory reset
 
 To wipe the stack back to factory defaults (fresh databases, seeded admin, and starter configuration), use `docker/reset.bat` (Windows). To pull the latest published images and restart, use `docker/update.bat`.

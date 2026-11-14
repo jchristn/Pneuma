@@ -664,6 +664,154 @@ namespace Pneuma.Sdk
             return SendAsync<ContentSubmitResult>(HttpMethod.Post, "/v1.0/subjects/" + Escape(subjectId) + "/content", request, token);
         }
 
+        /// <summary>
+        /// Upload a file (PDF, Office document, text, Markdown, HTML, JSON, CSV, image, ...) to a subject for ingestion.
+        /// The stream is sent as the request body; reusing <see cref="UploadFileOptions.ExternalKey"/> replaces the earlier
+        /// file with that key.
+        /// </summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="data">The file content. The stream is read from its current position and is not disposed.</param>
+        /// <param name="fileName">The file name, for example <c>report.pdf</c>.</param>
+        /// <param name="options">Title, external key, content type, labels, and tags; null for none.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result: the link, the queued job id, and whether an earlier file was replaced.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> or <paramref name="fileName"/> is null or empty.</exception>
+        /// <exception cref="PneumaException">Thrown with 400 for invalid input, 404 for an unknown subject, 413 when too large, or 415 for an unrecognized file.</exception>
+        public async Task<ContentSubmitResult> UploadFileAsync(string subjectId, System.IO.Stream data, string fileName, UploadFileOptions? options = null, CancellationToken token = default)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
+            UploadFileOptions opts = options ?? new UploadFileOptions();
+
+            StringBuilder path = new StringBuilder("/v1.0/subjects/" + Escape(subjectId) + "/files?filename=" + Uri.EscapeDataString(fileName));
+            if (!string.IsNullOrEmpty(opts.Title)) path.Append("&title=").Append(Uri.EscapeDataString(opts.Title));
+            if (!string.IsNullOrEmpty(opts.ExternalKey)) path.Append("&externalKey=").Append(Uri.EscapeDataString(opts.ExternalKey));
+            foreach (string label in opts.Labels)
+            {
+                if (!string.IsNullOrWhiteSpace(label)) path.Append("&labels=").Append(Uri.EscapeDataString(label));
+            }
+            foreach (KeyValuePair<string, string> tag in opts.Tags)
+            {
+                if (!string.IsNullOrWhiteSpace(tag.Key)) path.Append("&tag.").Append(Uri.EscapeDataString(tag.Key)).Append('=').Append(Uri.EscapeDataString(tag.Value ?? string.Empty));
+            }
+
+            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, BaseUrl + path.ToString()))
+            {
+                if (!string.IsNullOrEmpty(Token))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+                StreamContent content = new StreamContent(data);
+                content.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(opts.ContentType) ? "application/octet-stream" : opts.ContentType);
+                if (data.CanSeek) content.Headers.ContentLength = data.Length - data.Position;
+                request.Content = content;
+
+                using (HttpResponseMessage response = await _Http.SendAsync(request, token).ConfigureAwait(false))
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                    int status = (int)response.StatusCode;
+                    if (status < 200 || status > 299)
+                    {
+                        ErrorResponse? error = null;
+                        if (!string.IsNullOrWhiteSpace(responseBody))
+                        {
+                            try { error = JsonSerializer.Deserialize<ErrorResponse>(responseBody, _Json); }
+                            catch (JsonException) { error = null; }
+                        }
+                        throw new PneumaException(status, responseBody, error);
+                    }
+
+                    ContentSubmitResult? result = JsonSerializer.Deserialize<ContentSubmitResult>(responseBody, _Json);
+                    return result ?? new ContentSubmitResult { StatusCode = status };
+                }
+            }
+        }
+
+        /// <summary>Upload a file held in memory to a subject for ingestion.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="data">The file bytes.</param>
+        /// <param name="fileName">The file name, for example <c>report.pdf</c>.</param>
+        /// <param name="options">Title, external key, content type, labels, and tags; null for none.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result: the link, the queued job id, and whether an earlier file was replaced.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> or <paramref name="fileName"/> is null or empty.</exception>
+        /// <exception cref="PneumaException">Thrown with 400, 404, 413, or 415 as for the stream overload.</exception>
+        public async Task<ContentSubmitResult> UploadFileAsync(string subjectId, byte[] data, string fileName, UploadFileOptions? options = null, CancellationToken token = default)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            using (System.IO.MemoryStream stream = new System.IO.MemoryStream(data, false))
+            {
+                return await UploadFileAsync(subjectId, stream, fileName, options, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>Upload a file from disk to a subject for ingestion, named after the file.</summary>
+        /// <param name="subjectId">Subject identifier.</param>
+        /// <param name="filePath">Path of the file to upload.</param>
+        /// <param name="options">Title, external key, content type, labels, and tags; null for none.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result: the link, the queued job id, and whether an earlier file was replaced.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="filePath"/> is null or empty.</exception>
+        /// <exception cref="System.IO.FileNotFoundException">Thrown when the file does not exist.</exception>
+        /// <exception cref="PneumaException">Thrown with 400, 404, 413, or 415 as for the stream overload.</exception>
+        public async Task<ContentSubmitResult> UploadFileFromPathAsync(string subjectId, string filePath, UploadFileOptions? options = null, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentNullException(nameof(filePath));
+            if (!System.IO.File.Exists(filePath)) throw new System.IO.FileNotFoundException("The file to upload was not found.", filePath);
+            using (System.IO.FileStream stream = new System.IO.FileStream(filePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read, 81920, true))
+            {
+                return await UploadFileAsync(subjectId, stream, System.IO.Path.GetFileName(filePath), options, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>Get the upload size limit, the file name limit, and the file types the server expects to extract.</summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The upload settings.</returns>
+        public Task<UploadSettings> GetUploadSettingsAsync(CancellationToken token = default)
+        {
+            return SendAsync<UploadSettings>(HttpMethod.Get, "/v1.0/ingestion/upload-settings", null, token);
+        }
+
+        /// <summary>
+        /// Download a link's original content: the uploaded file or pushed text, or the crawled source document. Returns
+        /// the bytes with the content type and file name the server sent.
+        /// </summary>
+        /// <param name="id">Link identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The source file.</returns>
+        /// <exception cref="PneumaException">Thrown with 404 when the link or its source is not found.</exception>
+        public async Task<LinkSourceFile> DownloadLinkSourceAsync(string id, CancellationToken token = default)
+        {
+            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, BaseUrl + "/v1.0/links/" + Escape(id) + "/source?download=true"))
+            {
+                if (!string.IsNullOrEmpty(Token))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+
+                using (HttpResponseMessage response = await _Http.SendAsync(request, token).ConfigureAwait(false))
+                {
+                    int status = (int)response.StatusCode;
+                    if (status < 200 || status > 299)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        ErrorResponse? error = null;
+                        if (!string.IsNullOrWhiteSpace(errorBody))
+                        {
+                            try { error = JsonSerializer.Deserialize<ErrorResponse>(errorBody, _Json); }
+                            catch (JsonException) { error = null; }
+                        }
+                        throw new PneumaException(status, errorBody, error);
+                    }
+
+                    ContentDispositionHeaderValue? disposition = response.Content.Headers.ContentDisposition;
+                    string? name = disposition?.FileNameStar ?? disposition?.FileName?.Trim('"');
+                    return new LinkSourceFile
+                    {
+                        Data = await response.Content.ReadAsByteArrayAsync(token).ConfigureAwait(false),
+                        ContentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream",
+                        FileName = string.IsNullOrEmpty(name) ? null : name
+                    };
+                }
+            }
+        }
+
         /// <summary>Push up to 100 content items in one call; every item is attempted and reported.</summary>
         /// <param name="subjectId">Subject identifier.</param>
         /// <param name="request">The items.</param>

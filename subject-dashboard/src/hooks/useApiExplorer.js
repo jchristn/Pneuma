@@ -38,6 +38,12 @@ function headersToObject(headers) {
  * flattened operation list, per-operation request fields, execution, and a
  * persisted history capped at 12 entries.
  */
+// An operation whose request body is a raw file (application/octet-stream, no JSON form) takes a file, not JSON text.
+function isBinaryRequest(op) {
+  const content = op?.requestBody?.content || {};
+  return !!content['application/octet-stream'] && !content['application/json'];
+}
+
 export function useApiExplorer(apiClient, serverUrl) {
   const [spec, setSpec] = useState(null);
   const [specError, setSpecError] = useState('');
@@ -48,6 +54,8 @@ export function useApiExplorer(apiClient, serverUrl) {
   const [queryParams, setQueryParams] = useState({});
   const [headers, setHeaders] = useState({});
   const [body, setBody] = useState('');
+  // The file sent as the body of a binary (file upload) operation.
+  const [bodyFile, setBodyFile] = useState(null);
 
   const [response, setResponse] = useState(null);
   const [executing, setExecuting] = useState(false);
@@ -95,7 +103,8 @@ export function useApiExplorer(apiClient, serverUrl) {
     setPathParams(nextPath);
     setQueryParams(nextQuery);
     setHeaders({});
-    setBody(getRequestBodyTemplate(operation.requestBody, spec));
+    setBody(isBinaryRequest(operation) ? '' : getRequestBodyTemplate(operation.requestBody, spec));
+    setBodyFile(null);
     setResponse(null);
   }, [operation, spec]);
 
@@ -135,13 +144,14 @@ export function useApiExplorer(apiClient, serverUrl) {
     setResponse(null);
     const start = performance.now();
     try {
-      const hasBody = operation.method !== 'GET' && operation.method !== 'HEAD' && body;
+      const binary = isBinaryRequest(operation);
+      const hasBody = operation.method !== 'GET' && operation.method !== 'HEAD' && (binary ? !!bodyFile : body);
       const raw = await apiClient.executeExplorer({
         method: operation.method,
         path: resolvedPath,
         query: queryParams,
-        headers,
-        body: hasBody ? body : undefined
+        headers: binary ? { 'Content-Type': bodyFile?.type || 'application/octet-stream', ...headers } : headers,
+        body: hasBody ? (binary ? bodyFile : body) : undefined
       });
       const durationMs = performance.now() - start;
       const text = await raw.text();
@@ -177,7 +187,7 @@ export function useApiExplorer(apiClient, serverUrl) {
     } finally {
       setExecuting(false);
     }
-  }, [operation, apiClient, resolvedPath, queryParams, headers, body, pathParams]);
+  }, [operation, apiClient, resolvedPath, queryParams, headers, body, bodyFile, pathParams]);
 
   const loadFromHistory = useCallback(
     (item) => {
@@ -217,6 +227,9 @@ export function useApiExplorer(apiClient, serverUrl) {
     setHeaders,
     body,
     setBody,
+    bodyFile,
+    setBodyFile,
+    isBinaryBody: isBinaryRequest(operation),
     resolvedUrl,
     snippets,
     isDestructive,

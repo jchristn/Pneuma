@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { linkDisplayName } from '../utils/files';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -290,7 +291,7 @@ function HomeView() {
                   {recentFailures.map((link) => (
                     <tr key={link.id} className="clickable-row" onClick={() => navigate('/dashboard/links')}>
                       <td>{link.title || '(untitled)'}</td>
-                      <td className="cell-url" title={link.url}>{link.url}</td>
+                      <td className="cell-url" title={link.url}>{linkDisplayName(link)}</td>
                       <td><StatusPill status={link.status} /></td>
                       <td className="cell-error" title={link.lastError}>{link.lastError || '—'}</td>
                       <td>{link.lastIngestedUtc ? formatRelativeTime(link.lastIngestedUtc) : t('common.never')}</td>

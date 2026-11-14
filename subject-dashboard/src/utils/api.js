@@ -416,6 +416,79 @@ class ApiClient {
     if (tags && Object.keys(tags).length) body.tags = tags;
     return this._request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content`, { body });
   }
+
+  /**
+   * Upload one file to a subject for ingestion (POST /v1.0/subjects/{id}/files). The body is the raw file; metadata
+   * travels in the query string. Uses XMLHttpRequest so upload progress can be reported: onProgress(loadedBytes).
+   * Resolves with the ContentSubmitResult; rejects with an ApiError (413 too large, 415 unrecognized type, ...).
+   * Pass an AbortSignal to cancel.
+   */
+  uploadFile(subjectId, file, { title, externalKey, labels, tags } = {}, onProgress = null, signal = null) {
+    const params = new URLSearchParams();
+    params.append('filename', file.name);
+    if (title) params.append('title', title);
+    if (externalKey) params.append('externalKey', externalKey);
+    for (const label of labels || []) params.append('labels', label);
+    for (const [key, value] of Object.entries(tags || {})) params.append(`tag.${key}`, value ?? '');
+    const url = `${this.baseUrl}/v1.0/subjects/${encodeURIComponent(subjectId)}/files?${params.toString()}`;
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      if (this.token) xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded); };
+      xhr.onload = () => {
+        if (xhr.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        let parsed = null;
+        try { parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { parsed = null; }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(parsed);
+        else reject(new ApiError(xhr.status, (parsed && (parsed.message || parsed.error)) || xhr.statusText || `HTTP ${xhr.status}`, parsed));
+      };
+      xhr.onerror = () => reject(new ApiError(0, 'Network error while uploading.', null));
+      xhr.onabort = () => reject(new ApiError(0, 'Upload cancelled.', null));
+      if (signal) {
+        if (signal.aborted) { reject(new ApiError(0, 'Upload cancelled.', null)); return; }
+        signal.addEventListener('abort', () => xhr.abort(), { once: true });
+      }
+      xhr.send(file);
+    });
+  }
+
+  // Upload limits and the file types the server expects to extract: { maxUploadBytes, maxFileNameLength, supportedTypes }.
+  getUploadSettings() {
+    return this._request('GET', '/v1.0/ingestion/upload-settings');
+  }
+
+  /**
+   * Download a link's original content (the uploaded file or pushed text, or the crawled source) and offer it to the
+   * user under its file name. Returns { blob, contentType, fileName }.
+   */
+  async downloadLinkSource(link, fileName = null) {
+    const url = `${this.baseUrl}/v1.0/links/${encodeURIComponent(link.id)}/source?download=true`;
+    const headers = {};
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    const response = await fetch(url, { method: 'GET', headers });
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      let parsed = null;
+      try { parsed = text ? JSON.parse(text) : null; } catch { /* not json */ }
+      throw new ApiError(response.status, (parsed && (parsed.message || parsed.error)) || text || response.statusText, parsed);
+    }
+    const blob = await response.blob();
+    const contentType = response.headers.get('Content-Type') || blob.type || 'application/octet-stream';
+    const name = fileName || link.fileName || `${link.id}`;
+    const a = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    return { blob, contentType, fileName: name };
+  }
   // Bulk submit multiple links for a subject in a single request; labels/tags apply to every URL.
   async bulkSubmitLinks(subjectId, { urls, labels, tags }) {
     const body = { urls };

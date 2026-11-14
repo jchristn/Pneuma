@@ -12,14 +12,17 @@ namespace Pneuma.Server.Services
     using Pneuma.Core.Ingestion.Configuration;
     using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
+    using Pneuma.Core.Integrations.Abstractions;
+    using Pneuma.Core.Integrations.Implementations;
+    using Pneuma.Core.Integrations.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
     using Pneuma.Core.Storage;
 
     /// <summary>
-    /// Stores and queues content pushed to a subject (the REST content routes and the MCP <c>pneuma_submit_content</c>
-    /// tool share it). Content is kept in the blob store and ingested like a link's; an external key already used in
+    /// Stores and queues content pushed to a subject and files uploaded to it (the REST content and file routes and the
+    /// MCP <c>pneuma_submit_content</c> tool share it). Content is kept in the blob store and ingested like a link's; an external key already used in
     /// the subject replaces that link's content instead of adding a duplicate. Thread-safe.
     /// </summary>
     public class ContentSubmissionService
@@ -36,6 +39,7 @@ namespace Pneuma.Server.Services
         private readonly DatabaseDriverBase _Db;
         private readonly IBlobStore _Blobs;
         private readonly IngestionSettings _Settings;
+        private readonly IAtomizer? _Atomizer;
 
         #endregion
 
@@ -44,13 +48,18 @@ namespace Pneuma.Server.Services
         /// <summary>Instantiate the service.</summary>
         /// <param name="db">Database driver.</param>
         /// <param name="blobs">Blob store that holds pushed content.</param>
-        /// <param name="settings">Ingestion settings (content size limit).</param>
-        /// <exception cref="ArgumentNullException">Thrown when a dependency is null.</exception>
-        public ContentSubmissionService(DatabaseDriverBase db, IBlobStore blobs, IngestionSettings settings)
+        /// <param name="settings">Ingestion settings (content and upload size limits).</param>
+        /// <param name="atomizer">
+        /// Optional type detector used to refuse an uploaded file DocumentAtom does not recognize before it is stored; null
+        /// leaves detection to the ingestion job.
+        /// </param>
+        /// <exception cref="ArgumentNullException">Thrown when a required dependency is null.</exception>
+        public ContentSubmissionService(DatabaseDriverBase db, IBlobStore blobs, IngestionSettings settings, IAtomizer? atomizer = null)
         {
             _Db = db ?? throw new ArgumentNullException(nameof(db));
             _Blobs = blobs ?? throw new ArgumentNullException(nameof(blobs));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _Atomizer = atomizer;
         }
 
         #endregion
@@ -86,11 +95,106 @@ namespace Pneuma.Server.Services
             string? externalKey = String.IsNullOrWhiteSpace(item.ExternalKey) ? null : item.ExternalKey!.Trim();
             if (externalKey != null && externalKey.Length > 256) return Reject(result, 400, "externalKey is at most 256 characters.");
 
-            string tenantId = subject.TenantId;
             string contentType = item.ContentType!.Split(';')[0].Trim().ToLowerInvariant();
-            string? title = TextSanitizer.Clean(item.Title);
-            List<string> labels = CleanLabels(item.Labels);
-            Dictionary<string, string> tags = CleanTags(item.Tags);
+            return await StoreAsync(result, userId, subject, bytes, contentType, null, TextSanitizer.Clean(item.Title), externalKey, item.Labels, item.Tags, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Validate, store, and queue one uploaded file. The bytes are stored unchanged. A text-family file (plain text,
+        /// Markdown, HTML, JSON) keeps its declared type; any other file is checked with the type detector when one is
+        /// configured and its type is detected again by the ingestion job. Returns 201 created, 200 replaced, 400, 409,
+        /// 413, or 415 with the reason.
+        /// </summary>
+        /// <param name="userId">The submitting user, or null.</param>
+        /// <param name="subject">The target subject (already checked for models and a collection).</param>
+        /// <param name="request">File metadata.</param>
+        /// <param name="data">The file bytes.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The result.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="subject"/> or <paramref name="request"/> is null.</exception>
+        public async Task<ContentSubmitResult> SubmitFileAsync(string? userId, Subject subject, SubmitFileRequest request, byte[]? data, CancellationToken token)
+        {
+            if (subject == null) throw new ArgumentNullException(nameof(subject));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            ContentSubmitResult result = new ContentSubmitResult { Index = 0 };
+            string? fileName = UploadFileTypes.NormalizeFileName(request.FileName);
+            if (fileName == null) return Reject(result, 400, "A file name is required (the filename query parameter).");
+            if (fileName.Length > UploadFileTypes.MaxFileNameLength) return Reject(result, 400, "The file name is at most " + UploadFileTypes.MaxFileNameLength + " characters.");
+            if (data == null || data.Length == 0) return Reject(result, 400, "The file is empty.");
+            if (data.LongLength > _Settings.MaxUploadBytes) return Reject(result, 413, TooLargeMessage(data.LongLength));
+
+            string? externalKey = String.IsNullOrWhiteSpace(request.ExternalKey) ? null : request.ExternalKey!.Trim();
+            if (externalKey != null && externalKey.Length > 256) return Reject(result, 400, "externalKey is at most 256 characters.");
+
+            string contentType = UploadFileTypes.ResolveContentType(request.ContentType, fileName);
+            if (InlineContentKeys.DocumentTypeFor(contentType) == null && _Atomizer != null)
+            {
+                TypeDetectResult? detected = null;
+                try
+                {
+                    detected = await _Atomizer.DetectTypeAsync(data, token).ConfigureAwait(false);
+                }
+                catch (Exception) when (!token.IsCancellationRequested)
+                {
+                    // Detection at upload is a gate, not a dependency: when the detector is unreachable the file is
+                    // accepted and the job's type detection stage decides.
+                    detected = null;
+                }
+
+                if (detected != null && (detected.IsUnknown || !DocumentAtomClient.CanExtract(detected.Type)))
+                {
+                    string kind = detected.IsUnknown ? "an unrecognized type" : "type '" + detected.Type + "', which cannot be extracted";
+                    return Reject(result, 415, "'" + fileName + "' is " + kind + ".");
+                }
+            }
+
+            string? title = TextSanitizer.Clean(request.Title);
+            if (String.IsNullOrWhiteSpace(title)) title = fileName;
+            return await StoreAsync(result, userId, subject, data, contentType, fileName, title, externalKey, request.Labels, request.Tags, token).ConfigureAwait(false);
+        }
+
+        /// <summary>The upload limits and advisory types, for <c>GET /v1.0/ingestion/upload-settings</c>.</summary>
+        /// <returns>The settings.</returns>
+        public UploadSettings GetUploadSettings()
+        {
+            return new UploadSettings
+            {
+                MaxUploadBytes = _Settings.MaxUploadBytes,
+                MaxFileNameLength = UploadFileTypes.MaxFileNameLength,
+                DetectsTypeOnUpload = _Atomizer != null,
+                SupportedTypes = UploadFileTypes.Supported()
+            };
+        }
+
+        /// <summary>The message for a file over <c>Ingestion.MaxUploadBytes</c>.</summary>
+        /// <param name="length">File size in bytes.</param>
+        /// <returns>The message.</returns>
+        public string TooLargeMessage(long length)
+        {
+            return "The file is " + length + " bytes; the limit is " + _Settings.MaxUploadBytes + " (Ingestion.MaxUploadBytes).";
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<ContentSubmitResult> StoreAsync(
+            ContentSubmitResult result,
+            string? userId,
+            Subject subject,
+            byte[] bytes,
+            string contentType,
+            string? fileName,
+            string? title,
+            string? externalKey,
+            List<string>? submittedLabels,
+            Dictionary<string, string>? submittedTags,
+            CancellationToken token)
+        {
+            string tenantId = subject.TenantId;
+            List<string> labels = CleanLabels(submittedLabels);
+            Dictionary<string, string> tags = CleanTags(submittedTags);
 
             SubjectLink? existing = externalKey == null ? null : await _Db.SubjectLinks.ReadByExternalKeyAsync(tenantId, subject.Id, externalKey, token).ConfigureAwait(false);
             if (existing != null && existing.DeletionStatus != LinkDeletionStatusEnum.None) return Reject(result, 409, "The content with this externalKey is being deleted.");
@@ -100,8 +204,10 @@ namespace Pneuma.Server.Services
             {
                 await _Blobs.WriteAsync(InlineContentKeys.KeyFor(tenantId, existing.Id), bytes, token).ConfigureAwait(false);
                 existing.SourceKind = SourceKindEnum.Inline;
+                existing.Url = InlineContentKeys.UriFor(existing.Id, fileName);
                 existing.Title = title ?? existing.Title;
                 existing.ContentType = contentType;
+                existing.FileName = fileName;
                 existing.SizeBytes = bytes.Length;
                 existing.Labels = labels;
                 existing.Tags = tags;
@@ -129,9 +235,10 @@ namespace Pneuma.Server.Services
                 SourceKind = SourceKindEnum.Inline,
                 ExternalKey = externalKey,
                 ContentType = contentType,
+                FileName = fileName,
                 SizeBytes = bytes.Length
             };
-            link.Url = InlineContentKeys.UriFor(link.Id);
+            link.Url = InlineContentKeys.UriFor(link.Id, fileName);
 
             string key = InlineContentKeys.KeyFor(tenantId, link.Id);
             await _Blobs.WriteAsync(key, bytes, token).ConfigureAwait(false);
@@ -151,10 +258,6 @@ namespace Pneuma.Server.Services
                 throw;
             }
         }
-
-        #endregion
-
-        #region Private-Methods
 
         private static IngestionJob NewJob(Subject subject, SubjectLink link)
         {

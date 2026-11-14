@@ -59,6 +59,21 @@ function buildQuery(params) {
 }
 
 /**
+ * Read the file name from a Content-Disposition header, preferring the RFC 6266 `filename*` form.
+ * @param {string|null} header
+ * @returns {string|null}
+ */
+function dispositionFileName(header) {
+    if (!header) return null;
+    const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+    if (star) {
+        try { return decodeURIComponent(star[1].trim()); } catch { return star[1].trim(); }
+    }
+    const plain = /filename\s*=\s*"([^"]*)"/i.exec(header);
+    return plain ? plain[1] : null;
+}
+
+/**
  * Client for the Pneuma REST API.
  *
  * All authenticated calls send `Authorization: Bearer <token>`. Obtain a token
@@ -431,6 +446,80 @@ export class PneumaClient {
      */
     submitContent(subjectId, item) {
         return this.request('POST', `/v1.0/subjects/${encodeURIComponent(subjectId)}/content`, { body: item });
+    }
+
+    /**
+     * Upload one file to a subject for ingestion (`POST /v1.0/subjects/{id}/files`). The data is sent as the raw request
+     * body and the metadata in the query string. Reusing `externalKey` replaces the earlier file with that key.
+     *
+     * In a browser pass a `File` or `Blob` (a `File` supplies its own name and type). In Node pass a `Buffer`,
+     * `Uint8Array`, `ArrayBuffer`, or `Blob`; streams should be read into a Buffer first.
+     * @param {string} subjectId
+     * @param {Blob|ArrayBuffer|ArrayBufferView} data - The file content.
+     * @param {{ filename?: string, contentType?: string, title?: string, externalKey?: string, labels?: string[], tags?: Record<string,string> }} [options]
+     *   `filename` is required unless `data` is a `File`; `contentType` defaults to the blob's type, else
+     *   `application/octet-stream` (the server then infers the type from the file name).
+     * @returns {Promise<{ index: number, statusCode: number, replaced: boolean, link: object, jobId: string }>}
+     * @throws {PneumaError} 400 invalid input, 404 unknown subject, 413 too large, 415 unrecognized file.
+     */
+    async uploadFile(subjectId, data, options = {}) {
+        if (data === null || data === undefined) throw new TypeError('uploadFile: data is required');
+        const filename = options.filename || (typeof data === 'object' && typeof data.name === 'string' ? data.name : '');
+        if (!filename) throw new TypeError('uploadFile: options.filename is required unless data is a File');
+        const contentType = options.contentType || (typeof Blob !== 'undefined' && data instanceof Blob && data.type ? data.type : 'application/octet-stream');
+
+        const usp = new URLSearchParams();
+        usp.append('filename', filename);
+        if (options.title) usp.append('title', options.title);
+        if (options.externalKey) usp.append('externalKey', options.externalKey);
+        for (const label of options.labels || []) usp.append('labels', label);
+        for (const [key, value] of Object.entries(options.tags || {})) usp.append(`tag.${key}`, value ?? '');
+
+        const headers = { Accept: 'application/json', 'Content-Type': contentType };
+        if (this.token) headers.Authorization = `Bearer ${this.token}`;
+        const response = await fetch(`${this.baseUrl}/v1.0/subjects/${encodeURIComponent(subjectId)}/files?${usp.toString()}`, {
+            method: 'POST',
+            headers,
+            body: data
+        });
+        const text = await response.text();
+        let parsed = null;
+        if (text) {
+            try { parsed = JSON.parse(text); } catch { parsed = text; }
+        }
+        if (!response.ok) throw new PneumaError(response.status, parsed);
+        return parsed;
+    }
+
+    /**
+     * Upload limits and the file types the server expects to extract.
+     * @returns {Promise<{ maxUploadBytes: number, maxFileNameLength: number, detectsTypeOnUpload: boolean, supportedTypes: { documentType: string, extensions: string[], mimeTypes: string[] }[] }>}
+     */
+    getUploadSettings() {
+        return this.request('GET', '/v1.0/ingestion/upload-settings');
+    }
+
+    /**
+     * Download a link's original content: the uploaded file or pushed text, or the crawled source.
+     * @param {string} linkId
+     * @returns {Promise<{ data: Uint8Array, contentType: string, fileName: string|null }>}
+     * @throws {PneumaError} 404 when the link or its source is not found.
+     */
+    async downloadLinkSource(linkId) {
+        const headers = {};
+        if (this.token) headers.Authorization = `Bearer ${this.token}`;
+        const response = await fetch(`${this.baseUrl}/v1.0/links/${encodeURIComponent(linkId)}/source?download=true`, { headers });
+        if (!response.ok) {
+            const text = await response.text();
+            let parsed = null;
+            if (text) {
+                try { parsed = JSON.parse(text); } catch { parsed = text; }
+            }
+            throw new PneumaError(response.status, parsed);
+        }
+        const data = new Uint8Array(await response.arrayBuffer());
+        const contentType = (response.headers.get('Content-Type') || 'application/octet-stream').split(';')[0].trim();
+        return { data, contentType, fileName: dispositionFileName(response.headers.get('Content-Disposition')) };
     }
 
     /**

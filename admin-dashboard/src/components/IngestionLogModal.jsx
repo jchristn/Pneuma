@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { linkDisplayName } from '../utils/files';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { normalizeList } from '../utils/api';
@@ -129,7 +130,7 @@ function IngestionLogModal({ link, onClose }) {
     <Modal
       title={t('ingestionLog.title')}
       size="lg"
-      subtitle={link.title || link.url}
+      subtitle={link.fileName || link.title || linkDisplayName(link)}
       headerExtra={<CopyButton value={String(link.id)} label="ID" />}
       onClose={onClose}
       footer={(

@@ -62,7 +62,7 @@ function ApiExplorerView() {
 
   const validateAndRun = () => {
     setJsonError('');
-    if (hasBody && ex.body) {
+    if (hasBody && ex.body && !ex.isBinaryBody) {
       try { JSON.parse(ex.body); } catch { setJsonError(t('explorer.invalidJson')); return; }
     }
     if (ex.operation && isDestructive(ex.operation.method, ex.operation.path)) {
@@ -160,7 +160,26 @@ function ApiExplorerView() {
               {hasBody && (
                 <div className="explorer-field-group">
                   <h3>{t('explorer.body')}</h3>
-                  <textarea rows={10} value={ex.body} onChange={(e) => ex.setBody(e.target.value)} />
+                  {ex.isBinaryBody ? (
+                    <div>
+                      <input
+                        type="file"
+                        aria-label={t('explorer.bodyFile', 'Request body file')}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          ex.setBodyFile(file);
+                          if (file && Object.prototype.hasOwnProperty.call(ex.queryParams, 'filename') && !ex.queryParams.filename) {
+                            ex.setQueryParams({ ...ex.queryParams, filename: file.name });
+                          }
+                        }}
+                      />
+                      <div className="field-hint" style={{ marginTop: '0.35rem' }}>
+                        {ex.bodyFile ? `${ex.bodyFile.name} (${ex.bodyFile.size} bytes, ${ex.bodyFile.type || 'application/octet-stream'})` : t('explorer.bodyFileHint', 'Choose the file to send as the request body.')}
+                      </div>
+                    </div>
+                  ) : (
+                    <textarea rows={10} value={ex.body} onChange={(e) => ex.setBody(e.target.value)} />
+                  )}
                   {jsonError && <div className="error-message" style={{ marginTop: '0.5rem' }}>{jsonError}</div>}
                 </div>
               )}

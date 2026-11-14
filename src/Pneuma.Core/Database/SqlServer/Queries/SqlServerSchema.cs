@@ -289,6 +289,10 @@ namespace Pneuma.Core.Database.SqlServer.Queries
                     "IF OBJECT_ID(N'dbo.subjectquestions', N'U') IS NULL CREATE TABLE dbo.subjectquestions (id NVARCHAR(64) PRIMARY KEY, tenantid NVARCHAR(64) NOT NULL, subjectid NVARCHAR(64) NOT NULL, question NVARCHAR(MAX) NOT NULL, kind NVARCHAR(32) NOT NULL, position INT NOT NULL DEFAULT 0, origin NVARCHAR(16) NOT NULL, createdutc NVARCHAR(32) NOT NULL);",
                     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_subjectquestions_tenant_subject' AND object_id = OBJECT_ID(N'dbo.subjectquestions')) CREATE INDEX idx_subjectquestions_tenant_subject ON dbo.subjectquestions (tenantid, subjectid, position);"
                 }));
+                list.Add(new SchemaMigration(37, "Add link file name", new List<string>
+                {
+                    "IF COL_LENGTH('dbo.subjectlinks', 'filename') IS NULL ALTER TABLE dbo.subjectlinks ADD filename NVARCHAR(256);"
+                }));
                 return list;
             }
         }

@@ -13,6 +13,9 @@ import ConfirmModal from '../components/ConfirmModal';
 import JsonViewer from '../components/JsonViewer';
 import LinkRefreshModal, { isRefreshable } from '../components/LinkRefreshModal';
 import { formatDateTime } from '../i18n/formatters';
+import FileUploadModal from '../components/FileUploadModal';
+import { usePageFileDrop } from '../hooks/usePageFileDrop';
+import { formatFileSize, isInlineLink, isTextContentType, linkDisplayName, linkKind } from '../utils/files';
 
 // A link whose most recent ingestion failed can have its job restarted, mirroring the Ingestion Queue.
 function isLinkFailed(link) {
@@ -43,6 +46,10 @@ function LinksView() {
   const [reingestTarget, setReingestTarget] = useState(null);
   // Links whose scheduled refresh is being set (one from the row menu, several from the bulk bar).
   const [refreshTargets, setRefreshTargets] = useState(null);
+  // File upload: the modal, files dropped on the page for it to queue, and the count uploaded in the last run.
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState(null);
+  const [uploadedCount, setUploadedCount] = useState(null);
 
   // Load the subject list once for the filter dropdown and the create form.
   useEffect(() => {
@@ -67,10 +74,25 @@ function LinksView() {
     return match ? (match.displayName || match.name || id) : id;
   }, [subjects]);
 
+  const fileDragging = usePageFileDrop(subjects.length > 0, (files) => {
+    setDroppedFiles(files);
+    setUploadOpen(true);
+  });
+  const consumeDropped = useCallback(() => setDroppedFiles(null), []);
+
   const columns = [
-    { key: 'url', label: 'URL', cellClass: 'wrap', render: (r) => (
+    { key: 'url', label: t('links.source'), cellClass: 'wrap', render: (r) => (isInlineLink(r) ? (
+      <span className="fu-root fu-source-name" title={r.url}>
+        <span className="fu-kind">{t(`upload.kind.${linkKind(r)}`)}</span>
+        {linkDisplayName(r)}
+      </span>
+    ) : (
       <a href={r.url} target="_blank" rel="noopener noreferrer">{r.url}</a>
-    ) },
+    )) },
+    { key: 'sourceKind', defaultHidden: true, label: t('links.kind'), render: (r) => t(`upload.kind.${linkKind(r)}`) },
+    { key: 'fileName', defaultHidden: true, label: t('links.fileName'), cellClass: 'wrap', render: (r) => r.fileName || '—' },
+    { key: 'contentType', defaultHidden: true, label: t('links.contentType'), render: (r) => r.contentType || '—' },
+    { key: 'sizeBytes', defaultHidden: true, label: t('links.size'), render: (r) => (r.sizeBytes > 0 ? formatFileSize(r.sizeBytes) : '—') },
     { key: 'title', label: 'Title', render: (r) => r.title || '—' },
     { key: 'status', label: 'Status', render: (r) => <StatusPill label={r.status} tone={toneForStatus(r.status)} /> },
     { key: 'subjectId', label: 'Subject', render: (r) => (
@@ -151,7 +173,19 @@ function LinksView() {
     setArtifactLoading(true);
     setArtifactNotice('');
     try {
-      const { blob } = await apiClient.getLinkSource(item.id);
+      const { blob, contentType } = await apiClient.getLinkSource(item.id);
+      if (!isTextContentType(contentType)) {
+        // A PDF, Office document, or image cannot be shown as text: save it under its file name instead.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.fileName || linkDisplayName(item) || item.id;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return;
+      }
       const text = await blob.text();
       setArtifact({ title: t('links.viewSource'), data: text, copyLabel: t('links.viewSource'), size: 'full' });
     } catch (err) {
@@ -297,9 +331,14 @@ function LinksView() {
         fetcher={fetcher}
         toolbar={toolbar}
         headerActions={(
-          <button type="button" className="button-secondary" onClick={() => setShowBulk(true)}>
-            {t('links.addMultiple')}
-          </button>
+          <>
+            <button type="button" className="button-secondary" onClick={() => setShowBulk(true)}>
+              {t('links.addMultiple')}
+            </button>
+            <button type="button" className="button-secondary" onClick={() => setUploadOpen(true)} disabled={subjects.length === 0} title={t('upload.buttonTip')}>
+              {t('upload.button')}
+            </button>
+          </>
         )}
         capabilities={{ create: true, edit: false, delete: true, viewJson: true }}
         idField="id"
@@ -312,6 +351,7 @@ function LinksView() {
           { key: 'refreshNow', label: t('links.refreshNow'), tip: t('links.refreshNowTip'), hidden: (item) => !isRefreshable(item), onClick: (item) => refreshNow(item) },
           { key: 'ingestionLog', label: t('links.viewIngestionLog'), onClick: (item) => setLogLink(item) },
           { key: 'viewSource', label: t('links.viewSource'), onClick: (item) => openSource(item) },
+          { key: 'downloadOriginal', label: t('links.downloadOriginal'), hidden: (item) => !isInlineLink(item), onClick: (item) => apiClient.downloadLinkSource(item, linkDisplayName(item)).catch((err) => setArtifactNotice(artifactErrorMessage(err))) },
           { key: 'viewAtoms', label: t('links.viewAtoms'), onClick: (item) => openArtifact(item, 'atoms', t('links.artifactAtoms')) },
           { key: 'viewChunks', label: t('links.viewChunks'), onClick: (item) => openArtifact(item, 'chunks', t('links.artifactChunks')) },
           { key: 'viewVectors', label: t('links.viewVectors'), onClick: (item) => openArtifact(item, 'vectors', t('links.artifactVectors')) },
@@ -357,6 +397,35 @@ function LinksView() {
         >
           <p className="confirm-text">{artifactNotice}</p>
         </Modal>
+      )}
+      {uploadOpen && (
+        <FileUploadModal
+          subjects={subjectOptions}
+          defaultSubjectId={selectedSubjectId}
+          incomingFiles={droppedFiles}
+          onIncomingConsumed={consumeDropped}
+          onClose={() => { setUploadOpen(false); setDroppedFiles(null); }}
+          onUploaded={(count) => { setUploadedCount(count); setRefreshKey((k) => k + 1); }}
+          onViewLog={(link) => setLogLink(link)}
+        />
+      )}
+      {uploadedCount !== null && !uploadOpen && (
+        <Modal
+          title={t('upload.title')}
+          size="sm"
+          onClose={() => setUploadedCount(null)}
+          footer={<button type="button" className="button-primary" onClick={() => setUploadedCount(null)}>{t('common.close')}</button>}
+        >
+          <p className="confirm-text">{t('upload.uploadedNotice', { count: uploadedCount })}</p>
+        </Modal>
+      )}
+      {fileDragging && !uploadOpen && (
+        <div className="fu-root fu-overlay" aria-hidden="true">
+          <div className="fu-overlay-panel">
+            <span className="fu-dropzone-icon">⇪</span>
+            {t('upload.dropOverlay')}
+          </div>
+        </div>
       )}
       {showBulk && (
         <BulkAddLinksModal
