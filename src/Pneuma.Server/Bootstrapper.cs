@@ -61,7 +61,7 @@ namespace Pneuma.Server
             RequestHistoryCaptureService capture = new RequestHistoryCaptureService(database, settings.RequestHistory, logging);
             TelemetryService telemetry = new TelemetryService(settings.Telemetry, logging);
 
-            IntegrationClients clients = BuildIntegrationClients(settings);
+            IntegrationClients clients = BuildIntegrationClients(settings, logging);
             IArtifactStore artifactStore = BuildArtifactStore(settings, logging);
             ModelHealthMonitor modelHealth = new ModelHealthMonitor(database, authentication.Cipher, logging);
 
@@ -140,6 +140,18 @@ namespace Pneuma.Server
                 catch (Exception e)
                 {
                     logging.Warn("[Bootstrapper] S3 bucket initialization failed (continuing): " + e.Message);
+                }
+            }
+
+            if (clients.Blobs is S3BlobStore s3Blobs)
+            {
+                try
+                {
+                    await s3Blobs.EnsureBucketAsync().ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    logging.Warn("[Bootstrapper] blob bucket '" + s3Blobs.Bucket + "' initialization failed (continuing; blob writes fail until it exists): " + e.Message);
                 }
             }
 
@@ -244,6 +256,7 @@ namespace Pneuma.Server
                 try { await maintenance.ConfigureAwait(false); } catch (OperationCanceledException) { }
                 await database.DisposeAsync().ConfigureAwait(false);
                 if (artifactStore is IDisposable disposableStore) disposableStore.Dispose();
+                if (clients.Blobs is IDisposable disposableBlobs) disposableBlobs.Dispose();
             }
         }
 
@@ -270,7 +283,7 @@ namespace Pneuma.Server
                 logging);
         }
 
-        private static IntegrationClients BuildIntegrationClients(AppSettings settings)
+        private static IntegrationClients BuildIntegrationClients(AppSettings settings, LoggingModule logging)
         {
             IntegrationsSettings integrations = settings.Integrations;
             IntegrationResilienceSettings resilience = integrations.Resilience;
@@ -308,7 +321,7 @@ namespace Pneuma.Server
                 Graph = graphClient,
                 Vectors = recallDb,
                 Collections = recallDb,
-                Blobs = new DiskBlobStore(integrations.Blob.Directory)
+                Blobs = BlobStoreFactory.Create(settings, logging)
             };
         }
 

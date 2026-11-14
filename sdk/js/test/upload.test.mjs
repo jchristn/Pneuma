@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => {
             res.end(JSON.stringify({ maxUploadBytes: 1024, maxFileNameLength: 256, supportedTypes: [] }));
             return;
         }
-        recorded.push({ path: url.pathname, query: url.searchParams, contentType: req.headers['content-type'], auth: req.headers.authorization, body: Buffer.concat(chunks) });
+        recorded.push({ path: url.pathname, query: url.searchParams, contentType: req.headers['content-type'], auth: req.headers.authorization, transferEncoding: req.headers['transfer-encoding'], contentLength: req.headers['content-length'], body: Buffer.concat(chunks) });
         if (url.pathname.includes('/sub_missing/')) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'NotFound', message: 'Subject not found.' }));
@@ -85,6 +85,22 @@ await step('uploadFile defaults to octet-stream and requires a name', async () =
     await client.uploadFile('sub_1', new Uint8Array([1, 2, 3]), { filename: 'data.bin' });
     assert.equal(recorded.at(-1).contentType, 'application/octet-stream');
     await assert.rejects(() => client.uploadFile('sub_1', new Uint8Array([1])), TypeError);
+});
+
+await step('uploadFile streams a Node Readable and a web ReadableStream chunked', async () => {
+    const { Readable } = await import('node:stream');
+    const parts = [Buffer.from('part one, '), Buffer.from('part two, '), Buffer.from('part three')];
+    await client.uploadFile('sub_1', Readable.from(parts), { filename: 'streamed.txt', contentType: 'text/plain' });
+    let sent = recorded.at(-1);
+    assert.equal(sent.transferEncoding, 'chunked');
+    assert.equal(sent.contentLength, undefined);
+    assert.equal(sent.body.toString(), 'part one, part two, part three');
+
+    const web = new ReadableStream({ start(c) { c.enqueue(new Uint8Array([7, 8])); c.enqueue(new Uint8Array([9])); c.close(); } });
+    await client.uploadFile('sub_1', web, { filename: 'web.bin' });
+    sent = recorded.at(-1);
+    assert.equal(sent.transferEncoding, 'chunked');
+    assert.deepEqual([...sent.body], [7, 8, 9]);
 });
 
 await step('uploadFile throws PneumaError on an error status', async () => {

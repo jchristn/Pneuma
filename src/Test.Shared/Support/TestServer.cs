@@ -38,6 +38,9 @@ namespace Test.Shared.Support
         /// <summary>The in-memory RecallDB fake the server is wired to (tenants, collections, documents).</summary>
         public FakeRecallDbClient Recall { get; private set; } = null!;
 
+        /// <summary>The blob store the server uses (the configured provider).</summary>
+        public IBlobStore Blobs { get; private set; } = null!;
+
         public CrawlerFactory Crawlers => _Server.Crawlers;
 
         public CrawlSchedulerService CrawlScheduler => _Server.CrawlScheduler;
@@ -57,10 +60,19 @@ namespace Test.Shared.Support
         /// <summary>Create and start a test server.</summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A running test server.</returns>
-        public static async Task<TestServer> CreateAsync(CancellationToken token = default)
+        public static Task<TestServer> CreateAsync(CancellationToken token = default)
+        {
+            return CreateAsync(null, token);
+        }
+
+        /// <summary>Create and start a test server, adjusting its settings first (for example the blob provider or limits).</summary>
+        /// <param name="configure">Changes applied to the settings before the server is built; null for none.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A running test server.</returns>
+        public static async Task<TestServer> CreateAsync(Action<AppSettings>? configure, CancellationToken token = default)
         {
             TestServer instance = new TestServer();
-            await instance.StartAsync(token).ConfigureAwait(false);
+            await instance.StartAsync(configure, token).ConfigureAwait(false);
             return instance;
         }
 
@@ -69,6 +81,7 @@ namespace Test.Shared.Support
         public async ValueTask DisposeAsync()
         {
             try { _Server.Stop(); } catch (Exception) { }
+            if (Blobs is IDisposable disposableBlobs) disposableBlobs.Dispose();
             try { await Database.DisposeAsync().ConfigureAwait(false); } catch (Exception) { }
             try { if (File.Exists(_DbFile)) File.Delete(_DbFile); } catch (Exception) { }
             try { if (File.Exists(_SettingsFile)) File.Delete(_SettingsFile); } catch (Exception) { }
@@ -78,7 +91,7 @@ namespace Test.Shared.Support
 
         #region Private-Methods
 
-        private async Task StartAsync(CancellationToken token)
+        private async Task StartAsync(Action<AppSettings>? configure, CancellationToken token)
         {
             int port = FreePort();
             string dir = Path.Combine(Path.GetTempPath(), "pneuma-tests");
@@ -98,6 +111,8 @@ namespace Test.Shared.Support
             // Seeded model endpoints point at a closed loopback port, so API tests never reach a model that happens
             // to be running on the machine (a busy local Ollama made model-dependent tests slow and timing-flaky).
             settings.Seed.OllamaBaseUrl = "http://127.0.0.1:9";
+            settings.Integrations.Blob.Directory = Path.Combine(dir, "blobs-" + Guid.NewGuid().ToString("N"));
+            configure?.Invoke(settings);
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -110,7 +125,8 @@ namespace Test.Shared.Support
             RequestHistoryCaptureService capture = new RequestHistoryCaptureService(Database, settings.RequestHistory, logging);
             TelemetryService telemetry = new TelemetryService(settings.Telemetry, logging);
 
-            DiskBlobStore blobs = new DiskBlobStore(Path.Combine(dir, "blobs-" + Guid.NewGuid().ToString("N")));
+            IBlobStore blobs = BlobStoreFactory.Create(settings, null);
+            Blobs = blobs;
             ModelHealthMonitor modelHealth = new ModelHealthMonitor(Database, new Pneuma.Core.Security.Aes256Cipher(settings.Auth.TokenSigningKey), logging);
             FakeRecallDbClient recall = new FakeRecallDbClient();
             Recall = recall;

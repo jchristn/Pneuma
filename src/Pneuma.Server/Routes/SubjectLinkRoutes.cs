@@ -392,10 +392,15 @@ namespace Pneuma.Server.Routes
             Subject? subject = await ReadContentSubjectAsync(ctx, rc).ConfigureAwait(false);
             if (subject == null) return;
 
-            // Refuse an oversized upload from its declared length, before the body is read into memory.
-            if (ctx.Request.ContentLength > _Ingestion.MaxUploadBytes)
+            // The body arrives with a Content-Length or chunked. An oversized declared length is refused before reading;
+            // a chunked body is refused as soon as it passes the limit, so it is never buffered whole.
+            RequestBodyResult body = await RequestBodyReader.ReadAsync(ctx, _Ingestion.MaxUploadBytes, ctx.Token).ConfigureAwait(false);
+            if (body.TooLarge)
             {
-                await RouteHelper.SendErrorAsync(ctx, 413, "PayloadTooLarge", _Content!.TooLargeMessage(ctx.Request.ContentLength)).ConfigureAwait(false);
+                string message = body.Chunked
+                    ? "The file is larger than the limit of " + _Ingestion.MaxUploadBytes + " bytes (Ingestion.MaxUploadBytes)."
+                    : _Content!.TooLargeMessage(ctx.Request.ContentLength);
+                await RouteHelper.SendErrorAsync(ctx, 413, "PayloadTooLarge", message).ConfigureAwait(false);
                 return;
             }
 
@@ -410,8 +415,7 @@ namespace Pneuma.Server.Routes
                 Tags = QueryTags(query)
             };
 
-            byte[]? data = ctx.Request.ContentLength > 0 ? ctx.Request.DataAsBytes : null;
-            ContentSubmitResult result = await _Content!.SubmitFileAsync(rc.UserId, subject, request, data, ctx.Token).ConfigureAwait(false);
+            ContentSubmitResult result = await _Content!.SubmitFileAsync(rc.UserId, subject, request, body.Data, ctx.Token).ConfigureAwait(false);
             if (result.Error != null)
             {
                 await RouteHelper.SendErrorAsync(ctx, result.StatusCode, ErrorCodeFor(result.StatusCode), result.Error).ConfigureAwait(false);

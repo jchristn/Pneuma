@@ -10,13 +10,16 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Pneuma.Core.Enums;
     using Pneuma.Core.Helpers;
+    using Pneuma.Core.Ingestion.Deletion;
     using Pneuma.Core.Ingestion.Configuration;
     using Pneuma.Core.Ingestion.Enums;
     using Pneuma.Core.Ingestion.Models;
     using Pneuma.Core.Models;
     using Pneuma.Core.Requests;
     using Pneuma.Core.Responses;
+    using Pneuma.Core.Storage;
     using Pneuma.Server.Services;
+    using Pneuma.Server.Settings;
     using Test.Shared.Support;
     using Touchstone.Core;
 
@@ -235,6 +238,148 @@ namespace Test.Shared.Suites
                             }
                         }),
 
+                    new TestCaseDescriptor("FileUpload", "Upload_ChunkedBody", "A chunked upload (no Content-Length) is read in full, stored, downloadable, and recorded in history without its bytes",
+                        executeAsync: async ct =>
+                        {
+                            await using (TestServer server = await TestServer.CreateAsync(ct))
+                            {
+                                string token = await ApiClientHelper.LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                                string subjectId = await ApiClientHelper.CreateConfiguredSubjectAsync(server.BaseUrl, token, ct);
+                                string url = server.BaseUrl + "/v1.0/subjects/" + subjectId + "/files?filename=";
+
+                                byte[] binary = new byte[70000];
+                                new Random(7).NextBytes(binary);
+                                ApiResult big = await UploadAsync(url + "scan.pdf", token, binary, "application/pdf", ct, chunked: true);
+                                Expect(big, 201);
+                                Check(big.Body.Contains("\"sizeBytes\":70000"), "the whole chunked body is stored: " + big.Body);
+                                byte[] source = await DownloadAsync(server.BaseUrl + "/v1.0/links/" + LinkIdOf(big.Body) + "/source", token, ct);
+                                Check(source.SequenceEqual(binary), "the stored file equals the chunked upload");
+
+                                byte[] text = Encoding.UTF8.GetBytes("# Chunked\n\nA Markdown file sent with chunked transfer encoding.");
+                                ApiResult md = await UploadAsync(url + "chunked.md", token, text, "text/markdown", ct, chunked: true);
+                                Expect(md, 201);
+                                Check(md.Body.Contains("\"sizeBytes\":" + text.Length), "a chunked text upload is stored whole: " + md.Body);
+
+                                Expect(await UploadAsync(url + "empty.txt", token, Array.Empty<byte>(), "text/plain", ct, chunked: true), 400);
+
+                                bool recorded = false;
+                                for (int attempt = 0; attempt < 30 && !recorded; attempt++)
+                                {
+                                    RequestHistoryPage page = await server.Database.RequestHistory.EnumerateAsync(new RequestHistoryFilter { PathContains = "/files", PageSize = 50 }, ct);
+                                    foreach (RequestHistoryEntry entry in page.Items.Where(e => e.Method == "POST"))
+                                    {
+                                        RequestHistoryEntry? full = await server.Database.RequestHistory.ReadAsync(null, entry.Id, ct);
+                                        if (full?.RequestBody == "[binary, chunked]") recorded = true;
+                                    }
+                                    if (!recorded) await Task.Delay(100, ct);
+                                }
+                                Check(recorded, "a chunked binary upload is recorded with a placeholder");
+                            }
+                        }),
+
+                    new TestCaseDescriptor("FileUpload", "Upload_LimitAppliesToChunkedAndDeclared", "Ingestion.MaxUploadBytes refuses an oversized upload with 413 whether it is chunked or has a Content-Length",
+                        executeAsync: async ct =>
+                        {
+                            await using (TestServer server = await TestServer.CreateAsync(s => s.Ingestion.MaxUploadBytes = 4096, ct))
+                            {
+                                string token = await ApiClientHelper.LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                                string subjectId = await ApiClientHelper.CreateConfiguredSubjectAsync(server.BaseUrl, token, ct);
+                                string url = server.BaseUrl + "/v1.0/subjects/" + subjectId + "/files?filename=a.bin";
+                                byte[] big = new byte[20000];
+                                ApiResult chunked = await UploadAsync(url, token, big, "application/pdf", ct, chunked: true);
+                                Expect(chunked, 413);
+                                Check(chunked.Body.Contains("MaxUploadBytes"), "the 413 names the limit: " + chunked.Body);
+                                Expect(await UploadAsync(url, token, big, "application/pdf", ct), 413);
+                                Expect(await UploadAsync(url, token, new byte[4096], "application/pdf", ct, chunked: true), 201);
+                                ApiResult settings = await ApiClientHelper.CallAsync(HttpMethod.Get, server.BaseUrl + "/v1.0/ingestion/upload-settings", token, null, ct);
+                                Check(settings.Body.Contains("\"maxUploadBytes\":4096"), "the settings report the configured limit: " + settings.Body);
+                            }
+                        }),
+
+                    new TestCaseDescriptor("FileUpload", "S3BlobStore_RoundTrips", "The S3 blob store creates its bucket, writes, reads, and deletes objects under the blob key, and reads a missing object as null",
+                        executeAsync: async ct =>
+                        {
+                            using (StubS3Server s3 = new StubS3Server())
+                            using (S3BlobStore store = new S3BlobStore(s3.Endpoint, "us-west-1", "default", "default", true, "pneuma-blobs"))
+                            {
+                                await store.EnsureBucketAsync(ct);
+                                Check(s3.Buckets.ContainsKey("pneuma-blobs"), "the bucket is created");
+                                await store.EnsureBucketAsync(ct);
+
+                                byte[] data = Encoding.UTF8.GetBytes("hello blob");
+                                string key = await store.WriteAsync("inline/ten_1/lnk_1", data, ct);
+                                Check(key == "inline/ten_1/lnk_1", "the key is returned unchanged");
+                                Check(s3.Objects.ContainsKey("pneuma-blobs/inline/ten_1/lnk_1"), "the object is stored under the blob key");
+                                byte[]? read = await store.ReadAsync("inline/ten_1/lnk_1", ct);
+                                Check(read != null && read.SequenceEqual(data), "the object reads back");
+                                Check(await store.ReadAsync("inline/ten_1/missing", ct) == null, "a missing object is null");
+                                await store.DeleteAsync("inline/ten_1/lnk_1", ct);
+                                await store.DeleteAsync("inline/ten_1/lnk_1", ct);
+                                Check(await store.ReadAsync("inline/ten_1/lnk_1", ct) == null, "a deleted object is gone and deleting again is fine");
+                            }
+
+                            using (StubS3Server s3 = new StubS3Server())
+                            using (S3BlobStore store = new S3BlobStore(s3.Endpoint, null, "default", "default", true, "late-bucket"))
+                            {
+                                await store.WriteAsync("job_1", new byte[] { 1, 2, 3 }, ct);
+                                Check(s3.Buckets.ContainsKey("late-bucket") && s3.Objects.ContainsKey("late-bucket/job_1"), "a write to a missing bucket creates it and retries");
+                            }
+                        }),
+
+                    new TestCaseDescriptor("FileUpload", "BlobStoreFactory_FollowsSettings", "The blob store is the configured provider: Disk uses the directory, S3 the S3 connection and S3.Buckets.Blobs (whatever S3.Enabled says)",
+                        executeAsync: ct =>
+                        {
+                            AppSettings disk = new AppSettings();
+                            disk.Integrations.Blob.Directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pneuma-factory-" + Guid.NewGuid().ToString("N"));
+                            Check(BlobStoreFactory.Create(disk, null) is DiskBlobStore, "Disk is the default provider");
+
+                            AppSettings s3 = new AppSettings();
+                            s3.Integrations.Blob.Provider = BlobProviderEnum.S3;
+                            s3.S3.Enabled = false;
+                            s3.S3.Endpoint = "http://127.0.0.1:9";
+                            s3.S3.Buckets.Blobs = "custom-blobs";
+                            IBlobStore store = BlobStoreFactory.Create(s3, null);
+                            Check(store is S3BlobStore bucketStore && bucketStore.Bucket == "custom-blobs", "S3 uses the configured bucket");
+                            ((IDisposable)store).Dispose();
+
+                            BlobSettings parsed = System.Text.Json.JsonSerializer.Deserialize<BlobSettings>("{\"Provider\":\"S3\",\"Directory\":\"/app/blobs\"}")!;
+                            Check(parsed.Provider == BlobProviderEnum.S3, "the provider reads from configuration by name");
+                            return Task.CompletedTask;
+                        }),
+
+                    new TestCaseDescriptor("FileUpload", "Upload_S3Provider_EndToEnd", "With the S3 provider an upload is stored as an object in the blob bucket, served back by the source route, and removed when the link is deleted",
+                        executeAsync: async ct =>
+                        {
+                            using (StubS3Server s3 = new StubS3Server())
+                            {
+                                await using (TestServer server = await TestServer.CreateAsync(s =>
+                                {
+                                    s.Integrations.Blob.Provider = BlobProviderEnum.S3;
+                                    s.S3.Endpoint = s3.Endpoint;
+                                    s.S3.Buckets.Blobs = "pneuma-blobs";
+                                }, ct))
+                                {
+                                    Check(server.Blobs is S3BlobStore, "the server uses the S3 blob store");
+                                    string token = await ApiClientHelper.LoginAsync(server.BaseUrl, "admin@pneuma", "password", ct);
+                                    string subjectId = await ApiClientHelper.CreateConfiguredSubjectAsync(server.BaseUrl, token, ct);
+                                    byte[] file = Encoding.ASCII.GetBytes("%PDF-1.4 stored in a bucket");
+                                    ApiResult up = await UploadAsync(server.BaseUrl + "/v1.0/subjects/" + subjectId + "/files?filename=bucket.pdf", token, file, "application/pdf", ct, chunked: true);
+                                    Expect(up, 201);
+                                    string linkId = LinkIdOf(up.Body);
+                                    string objectKey = s3.Objects.Keys.FirstOrDefault(k => k.StartsWith("pneuma-blobs/inline/", StringComparison.Ordinal) && k.EndsWith("/" + linkId, StringComparison.Ordinal)) ?? String.Empty;
+                                    Check(objectKey.Length > 0, "the upload is an object in the bucket: " + String.Join(", ", s3.Objects.Keys));
+                                    Check(s3.Objects[objectKey].SequenceEqual(file), "the object holds the uploaded bytes");
+                                    Check((await DownloadAsync(server.BaseUrl + "/v1.0/links/" + linkId + "/source", token, ct)).SequenceEqual(file), "the source route reads the bucket");
+
+                                    // The link deletion worker runs only in the full host, so run the cascade it would run.
+                                    string tenantId = objectKey.Split('/')[2];
+                                    CascadeDeletionService cascade = new CascadeDeletionService(server.Database, new NullArtifactStore(), server.Recall, new FakeGraphRepositoryFactory(new FakeLiteGraphClient()), server.Blobs, server.Recall, new FakeLiteGraphTenantAdmin());
+                                    await cascade.DeleteLinkCascadeAsync(tenantId, linkId, ct);
+                                    Check(!s3.Objects.ContainsKey(objectKey), "deleting the link removes its object");
+                                }
+                            }
+                        }),
+
                     new TestCaseDescriptor("FileUpload", "UploadFileTypes_NormalizesAndInfers", "File names lose their path and control characters, and content types are inferred from extensions",
                         executeAsync: ct =>
                         {
@@ -252,18 +397,33 @@ namespace Test.Shared.Suites
                 });
         }
 
-        private static async Task<ApiResult> UploadAsync(string url, string? token, byte[] data, string? contentType, CancellationToken ct)
+        private static async Task<ApiResult> UploadAsync(string url, string? token, byte[] data, string? contentType, CancellationToken ct, bool chunked = false)
         {
             using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url))
             {
                 if (!String.IsNullOrEmpty(token)) request.Headers.Add("Authorization", "Bearer " + token);
-                ByteArrayContent content = new ByteArrayContent(data);
+                if (chunked) request.Headers.TransferEncodingChunked = true;
+                HttpContent content = chunked ? new StreamContent(new System.IO.MemoryStream(data, false), 8192) : new ByteArrayContent(data);
                 if (contentType != null) content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 request.Content = content;
                 using (HttpResponseMessage response = await _Http.SendAsync(request, ct).ConfigureAwait(false))
                 {
                     string text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     return new ApiResult { StatusCode = (int)response.StatusCode, Body = text };
+                }
+            }
+        }
+
+        private static async Task<byte[]> DownloadAsync(string url, string token, CancellationToken ct)
+        {
+            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+            {
+                request.Headers.Add("Authorization", "Bearer " + token);
+                using (HttpResponseMessage response = await _Http.SendAsync(request, ct).ConfigureAwait(false))
+                {
+                    byte[] body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                    if ((int)response.StatusCode != 200) throw new Exception("download should be 200, got " + (int)response.StatusCode + " " + Encoding.UTF8.GetString(body));
+                    return body;
                 }
             }
         }

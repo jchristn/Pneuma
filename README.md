@@ -164,10 +164,24 @@ curl -X POST "http://localhost:8080/v1.0/subjects/$SUBJECT/files?filename=report
 ```
 
 The server checks the type with DocumentAtom before accepting the file (415 for a type it cannot extract), refuses files
-over `Ingestion.MaxUploadBytes` (100 MB by default) with 413, and stores the original unchanged in the blob store
-(`Integrations.Blob.Directory`, the `./blobs` volume in Docker) under `inline/{tenantId}/{linkId}`. Back that directory
-up: unlike a URL, an uploaded file cannot be fetched again. Servers that share one database must share that directory.
-`GET /v1.0/links/{id}/source?download=true` returns the original. The C#, JS, and Python SDKs wrap both calls.
+over `Ingestion.MaxUploadBytes` (100 MB by default) with 413, whether the body has a `Content-Length` or is sent
+chunked, and stores the original unchanged in the blob store under `inline/{tenantId}/{linkId}`.
+`GET /v1.0/links/{id}/source?download=true` returns the original. The C#, JS, and Python SDKs wrap both calls and
+stream files of unknown length chunked.
+
+### Blob storage
+
+The blob store holds uploaded files, pushed text, each ingestion job's copy of its source, and the classification
+cache. `Integrations.Blob.Provider` chooses where all of it lives, with no fallback between providers:
+
+- `S3` (the Docker default): objects in the `S3.Buckets.Blobs` bucket (`pneuma-blobs`), reached with the `S3`
+  section's endpoint, region, credentials, and addressing style (Less3 in the Compose stack). The bucket is created
+  at startup. This works for any number of servers sharing one database.
+- `Disk` (the default outside Docker): files under `Integrations.Blob.Directory`. Servers that share one database
+  must share that directory.
+
+Changing the provider needs a restart and does not move existing objects. Back the bucket or directory up: unlike a
+URL, an uploaded file cannot be fetched again.
 
 ### Factory reset
 

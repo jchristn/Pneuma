@@ -1,8 +1,8 @@
 namespace Pneuma.Server.Settings
 {
     /// <summary>
-    /// Names of the per-stage object-storage buckets. Each ingestion artifact is written to its own
-    /// bucket under a key that references the originating link id.
+    /// Names of the object-storage buckets: one per ingestion artifact stage (keyed by the originating link id), and the
+    /// blob store's bucket.
     /// </summary>
     public class S3BucketSettings
     {
@@ -22,6 +22,12 @@ namespace Pneuma.Server.Settings
 
         /// <summary>Bucket for candidate-subgraph JSON documents (model classification output).</summary>
         public string Subgraph { get; set; } = "pneuma-subgraph";
+
+        /// <summary>
+        /// Bucket for the blob store when <c>Integrations.Blob.Provider</c> is <c>S3</c>: uploaded files, pushed text, each
+        /// job's copy of its source, and the classification cache.
+        /// </summary>
+        public string Blobs { get; set; } = "pneuma-blobs";
 
         #endregion
     }

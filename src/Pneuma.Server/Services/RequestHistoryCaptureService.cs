@@ -105,8 +105,13 @@ namespace Pneuma.Server.Services
             };
 
             // Binary bodies (file uploads, downloaded sources) are recorded as a size placeholder rather than decoded as
-            // text. Secret-named JSON values (passwords, API keys, tokens, crawl-plan credentials) are masked before storage.
-            if (IsBinary(ctx.Request.ContentType))
+            // text, and a chunked body (already consumed by the route) as a placeholder. Secret-named JSON values (passwords, API keys, tokens, crawl-plan credentials) are masked before storage.
+            if (ctx.Request.ChunkedTransfer)
+            {
+                // A chunked body is read once, by the route, chunk by chunk; it cannot be read again here.
+                entry.RequestBody = IsBinary(ctx.Request.ContentType) ? "[binary, chunked]" : "[chunked body not captured]";
+            }
+            else if (IsBinary(ctx.Request.ContentType))
             {
                 entry.RequestBody = BinaryPlaceholder(ctx.Request.ContentLength);
                 entry.RequestBodyBytes = Math.Max(0L, ctx.Request.ContentLength);

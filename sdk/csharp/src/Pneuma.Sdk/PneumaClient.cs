@@ -670,7 +670,11 @@ namespace Pneuma.Sdk
         /// file with that key.
         /// </summary>
         /// <param name="subjectId">Subject identifier.</param>
-        /// <param name="data">The file content. The stream is read from its current position and is not disposed.</param>
+        /// <param name="data">
+        /// The file content. The stream is read from its current position and is not disposed. A seekable stream is sent
+        /// with a Content-Length; a non-seekable stream (a network or pipe stream) is sent with chunked transfer encoding,
+        /// so it is never buffered whole.
+        /// </param>
         /// <param name="fileName">The file name, for example <c>report.pdf</c>.</param>
         /// <param name="options">Title, external key, content type, labels, and tags; null for none.</param>
         /// <param name="token">Cancellation token.</param>

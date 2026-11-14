@@ -3,6 +3,7 @@
 
 A loopback HTTP server records what the SDK sends, so these run without a Pneuma server:
   - upload_file sends the raw bytes with the file name, labels, and tags in the query string
+  - an iterable of chunks is streamed with chunked transfer encoding
   - the content type is guessed from the file name, and a path upload is named after the file
   - an error status raises PneumaError with the parsed body
   - download_link_source returns the bytes, type, and file name, and can write them to disk
@@ -30,8 +31,18 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(length)
+        chunked = (self.headers.get("Transfer-Encoding") or "").lower() == "chunked"
+        if chunked:
+            body = b""
+            while True:
+                size = int(self.rfile.readline().split(b";")[0].strip(), 16)
+                if size == 0:
+                    self.rfile.readline()
+                    break
+                body += self.rfile.read(size)
+                self.rfile.readline()
+        else:
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         url = urlparse(self.path)
         RECORDED.append({
             "path": url.path,
@@ -39,6 +50,7 @@ class _Handler(BaseHTTPRequestHandler):
             "contentType": self.headers.get("Content-Type"),
             "auth": self.headers.get("Authorization"),
             "body": body,
+            "chunked": chunked,
         })
         if "/sub_missing/" in url.path:
             payload = json.dumps({"error": "NotFound", "message": "Subject not found."}).encode()
@@ -114,6 +126,22 @@ def test_upload_and_download():
             assert downloaded["fileName"] == "Q3 résumé.pdf"
             with open(downloaded["path"], "rb") as handle:
                 assert handle.read() == b"%PDF-1.4 bytes"
+
+        def chunks():
+            yield b"part one, "
+            yield b"part two"
+
+        client.upload_file("sub_1", chunks(), filename="streamed.txt")
+        sent = RECORDED[-1]
+        assert sent["chunked"] is True
+        assert sent["body"] == b"part one, part two"
+        assert sent["contentType"] == "text/plain"
+
+        try:
+            client.upload_file("sub_1", chunks())
+            raise AssertionError("an iterable without a file name should raise")
+        except ValueError:
+            pass
 
         try:
             client.upload_file("sub_missing", b"x", filename="a.txt")

@@ -191,8 +191,9 @@ brevity):
   `list_links()`, `get_link(id)`, `delete_link(id)`
 - **File upload**: `upload_file(subject_id, file, filename=None, content_type=None,
   title=None, external_key=None, labels=None, tags=None)` sends one file
-  (`POST /v1.0/subjects/{id}/files`); `file` is a path, bytes, or a binary file
-  object, and the content type is guessed from the name. Reusing `external_key`
+  (`POST /v1.0/subjects/{id}/files`); `file` is a path, bytes, a binary file
+  object, or an iterable of byte chunks (streamed chunked), and the content type
+  is guessed from the name. Reusing `external_key`
   replaces the earlier file. `get_upload_settings()` returns the size limit and
   supported types; `download_link_source(link_id, dest=None)` returns
   `{data, contentType, fileName, path}` and can save the original to disk.

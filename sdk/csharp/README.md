@@ -136,6 +136,7 @@ ContentSubmitResult uploaded = await client.UploadFileFromPathAsync(subject.Id, 
 Console.WriteLine($"{uploaded.Link!.FileName} -> job {uploaded.JobId} (replaced: {uploaded.Replaced})");
 
 // From memory or any stream (ContentType defaults to application/octet-stream; the server infers it from the name).
+// A non-seekable stream (for example a network stream) is sent chunked.
 await client.UploadFileAsync(subject.Id, File.ReadAllBytes("notes.md"), "notes.md", new UploadFileOptions { ContentType = "text/markdown" });
 
 UploadSettings limits = await client.GetUploadSettingsAsync();          // MaxUploadBytes, SupportedTypes

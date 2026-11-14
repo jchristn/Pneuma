@@ -59,6 +59,35 @@ function buildQuery(params) {
 }
 
 /**
+ * Turn upload data into a fetch body. Blobs, buffers, and typed arrays pass through; a Node `Readable` or any async
+ * iterable of chunks becomes a web `ReadableStream` (sent chunked).
+ * @param {*} data
+ * @returns {*}
+ */
+function toUploadBody(data) {
+    if (typeof ReadableStream !== 'undefined' && data instanceof ReadableStream) return data;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) return data;
+    if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return data;
+    if (data && typeof data[Symbol.asyncIterator] === 'function') {
+        const iterator = data[Symbol.asyncIterator]();
+        return new ReadableStream({
+            async pull(controller) {
+                const { value, done } = await iterator.next();
+                if (done) {
+                    controller.close();
+                    return;
+                }
+                controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value.buffer ? value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) : value));
+            },
+            async cancel() {
+                if (typeof iterator.return === 'function') await iterator.return();
+            }
+        });
+    }
+    return data;
+}
+
+/**
  * Read the file name from a Content-Disposition header, preferring the RFC 6266 `filename*` form.
  * @param {string|null} header
  * @returns {string|null}
@@ -453,9 +482,10 @@ export class PneumaClient {
      * body and the metadata in the query string. Reusing `externalKey` replaces the earlier file with that key.
      *
      * In a browser pass a `File` or `Blob` (a `File` supplies its own name and type). In Node pass a `Buffer`,
-     * `Uint8Array`, `ArrayBuffer`, or `Blob`; streams should be read into a Buffer first.
+     * `Uint8Array`, `ArrayBuffer`, or `Blob`. A web `ReadableStream`, a Node `Readable`, or an async iterable of chunks is
+     * streamed with chunked transfer encoding, so a file of unknown length is never buffered whole.
      * @param {string} subjectId
-     * @param {Blob|ArrayBuffer|ArrayBufferView} data - The file content.
+     * @param {Blob|ArrayBuffer|ArrayBufferView|ReadableStream|AsyncIterable<Uint8Array>} data - The file content.
      * @param {{ filename?: string, contentType?: string, title?: string, externalKey?: string, labels?: string[], tags?: Record<string,string> }} [options]
      *   `filename` is required unless `data` is a `File`; `contentType` defaults to the blob's type, else
      *   `application/octet-stream` (the server then infers the type from the file name).
@@ -477,11 +507,10 @@ export class PneumaClient {
 
         const headers = { Accept: 'application/json', 'Content-Type': contentType };
         if (this.token) headers.Authorization = `Bearer ${this.token}`;
-        const response = await fetch(`${this.baseUrl}/v1.0/subjects/${encodeURIComponent(subjectId)}/files?${usp.toString()}`, {
-            method: 'POST',
-            headers,
-            body: data
-        });
+        const init = { method: 'POST', headers, body: toUploadBody(data) };
+        // A streamed body has no length: fetch sends it chunked and requires half-duplex mode.
+        if (typeof ReadableStream !== 'undefined' && init.body instanceof ReadableStream) init.duplex = 'half';
+        const response = await fetch(`${this.baseUrl}/v1.0/subjects/${encodeURIComponent(subjectId)}/files?${usp.toString()}`, init);
         const text = await response.text();
         let parsed = null;
         if (text) {

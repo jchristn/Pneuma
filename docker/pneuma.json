@@ -94,7 +94,7 @@
       "tenantGuid": "00000000-0000-0000-0000-000000000000"
     },
     "blob": {
-      "provider": "Disk",
+      "provider": "S3",
       "directory": "/app/blobs"
     },
     "resilience": {
@@ -127,7 +127,8 @@
       "atoms": "pneuma-atoms",
       "chunks": "pneuma-chunks",
       "embeddings": "pneuma-embeddings",
-      "subgraph": "pneuma-subgraph"
+      "subgraph": "pneuma-subgraph",
+      "blobs": "pneuma-blobs"
     }
   },
   "telemetry": {

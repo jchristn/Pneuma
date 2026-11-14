@@ -9,7 +9,7 @@ response raises :class:`PneumaError`.
 import mimetypes
 import os
 import re
-from typing import Any, BinaryIO, Dict, List, Optional, Union
+from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Union
 from urllib.parse import unquote
 
 import requests
@@ -623,7 +623,7 @@ class PneumaClient:
     def upload_file(
         self,
         subject_id: str,
-        file: Union[str, "os.PathLike[str]", bytes, BinaryIO],
+        file: Union[str, "os.PathLike[str]", bytes, BinaryIO, Iterable[bytes]],
         filename: Optional[str] = None,
         content_type: Optional[str] = None,
         title: Optional[str] = None,
@@ -637,9 +637,11 @@ class PneumaClient:
 
         Args:
             subject_id: The subject to add the file to.
-            file: A path, the file's bytes, or a binary file object (read from its current position).
+            file: A path, the file's bytes, a binary file object (read from its current position), or an
+                iterable of byte chunks (for example a generator). A file object of unknown length or an
+                iterable is streamed with chunked transfer encoding instead of being buffered.
             filename: The file name. Defaults to the path's base name or the file object's ``name``;
-                required for raw bytes.
+                required for raw bytes and iterables.
             content_type: The MIME type. Defaults to a guess from the file name, else
                 ``application/octet-stream`` (the server then infers it from the extension).
             title: Optional title; the server uses the file name when omitted.
@@ -672,7 +674,7 @@ class PneumaClient:
         if not filename:
             if close_after:
                 body.close()
-            raise ValueError("A filename is required when uploading raw bytes or an unnamed stream.")
+            raise ValueError("A filename is required when uploading raw bytes, an iterable, or an unnamed stream.")
 
         if content_type is None:
             guessed, _ = mimetypes.guess_type(filename)

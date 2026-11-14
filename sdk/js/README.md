@@ -222,7 +222,8 @@ order, search }` options object as its last argument.
 - `submitLinks(subjectId, { urls, labels?, tags? })` — `labels`/`tags` apply to every URL in the batch
 - `uploadFile(subjectId, data, { filename?, contentType?, title?, externalKey?, labels?, tags? })` — upload one file
   (`POST /v1.0/subjects/{id}/files`). `data` is a `File`/`Blob` (browser) or a `Buffer`/`Uint8Array`/`ArrayBuffer`
-  (Node); `filename` is required unless `data` is a `File`. Reusing `externalKey` replaces the earlier file. Throws
+  (Node), or a `ReadableStream`, Node `Readable`, or async iterable, which is streamed chunked; `filename` is
+  required unless `data` is a `File`. Reusing `externalKey` replaces the earlier file. Throws
   `PneumaError` with 413 (too large) or 415 (a type the server cannot extract).
   ```js
   import { readFile } from 'node:fs/promises';

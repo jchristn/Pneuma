@@ -91,7 +91,7 @@
       "GraphGuid": null
     },
     "Blob": {
-      "Provider": "Disk",
+      "Provider": "S3",
       "Directory": "/app/blobs"
     },
     "Resilience": {
@@ -124,7 +124,8 @@
       "Atoms": "pneuma-atoms",
       "Chunks": "pneuma-chunks",
       "Embeddings": "pneuma-embeddings",
-      "Subgraph": "pneuma-subgraph"
+      "Subgraph": "pneuma-subgraph",
+      "Blobs": "pneuma-blobs"
     }
   },
   "Telemetry": {

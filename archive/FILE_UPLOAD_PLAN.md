@@ -21,7 +21,8 @@ Every task is a checkbox: `- [ ]` not started, `- [x]` done. When a task spawns 
 - [x] **`FileName` column on links.** A nullable `filename` column (migration 37 on all four providers). The title defaults to the file name.
 - [x] **Readable URI.** Uploaded links carry `pneuma-inline://{linkId}/{url-escaped filename}` so job logs, the live pipeline view, and chat citations show the file name with no extra server fields. The blob key is still derived from the link id only.
 - [x] **Size limit.** New `Ingestion.MaxUploadBytes`, default 100 MB (104857600), clamped to [1024, 1073741824]. Checked against `Content-Length` before the body is read (Watson's own `MaxRequestBodySize` is unlimited by default).
-- [x] **Storage stays on `DiskBlobStore`.** `Integrations.Blob.Directory` (`/app/blobs`, the `./blobs` volume in Docker). Several servers sharing one database need that directory on a shared volume. An S3-backed blob provider is a follow-up (§9).
+- [x] **Storage follows the server's configuration (revised after review).** `Integrations.Blob.Provider` is `Disk` (files under `Integrations.Blob.Directory`) or `S3` (objects in `S3.Buckets.Blobs`, `pneuma-blobs`, using the `S3` section's connection). It applies to the whole blob store (uploads, pushed text, job source copies, classification cache) with no fallback between providers. The Docker configurations use `S3` (Less3). The first cut kept everything on disk; that was revised because the stack already runs S3-compatible storage.
+- [x] **Chunked uploads are supported (revised after review).** A body sent with `Transfer-Encoding: chunked` is read chunk by chunk and refused with 413 as soon as it passes `Ingestion.MaxUploadBytes`; a declared `Content-Length` over the limit is refused before reading. The SDKs stream bodies of unknown length chunked.
 - [x] **Replacement semantics match text push.** The same `externalKey` overwrites the blob in place and queues a new job; the previous version stays searchable until the new one is indexed.
 - [x] **Scope.** Admin and subject dashboards. The user dashboard and MCP are out of scope (§9).
 
@@ -122,13 +123,14 @@ Null for URL, crawled, and pushed-text links.
 
 ## 9. Verification notes
 
+- Review follow-up: `S3BlobStore` and `BlobStoreFactory` are tested against an in-process S3 stand-in (`StubS3Server`), including an end-to-end upload with the S3 provider; chunked uploads (full read, 413 mid-stream, history placeholder) are tested through the real server.
+
 - Backend: `Test.Automated` (net10.0 and net8.0) passes, including the new `FileUpload` suite (route, service, pipeline, helper, request-history, and OpenAPI cases) and `Database.SubjectLink_FileNameRoundTrips` (SQLite; the other providers run the same contract when `PNEUMA_TEST_DB_TYPE` points at them).
 - Dashboards: `eslint`, `vitest` (`utils/files.test.js`), and `vite build` pass for admin and subject. The drag-and-drop UI was not exercised in a browser.
 - SDKs: the C# SDK builds; the JS (`test/upload.test.mjs`) and Python (`tests/test_upload.py`) upload helpers are tested offline against a loopback server. The live smoke harnesses (including the new C# upload steps) need a running Pneuma stack and were not run.
 
 ## 10. Out of scope / follow-ups
 
-- S3-backed `IBlobStore` provider (`Blob.Provider: "S3"`) for multi-server deployments without a shared volume.
 - Streaming request bodies into the blob store (`IBlobStore` stream overloads) to avoid holding large uploads in memory.
 - Versioned blob keys so a failed replacement keeps the previous file for reingest.
 - Per-tenant upload quota.
